@@ -38,11 +38,6 @@ import CompliancePage from './pages/CompliancePage'
 import IntegrationsPage from './pages/IntegrationsPage'
 import AuditPage from './pages/AuditPage'
 
-// Candidate-facing (Olivia experience) — rendered full-bleed, no recruiter chrome
-import CareerSitePage from './pages/candidate/CareerSitePage'
-import JobPreviewPage from './pages/candidate/JobPreviewPage'
-import OliviaChatPage from './pages/candidate/OliviaChatPage'
-
 /** Redirect to Overview if the route's module has been turned off in config. */
 function RequireModule({ module, children }: { module: string; children: ReactNode }) {
   const { isModuleOn } = useConfig()
@@ -96,11 +91,8 @@ createRoot(document.getElementById('root')!).render(
         <StoreProvider>
           <BrowserRouter>
             <Routes>
-              {/* Candidate-facing routes render OUTSIDE the recruiter chrome. */}
-              <Route path="/careers" element={<CareerSitePage />} />
-              <Route path="/careers/:id" element={<JobPreviewPage />} />
-              <Route path="/careers/:id/apply" element={<OliviaChatPage />} />
-              {/* Everything else is the recruiter app. */}
+              {/* The recruiter console. The candidate-facing "Careers and Conv"
+                  app is integrated separately. */}
               <Route path="/*" element={<RecruiterApp />} />
             </Routes>
           </BrowserRouter>
