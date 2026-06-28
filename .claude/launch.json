@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "olivia-frontend",
+      "runtimeExecutable": "/Users/alpineqora/.vms-tools/run-frontend.sh",
+      "runtimeArgs": [],
+      "port": 5177,
+      "cwd": "frontend"
+    }
+  ]
+}
