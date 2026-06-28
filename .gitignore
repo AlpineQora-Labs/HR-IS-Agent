@@ -1,0 +1,24 @@
+# Java / Gradle
+backend/build/
+backend/.gradle/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+
+# Local theme/brand overrides (proprietary tokens & trademarked assets —
+# supplied at delivery, never committed). App falls back to placeholders.
+frontend/src/styles/*.local.css
+frontend/public/brand-logo.*
+frontend/public/brand-mark.*
+
+# Secrets / local config
+.env
+.env.local
+
+# Source artifacts that shouldn't be tracked
+recruiting_feature_matrix_*.xlsx
+
+# misc
+.DS_Store
+*.log

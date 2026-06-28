@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: olivia
+  datasource:
+    url: jdbc:postgresql://localhost:5435/hr_dev
+    username: vms
+    password: vms_local_dev
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+server:
+  port: 8092
+  error:
+    include-message: always
+
+app:
+  cors:
+    allowed-origin: ${FRONTEND_ORIGIN:http://localhost:5177}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
