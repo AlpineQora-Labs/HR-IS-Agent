@@ -17,8 +17,11 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
+        // POC: allow the recruiter console (configured origin) and any local dev port — the
+        // candidate career site runs on its own port (e.g. :5173) and POSTs to this API, and
+        // Chrome attaches an Origin header on non-GET requests even same-origin-via-proxy.
         registry.addMapping("/v1/**")
-                .allowedOrigins(allowedOrigin)
+                .allowedOriginPatterns(allowedOrigin, "http://localhost:*", "http://127.0.0.1:*")
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE");
     }
 }

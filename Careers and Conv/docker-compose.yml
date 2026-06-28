@@ -1,0 +1,25 @@
+# Local Oracle for TalentBridge. Lightweight Oracle Database 23ai Free (gvenzl community image).
+# Usage:
+#   docker compose up -d            # start Oracle, wait until healthy
+#   cd backend && ./mvnw spring-boot:run -Dspring-boot.run.profiles=oracle
+services:
+  oracle:
+    image: gvenzl/oracle-free:23-slim
+    container_name: talentbridge-oracle
+    ports:
+      - "1522:1521"   # host 1522 (1521 may be used by another local Oracle)
+    environment:
+      ORACLE_PASSWORD: oracle            # SYS/SYSTEM password
+      APP_USER: talentbridge             # application schema user
+      APP_USER_PASSWORD: talentbridge
+    volumes:
+      - talentbridge-oracle-data:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+volumes:
+  talentbridge-oracle-data:

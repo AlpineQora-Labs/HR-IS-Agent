@@ -80,7 +80,7 @@ export default function IntegrationsPage() {
           <div>
             <h1 style={{ fontSize: 28 }}>Integrations</h1>
             <p className="sub">
-              Olivia speaks to your stack through an open API. Connect your HRIS, calendars, assessments, and messaging
+              The platform speaks to your stack through an open API. Connect your HRIS, calendars, assessments, and messaging
               channels — data syncs both ways.
             </p>
           </div>

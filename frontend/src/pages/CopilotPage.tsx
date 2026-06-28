@@ -48,7 +48,7 @@ export default function CopilotPage() {
       <div className="page-head">
         <div className="crumb">
           <span className="dot" />
-          Olivia · Copilot
+          Recruiting · Copilot
         </div>
         <h1>AI Copilot</h1>
         <p className="sub">
@@ -92,7 +92,7 @@ export default function CopilotPage() {
               <textarea
                 id="cp-prompt"
                 className="textarea"
-                placeholder="Add context, tone, or specifics for Olivia to work from…"
+                placeholder="Add context, tone, or specifics for the assistant to work from…"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
               />

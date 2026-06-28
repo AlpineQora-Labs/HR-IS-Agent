@@ -22,7 +22,7 @@ public class ScriptedBrain implements AssistantBrain {
     @Override
     public String greeting(Job job, String language) {
         String title = job != null ? job.getTitle() : "this role";
-        return "Hi! I'm Olivia, your recruiting assistant. 👋 "
+        return "Hi! I'm Aria, your recruiting assistant. 👋 "
                 + "I'm so glad you're interested in the " + title + " role. "
                 + "I'll ask a few quick questions to get your application started — it only takes a minute. "
                 + "To begin, what's your full name?";

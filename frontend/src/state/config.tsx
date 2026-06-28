@@ -121,10 +121,10 @@ const defaultConfig: ConfigShape = {
     },
   ],
   users: [
-    { id: 'u1', name: 'Olivia Admin', initials: 'OA', email: 'admin@olivia.ai', roleKey: 'admin' },
-    { id: 'u2', name: 'Maya Chen', initials: 'MC', email: 'maya.chen@olivia.ai', roleKey: 'recruiter' },
-    { id: 'u3', name: 'Daniel Ruiz', initials: 'DR', email: 'daniel.ruiz@olivia.ai', roleKey: 'hiring_manager' },
-    { id: 'u4', name: 'Sam Okafor', initials: 'SO', email: 'sam.okafor@olivia.ai', roleKey: 'viewer' },
+    { id: 'u1', name: 'Avery Stone', initials: 'AS', email: 'avery.stone@bofa.com', roleKey: 'admin' },
+    { id: 'u2', name: 'Maya Chen', initials: 'MC', email: 'maya.chen@bofa.com', roleKey: 'recruiter' },
+    { id: 'u3', name: 'Daniel Ruiz', initials: 'DR', email: 'daniel.ruiz@bofa.com', roleKey: 'hiring_manager' },
+    { id: 'u4', name: 'Sam Okafor', initials: 'SO', email: 'sam.okafor@bofa.com', roleKey: 'viewer' },
   ],
   currentUserId: 'u1',
 }

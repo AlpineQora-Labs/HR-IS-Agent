@@ -6,6 +6,13 @@ backend/.gradle/
 frontend/node_modules/
 frontend/dist/
 
+# Candidate career app (TalentBridge): only the career frontend is integrated
+# ("career site only"). Its original backend is not used here, and build/deps
+# are not tracked.
+Careers and Conv/backend/
+Careers and Conv/**/node_modules/
+Careers and Conv/**/dist/
+
 # Local theme/brand overrides (proprietary tokens & trademarked assets —
 # supplied at delivery, never committed). App falls back to placeholders.
 frontend/src/styles/*.local.css

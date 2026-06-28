@@ -1,5 +1,5 @@
 import { useState, type ComponentType, type ReactNode } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { useStore } from '@/state/store'
 import { MODULES, useConfig } from '@/state/config'
 import {
@@ -121,7 +121,7 @@ function Brand({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => vo
         {!markFailed ? (
           <img src={MARK_SRCS[markIdx]} alt="" className="brand-mark-img" onError={() => setMarkIdx((i) => i + 1)} />
         ) : (
-          <div className="mark">O</div>
+          <div className="mark">B</div>
         )}
       </button>
     )
@@ -130,12 +130,12 @@ function Brand({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => vo
   return (
     <button className="brand-toggle" onClick={onToggle} title="Toggle sidebar" aria-label="Toggle sidebar">
       {!logoFailed ? (
-        <img src={LOGO_SRCS[logoIdx]} alt="Olivia" className="brand-logo" onError={() => setLogoIdx((i) => i + 1)} />
+        <img src={LOGO_SRCS[logoIdx]} alt="Bank of America" className="brand-logo" onError={() => setLogoIdx((i) => i + 1)} />
       ) : (
         <>
-          <div className="mark">O</div>
+          <div className="mark">B</div>
           <div className="wordmark">
-            Olivia<small>Conversational Recruiting</small>
+            Bank of America<small>Careers · Recruiting</small>
           </div>
         </>
       )}
@@ -188,10 +188,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           <IconSearch className="ic-lead" />
           <input className="input" placeholder="Search jobs, candidates, pipelines…" />
         </div>
-        <Link to="/careers" className="btn btn--ghost" title="Open the candidate-facing career site">
+        <a href="http://localhost:5173" target="_blank" rel="noreferrer" className="btn btn--ghost" title="Open the candidate-facing career site">
           Career site
           <IconArrowRight className="ic" />
-        </Link>
+        </a>
         <button className="btn btn--ghost btn--icon" aria-label="Notifications">
           <IconBell className="ic" />
         </button>
