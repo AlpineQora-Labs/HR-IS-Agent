@@ -275,7 +275,7 @@
 <script>
   // The chat launcher opens the TalentBridge runtime (Phase 2 React app). In dev the runtime is
   // served by Vite on :5173; in a deployed build this would be the runtime's hosted path.
-  var RUNTIME_URL='http://localhost:5173';
+  var RUNTIME_URL='http://localhost:5174';
   function openRuntime(){addBubble('Screen me for a role','user');botReply('Opening the screening assistant…');window.open(RUNTIME_URL,'_blank','noopener');}
   function openChat(){document.getElementById('panel').classList.add('open');document.getElementById('launch').style.display='none';document.getElementById('teaser').style.display='none';}
   function closeChat(){document.getElementById('panel').classList.remove('open');document.getElementById('launch').style.display='flex';}

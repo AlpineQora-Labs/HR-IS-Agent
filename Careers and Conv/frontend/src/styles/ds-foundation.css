@@ -1,0 +1,203 @@
+/* =========================================================
+   BofA Agentic HR · Design tokens
+   Editorial-document aesthetic for executive-facing diagrams,
+   journey maps, architecture proposals, and storyboards.
+   ========================================================= */
+
+/* -------- FONTS (via Google Fonts — substitution flagged) --------
+   Originals (extracted from Figma exports) appear to be
+   Source Serif 4 (display), Inter (UI/body), JetBrains Mono (micro labels).
+   These exact families are loaded from Google Fonts. If you have
+   licensed BofA fonts (e.g. Connections), drop them in /fonts/
+   and override the variables below. */
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..900;1,8..60,300..900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ---- Brand palette ---- */
+  --bofa-red:        #E31837; /* primary brand red */
+  --bofa-navy:       #012169; /* primary brand navy */
+  --bofa-burgundy:   #862633; /* secondary, used for input/source labels */
+
+  /* ---- Paper / surface ---- */
+  --paper-0:         #FBFAF6; /* base parchment */
+  --paper-1:         #F3F0E8; /* warmer paper, page lanes */
+  --paper-2:         #EBE7DC; /* divider / lane background */
+  --paper-edge:      #E6E1D4; /* paper edge stroke */
+  --paper-rule:      #D8D3C5; /* rules and quiet borders */
+
+  /* ---- Ink ---- */
+  --ink-0:           #0E1A33; /* primary ink, near-black with navy bias */
+  --ink-1:           #1a1a1a; /* neutral text */
+  --ink-2:           #3A4666; /* muted heading ink */
+  --ink-3:           #4a4a4a; /* secondary text */
+  --ink-4:           #6B7694; /* tertiary, captions */
+  --ink-5:           #9AA1B4; /* hint */
+  --hairline:        rgba(14,26,51,0.16);
+
+  /* ---- Semantic accents (status / category) ---- */
+  --c-blue:          #0063B2; /* tech / system, links */
+  --c-teal:          #007296; /* auth / identity */
+  --c-violet:        #584EA8; /* mule gateway / orchestration */
+  --c-green:         #007840; /* success / positive emotion */
+  --c-green-soft:    #286F2F;
+  --c-amber:         #8F5E00; /* caution */
+  --c-amber-soft:    #A64831;
+  --c-red:           #E31837; /* alert / pain today */
+  --c-burgundy:      #862633;
+
+  /* ---- Soft tints (for lane / category backgrounds) ---- */
+  --tint-green:      #EFF5EF;
+  --tint-blue:       #ECF1F7;
+  --tint-red:        #F8ECEE;
+  --tint-paper:      #F5F6F8;
+
+  /* ---- Spacing scale (8-pt with editorial 4-pt half-step) ---- */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+  --s-9: 96px;
+
+  /* ---- Radii — small, restrained ---- */
+  --r-1: 2px;     /* dots, small chips */
+  --r-2: 6px;     /* pills */
+  --r-3: 8px;     /* inner cards */
+  --r-4: 12px;    /* outer cards */
+  --r-5: 14px;    /* page panels */
+  --r-pill: 999px;
+
+  /* ---- Shadow — almost none. Editorial relies on borders. ---- */
+  --shadow-0: none;
+  --shadow-1: 0 1px 0 rgba(14,26,51,0.04);
+  --shadow-2: 0 1px 2px rgba(14,26,51,0.06), 0 0 0 0.5px rgba(14,26,51,0.04);
+
+  /* ---- Borders ---- */
+  --border-hairline:  0.5px solid var(--ink-1);
+  --border-thin:      1px solid var(--ink-1);
+  --border-rule:      1px solid var(--paper-rule);
+  --border-strong:    2.5px solid var(--bofa-navy);
+  --strip-w:          6px;          /* the colored left strip */
+
+  /* ---- Type families ---- */
+  --font-display: 'Source Serif 4', 'Source Serif Pro', 'Charter', Georgia, serif;
+  --font-sans:    'Inter', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono:    'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ---- Type scale ---- */
+  --t-eyebrow:  10px;   /* tier · the concierge */
+  --t-micro:    11px;   /* footer mono */
+  --t-mono:     12px;   /* most mono labels */
+  --t-caption:  12px;
+  --t-body-sm:  13px;
+  --t-body:     14px;
+  --t-lead:     16px;
+  --t-h6:       16px;
+  --t-h5:       18px;
+  --t-h4:       22px;
+  --t-h3:       28px;
+  --t-h2:       40px;
+  --t-h1:       56px;
+  --t-display:  72px;
+
+  /* ---- Tracking for the mono ALL-CAPS pattern ---- */
+  --track-mono: 0.14em;
+  --track-mono-tight: 0.08em;
+
+  /* ---- Easing / motion (rare — used for hover only) ---- */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1); /* @kind other */
+  --dur-fast: 120ms; /* @kind other */
+  --dur-base: 200ms; /* @kind other */
+}
+
+/* -----------------------------------------------------------------
+   Semantic primitives — drop these classes onto plain HTML and the
+   editorial voice comes through automatically.
+   ----------------------------------------------------------------- */
+
+html, body { background: var(--paper-0); color: var(--ink-1); }
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--t-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+/* Display / serif headlines — the signature move:
+   black serif with one or two words italicized in red. */
+.display, h1.display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--t-display);
+  line-height: 1.02;
+  letter-spacing: -0.015em;
+  color: var(--ink-0);
+  text-wrap: pretty;
+}
+.display em, .display .accent {
+  font-style: italic;
+  color: var(--bofa-red);
+  font-weight: 600;
+}
+
+h1, .h1 { font-family: var(--font-display); font-weight: 600; font-size: var(--t-h1); line-height: 1.05; letter-spacing: -0.012em; color: var(--ink-0); }
+h2, .h2 { font-family: var(--font-display); font-weight: 600; font-size: var(--t-h2); line-height: 1.1;  letter-spacing: -0.01em;  color: var(--ink-0); }
+h3, .h3 { font-family: var(--font-display); font-weight: 600; font-size: var(--t-h3); line-height: 1.15; letter-spacing: -0.005em; color: var(--ink-0); }
+h4, .h4 { font-family: var(--font-sans);    font-weight: 600; font-size: var(--t-h4); line-height: 1.25; color: var(--ink-0); }
+h5, .h5 { font-family: var(--font-sans);    font-weight: 600; font-size: var(--t-h5); line-height: 1.3;  color: var(--ink-0); }
+h6, .h6 { font-family: var(--font-sans);    font-weight: 600; font-size: var(--t-h6); line-height: 1.35; color: var(--ink-0); }
+
+h1 em, h2 em, h3 em, .h1 em, .h2 em, .h3 em { font-style: italic; color: var(--bofa-red); font-weight: 600; }
+
+p { color: var(--ink-1); font-size: var(--t-body); line-height: 1.55; text-wrap: pretty; }
+p.lead { font-size: var(--t-lead); color: var(--ink-2); line-height: 1.55; }
+p.caption { font-size: var(--t-caption); color: var(--ink-3); }
+
+strong, b { font-weight: 600; color: var(--ink-0); }
+
+/* ALL-CAPS letter-spaced mono — the system's tier/section labels.
+   "TIER 2 · THE CONCIERGE", "STEP ZERO · ALIGN BEFORE PAGING", etc. */
+.eyebrow,
+.label-mono {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--t-mono);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.eyebrow.red    { color: var(--bofa-red); }
+.eyebrow.navy   { color: var(--bofa-navy); }
+.eyebrow.burgundy { color: var(--bofa-burgundy); }
+
+/* Numbered step (01, 02 …) — used as serif numerals next to a stage label */
+.numeral {
+  font-family: var(--font-display);
+  font-size: var(--t-h2);
+  font-weight: 400;
+  color: var(--ink-2);
+  letter-spacing: -0.015em;
+  font-feature-settings: "lnum" 1;
+}
+
+/* Mono caption used in footers and key/values */
+.foot-mono,
+.kv-mono {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono-tight);
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+a { color: var(--c-blue); text-decoration: none; border-bottom: 1px solid currentColor; }
+a:hover { color: var(--bofa-navy); }
+
+hr { border: 0; border-top: 1px solid var(--paper-rule); margin: var(--s-5) 0; }
+
+::selection { background: rgba(227,24,55,0.18); color: var(--ink-0); }
