@@ -21,9 +21,17 @@ body {
 }
 
 /* Sans-serif headings (the DS default is an editorial serif) to match the
-   conversational, product feel of Olivia. */
+   conversational, product feel of the app. */
 :root {
   --font-display: var(--font-sans);
+}
+
+/* The main content area is a CSS-grid track; without min-width:0 a wide child
+   (e.g. the horizontally-scrolling Pipeline board) expands the track past the
+   viewport and gets clipped instead of scrolling. This bounds it so inner
+   `overflow-x:auto` containers scroll within the content column. */
+.app__main {
+  min-width: 0;
 }
 
 /* Focus state — clear, high-contrast ring on form controls. */

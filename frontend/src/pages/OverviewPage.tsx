@@ -107,7 +107,7 @@ export default function OverviewPage() {
             <StatTile label="Open jobs" value={data.openJobs} meta="Actively recruiting" />
             <StatTile label="Active candidates" value={data.activeCandidates.toLocaleString()} meta="In pipeline" />
             <StatTile label="Avg time-to-hire" value={`${Math.round(data.avgTimeToHireDays)}d`} meta="Req to offer-accept" />
-            <StatTile label="Offer-accept rate" value={percent(data.offerAcceptRate)} meta="Trailing 90 days" />
+            <StatTile label="Offer-accept rate" value={percent(data.offerAcceptRate, false)} meta="Trailing 90 days" />
           </div>
 
           <div className="grid-stats" style={{ gridTemplateColumns: 'repeat(5,1fr)', marginBottom: 20 }}>

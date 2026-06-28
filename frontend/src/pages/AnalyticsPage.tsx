@@ -155,7 +155,7 @@ function buildTrends(a: AnalyticsSummary): Trend[] {
     { label: 'Offers · 30d', value: a.offers30d.toLocaleString(), end: a.offers30d, color: 'var(--c-violet)', delta: 5 },
     { label: 'Hires · 30d', value: a.hires30d.toLocaleString(), end: a.hires30d, color: 'var(--c-green)', delta: 9 },
     { label: 'Avg time-to-hire', value: `${a.avgTimeToHireDays}d`, end: a.avgTimeToHireDays, color: 'var(--c-amber)', delta: -4 },
-    { label: 'Avg fit score', value: percent(a.avgFitScore), end: a.avgFitScore * 100, color: 'var(--bofa-red)', delta: 3 },
+    { label: 'Avg fit score', value: `${Math.round(a.avgFitScore)}`, end: a.avgFitScore, color: 'var(--bofa-red)', delta: 3 },
   ]
 }
 
@@ -167,7 +167,7 @@ const KPIS: { label: string; pick: (a: AnalyticsSummary) => string; meta?: strin
   { label: 'Offers · 30d', pick: (a) => a.offers30d.toLocaleString() },
   { label: 'Hires · 30d', pick: (a) => a.hires30d.toLocaleString() },
   { label: 'Time to hire', pick: (a) => `${a.avgTimeToHireDays}d` },
-  { label: 'Offer accept rate', pick: (a) => percent(a.offerAcceptRate) },
+  { label: 'Offer accept rate', pick: (a) => percent(a.offerAcceptRate, false) },
 ]
 
 export default function AnalyticsPage() {

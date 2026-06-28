@@ -111,7 +111,7 @@ export default function CompliancePage() {
                   <td className="t-muted">{r.stage}</td>
                   <td>{r.dimension}</td>
                   <td>{r.groupLabel}</td>
-                  <td className="t-right t-num">{percent(r.passRate)}</td>
+                  <td className="t-right t-num">{percent(r.passRate, false)}</td>
                   <td className="t-right">
                     <span className={`badge ${ratioClass(r.impactRatio)}`}>{r.impactRatio.toFixed(2)}</span>
                   </td>
