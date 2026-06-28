@@ -1,0 +1,189 @@
+/* Repo-specific helpers layered on top of the design system (ds-foundation.css
+   + ds-product.css). Keep this small — prefer the design-system classes; this
+   only adds the chrome bits the DS doesn't ship (collapsible rail, focus ring,
+   inline link, dropdown menu). Mirrors VMS vms.css. */
+
+/* Global border-box reset — without this, inputs/selects with width:100% plus
+   padding+border overflow their grid columns and overlap neighbours. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+}
+
+/* Sans-serif headings (the DS default is an editorial serif) to match the
+   conversational, product feel of Olivia. */
+:root {
+  --font-display: var(--font-sans);
+}
+
+/* Focus state — clear, high-contrast ring on form controls. */
+.input:focus,
+.input:focus-visible,
+.select:focus,
+.select:focus-visible,
+.textarea:focus,
+.textarea:focus-visible {
+  outline: none;
+  border-color: var(--bofa-navy);
+  box-shadow: 0 0 0 3px rgba(1, 33, 105, 0.35);
+}
+
+.btn {
+  border-radius: 999px;
+}
+
+/* inline text link */
+.link {
+  font-size: 13px;
+  color: var(--c-blue);
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+.link:hover {
+  color: var(--bofa-navy);
+}
+
+/* the ported foundation sets a:hover underline borders; neutralize for chrome */
+a {
+  border-bottom: 0;
+}
+
+/* muted secondary text */
+.muted {
+  color: var(--ink-4);
+  font-size: 14px;
+  margin: 6px 0 0;
+}
+
+/* ---- Collapsible sidebar ---- */
+.app {
+  /* Bound the shell to the viewport so .app__main is the scroll container
+     (not the window), keeping sticky headers/footers contained. */
+  height: 100vh;
+  transition: grid-template-columns 0.16s ease;
+}
+.brand-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.app__brand {
+  background: #fff;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.app__brand .wordmark {
+  color: var(--ink-0);
+}
+.app__brand .wordmark small {
+  display: block;
+  color: var(--ink-4);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.brand-logo {
+  height: 26px;
+  width: auto;
+  max-width: 180px;
+  display: block;
+}
+.brand-mark-img {
+  height: 26px;
+  width: auto;
+  display: block;
+}
+
+.nav-label {
+  flex: 1;
+}
+
+.app--collapsed {
+  grid-template-columns: 64px 1fr;
+}
+.app--collapsed .app__brand {
+  padding: 0;
+  justify-content: center;
+}
+.app--collapsed .app__brand .wordmark {
+  display: none;
+}
+.app--collapsed .app__side {
+  padding: 14px 8px;
+}
+.app--collapsed .nav-item {
+  justify-content: center;
+  padding: 10px 0;
+  gap: 0;
+}
+.app--collapsed .nav-item .nav-label,
+.app--collapsed .nav-item .count {
+  display: none;
+}
+.app--collapsed .nav-group {
+  height: 1px;
+  margin: 9px 12px;
+  padding: 0;
+  background: var(--line);
+  font-size: 0;
+  overflow: hidden;
+}
+.app--collapsed .app__side > div:first-child .nav-group {
+  display: none;
+}
+
+/* ---- Dropdown menu ---- */
+.menu {
+  min-width: 210px;
+  background: var(--app-panel);
+  border: 1px solid var(--line-3);
+  border-radius: var(--ra-2);
+  box-shadow: var(--el-2);
+  padding: 4px;
+}
+.menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 9px 11px;
+  border-radius: var(--ra-1);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--ink-1);
+  cursor: pointer;
+}
+.menu__item:hover {
+  background: var(--navy-050);
+  color: var(--bofa-navy);
+}
+
+/* ---- Career site (candidate, full-bleed, no recruiter chrome) ---- */
+.careers {
+  min-height: 100vh;
+  overflow-y: auto;
+}
+.careers__inner {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
