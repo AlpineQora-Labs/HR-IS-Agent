@@ -38,6 +38,18 @@ function Empty({ label }: { label: string }) {
   )
 }
 
+function StatTile({ label, value, meta }: { label: string; value: string | number; meta?: string }) {
+  return (
+    <div className="stat">
+      <div className="stat__label">{label}</div>
+      <div className="stat__value">{value}</div>
+      {meta ? <div className="stat__meta">{meta}</div> : null}
+    </div>
+  )
+}
+
+const isComplete = (s: string) => ['COMPLETED', 'PASSED'].includes(s.toUpperCase())
+
 export default function AssessmentsPage() {
   const { data: jobs } = useJobs()
   const [jobId, setJobId] = useState<string>('')
@@ -52,6 +64,20 @@ export default function AssessmentsPage() {
   const sorted = useMemo<Assessment[]>(() => {
     if (!data) return []
     return [...data].sort((a, b) => statusRank(a.status) - statusRank(b.status) || b.score - a.score)
+  }, [data])
+
+  const kpis = useMemo(() => {
+    const list = data ?? []
+    const completed = list.filter((a) => isComplete(a.status))
+    const scored = completed.filter((a) => a.score > 0)
+    const avg = scored.length ? Math.round(scored.reduce((n, a) => n + a.score, 0) / scored.length) : 0
+    const passed = completed.filter((a) => a.score >= 70).length
+    return {
+      total: list.length,
+      completed: completed.length,
+      avg,
+      passRate: completed.length ? Math.round((passed / completed.length) * 100) : 0,
+    }
   }, [data])
 
   return (
@@ -71,6 +97,15 @@ export default function AssessmentsPage() {
           </div>
         </div>
       </div>
+
+      {data && data.length > 0 ? (
+        <div className="grid-stats" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 18 }}>
+          <StatTile label="Assessments" value={kpis.total} />
+          <StatTile label="Completed" value={kpis.completed} />
+          <StatTile label="Avg score" value={kpis.avg || '—'} />
+          <StatTile label="Pass rate" value={`${kpis.passRate}%`} meta="Score ≥ 70" />
+        </div>
+      ) : null}
 
       <div className="grid-stats" style={{ marginBottom: 20, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
         {TYPE_LEGEND.map((t) => (
@@ -123,7 +158,12 @@ export default function AssessmentsPage() {
       {isLoading ? (
         <Empty label="Loading assessments…" />
       ) : sorted.length === 0 ? (
-        <Empty label="No assessments recorded for this application." />
+        <div className="card">
+          <div className="card__body" style={{ padding: '44px 20px', textAlign: 'center' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--ink-0)' }}>No assessments yet</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-4)', marginTop: 6 }}>This candidate hasn't been sent an assessment for this application.</div>
+          </div>
+        </div>
       ) : (
         <div className="table-wrap">
           <table className="data-table">

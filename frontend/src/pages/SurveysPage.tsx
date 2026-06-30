@@ -1,5 +1,16 @@
+import { useMemo } from 'react'
 import { useSurveys } from '@/api/hooks'
 import { percent } from '@/lib/format'
+
+function StatTile({ label, value, meta }: { label: string; value: string | number; meta?: string }) {
+  return (
+    <div className="stat">
+      <div className="stat__label">{label}</div>
+      <div className="stat__value">{value}</div>
+      {meta ? <div className="stat__meta">{meta}</div> : null}
+    </div>
+  )
+}
 
 // Sense-inspired candidate experience surveys: capture sentiment at each stage,
 // with a colored sentiment indicator (-1..1) and NPS.
@@ -50,6 +61,14 @@ function npsBadge(nps: number) {
 export default function SurveysPage() {
   const { data, isLoading } = useSurveys()
 
+  const kpis = useMemo(() => {
+    const list = data ?? []
+    const sent = list.reduce((n, s) => n + s.sent, 0)
+    const rr = list.length ? Math.round(list.reduce((n, s) => n + s.responseRate, 0) / list.length) : 0
+    const nps = list.length ? Math.round(list.reduce((n, s) => n + s.nps, 0) / list.length) : 0
+    return { total: list.length, sent, rr, nps }
+  }, [data])
+
   return (
     <div>
       <div className="page-head">
@@ -64,13 +83,25 @@ export default function SurveysPage() {
         </p>
       </div>
 
+      {data && data.length > 0 ? (
+        <div className="grid-stats" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 18 }}>
+          <StatTile label="Surveys" value={kpis.total} />
+          <StatTile label="Sent" value={kpis.sent.toLocaleString()} />
+          <StatTile label="Avg response rate" value={percent(kpis.rr, false)} />
+          <StatTile label="Avg NPS" value={kpis.nps} />
+        </div>
+      ) : null}
+
       {isLoading ? (
         <div className="card">
           <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--ink-4)' }}>Loading surveys…</div>
         </div>
       ) : !data || data.length === 0 ? (
         <div className="card">
-          <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--ink-4)' }}>No surveys yet.</div>
+          <div className="card__body" style={{ padding: '44px 20px', textAlign: 'center' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--ink-0)' }}>No surveys yet</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-4)', marginTop: 6 }}>Pulse surveys capture candidate sentiment at every stage of the funnel.</div>
+          </div>
         </div>
       ) : (
         <div className="table-wrap">
