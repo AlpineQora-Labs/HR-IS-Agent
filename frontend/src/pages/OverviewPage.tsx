@@ -1,6 +1,8 @@
-import { useAnalyticsSummary } from '../api/hooks'
-import { percent } from '../lib/format'
-import type { FunnelStage } from '../api/types'
+import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
+import { useAllSlots, useAnalyticsSummary, useJobs } from '../api/hooks'
+import { date, percent } from '../lib/format'
+import type { FunnelStage, JobSummary } from '../api/types'
 
 function StatTile({ label, value, meta }: { label: string; value: string | number; meta?: string }) {
   return (
@@ -8,6 +10,138 @@ function StatTile({ label, value, meta }: { label: string; value: string | numbe
       <div className="stat__label">{label}</div>
       <div className="stat__value">{value}</div>
       {meta ? <div className="stat__meta">{meta}</div> : null}
+    </div>
+  )
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  OPEN: 'Open',
+  PAUSED: 'On hold',
+  FILLED: 'Filled',
+  DRAFT: 'Draft',
+  CLOSED: 'Closed',
+  ARCHIVED: 'Archived',
+}
+const STATUS_COLORS: Record<string, string> = {
+  OPEN: '#1D9E75',
+  PAUSED: '#EF9F27',
+  FILLED: '#185FA5',
+  DRAFT: '#888780',
+  CLOSED: '#A32D2D',
+  ARCHIVED: '#534AB7',
+}
+const FALLBACK_COLORS = ['#1D9E75', '#185FA5', '#EF9F27', '#534AB7', '#D4537E', '#888780']
+
+function JobSummaryDonut({ jobs }: { jobs: JobSummary[] }) {
+  const segs = useMemo(() => {
+    const counts: Record<string, number> = {}
+    jobs.forEach((j) => {
+      const s = (j.status || 'OTHER').toUpperCase()
+      counts[s] = (counts[s] || 0) + 1
+    })
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])
+  }, [jobs])
+
+  const total = jobs.length
+  const r = 66
+  const C = 2 * Math.PI * r
+  let offset = 0
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap' }}>
+      <div style={{ position: 'relative', width: 168, height: 168, flexShrink: 0 }}>
+        <svg width={168} height={168} viewBox="0 0 168 168" style={{ transform: 'rotate(-90deg)' }}>
+          <circle cx={84} cy={84} r={r} fill="none" stroke="var(--app-sunken)" strokeWidth={20} />
+          {segs.map(([status, count], i) => {
+            const frac = total > 0 ? count / total : 0
+            const len = frac * C
+            const color = STATUS_COLORS[status] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length]
+            const circle = (
+              <circle
+                key={status}
+                cx={84}
+                cy={84}
+                r={r}
+                fill="none"
+                stroke={color}
+                strokeWidth={20}
+                strokeDasharray={`${len} ${C - len}`}
+                strokeDashoffset={-offset}
+              />
+            )
+            offset += len
+            return circle
+          })}
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="t-num" style={{ fontSize: 34, fontWeight: 700, color: 'var(--ink-0)', lineHeight: 1 }}>{total}</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 2 }}>Total jobs</div>
+        </div>
+      </div>
+      <div style={{ flex: 1, minWidth: 150, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px' }}>
+        {segs.map(([status, count], i) => (
+          <div key={status} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 3, background: STATUS_COLORS[status] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length], flexShrink: 0 }} />
+            <span style={{ color: 'var(--ink-3)' }}>{STATUS_LABEL[status] ?? status}</span>
+            <span className="t-num" style={{ marginLeft: 'auto', fontWeight: 600, color: 'var(--ink-0)' }}>{count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const ivTime = (iso: string) => {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
+function ScheduleTimeline({ jobs }: { jobs: JobSummary[] }) {
+  const jobIds = useMemo(() => jobs.map((j) => j.id), [jobs])
+  const titleById = useMemo(() => Object.fromEntries(jobs.map((j) => [j.id, j.title])), [jobs])
+  const { slots, isLoading } = useAllSlots(jobIds)
+
+  const upcoming = useMemo(() => {
+    const now = Date.now()
+    return [...slots]
+      .filter((s) => !Number.isNaN(new Date(s.startsAt).getTime()))
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+      .filter((s) => new Date(s.endsAt || s.startsAt).getTime() >= now - 86_400_000)
+      .slice(0, 6)
+  }, [slots])
+
+  if (isLoading) return <div style={{ padding: '20px', color: 'var(--ink-4)', fontSize: 13 }}>Loading schedule…</div>
+  if (upcoming.length === 0) return <div style={{ padding: '20px', color: 'var(--ink-4)', fontSize: 13 }}>No upcoming interview slots.</div>
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {upcoming.map((s) => (
+        <div
+          key={s.id}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 14,
+            padding: '11px 14px',
+            borderBottom: '1px solid var(--line)',
+            borderLeft: `3px solid ${s.booked ? 'var(--bofa-navy)' : '#1D9E75'}`,
+          }}
+        >
+          <div style={{ width: 116, flexShrink: 0 }}>
+            <div className="t-num" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-1)' }}>
+              {ivTime(s.startsAt)} – {ivTime(s.endsAt)}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>{date(s.startsAt)}</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, color: 'var(--ink-0)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {titleById[s.jobId] || 'Interview'}
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>{s.interviewerName || 'Unassigned'}</div>
+          </div>
+          <span className={`badge ${s.booked ? 'badge--info' : 'badge--ok'}`}>{s.booked ? 'Booked' : 'Open'}</span>
+        </div>
+      ))}
     </div>
   )
 }
@@ -65,6 +199,7 @@ function Funnel({ stages }: { stages: FunnelStage[] }) {
 
 export default function OverviewPage() {
   const { data, isLoading, isError, refetch } = useAnalyticsSummary()
+  const { data: jobs } = useJobs()
 
   return (
     <div>
@@ -116,6 +251,36 @@ export default function OverviewPage() {
             <StatTile label="Offers · 30d" value={data.offers30d.toLocaleString()} />
             <StatTile label="Hires · 30d" value={data.hires30d.toLocaleString()} />
             <StatTile label="Avg fit score" value={Math.round(data.avgFitScore)} meta="Across active apps" />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 360px', gap: 20, alignItems: 'start', marginBottom: 20 }}>
+            <div className="card">
+              <div className="card__head">
+                <h3 style={{ fontSize: 15 }}>Job summary</h3>
+                <Link to="/jobs" className="link" style={{ fontSize: 12.5 }}>View all jobs</Link>
+              </div>
+              <div className="card__body">
+                {jobs && jobs.length > 0 ? (
+                  <JobSummaryDonut jobs={jobs} />
+                ) : (
+                  <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--ink-4)' }}>No jobs yet.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card__head">
+                <h3 style={{ fontSize: 15 }}>Upcoming schedule</h3>
+                <Link to="/interviews" className="link" style={{ fontSize: 12.5 }}>Calendar</Link>
+              </div>
+              <div className="card__body" style={{ padding: 0 }}>
+                {jobs && jobs.length > 0 ? (
+                  <ScheduleTimeline jobs={jobs} />
+                ) : (
+                  <div style={{ padding: '24px 18px', textAlign: 'center', color: 'var(--ink-4)' }}>No schedule yet.</div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 360px', gap: 20, alignItems: 'start' }}>

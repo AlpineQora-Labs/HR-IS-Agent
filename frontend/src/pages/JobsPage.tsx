@@ -19,9 +19,29 @@ function payRange(j: JobSummary) {
   return `${money(j.payMin)}–${money(j.payMax)}${per}`
 }
 
+const isOpenStatus = (s: string) => ['open', 'active', 'published'].includes(s.toLowerCase())
+
+function StatTile({ label, value, meta }: { label: string; value: string | number; meta?: string }) {
+  return (
+    <div className="stat">
+      <div className="stat__label">{label}</div>
+      <div className="stat__value">{value}</div>
+      {meta ? <div className="stat__meta">{meta}</div> : null}
+    </div>
+  )
+}
+
 export default function JobsPage() {
   const { data, isLoading, isError, refetch } = useJobs()
   const [filter, setFilter] = useState('')
+
+  const kpis = useMemo(() => {
+    const list = data ?? []
+    const open = list.filter((j) => isOpenStatus(j.status)).length
+    const openings = list.reduce((n, j) => n + (j.openings || 0), 0)
+    const applicants = list.reduce((n, j) => n + (j.applicants || 0), 0)
+    return { open, openings, applicants, avg: list.length ? Math.round(applicants / list.length) : 0 }
+  }, [data])
 
   const rows = useMemo(() => {
     if (!data) return []
@@ -54,6 +74,15 @@ export default function JobsPage() {
           </div>
         </div>
       </div>
+
+      {data && data.length > 0 ? (
+        <div className="grid-stats" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 18 }}>
+          <StatTile label="Open requisitions" value={kpis.open} meta={`of ${data.length} total`} />
+          <StatTile label="Total openings" value={kpis.openings} meta="Seats to fill" />
+          <StatTile label="Total applicants" value={kpis.applicants.toLocaleString()} />
+          <StatTile label="Avg applicants / req" value={kpis.avg} />
+        </div>
+      ) : null}
 
       {isLoading ? (
         <div className="card">

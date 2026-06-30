@@ -249,6 +249,13 @@ export interface EventRow {
   hires: number
 }
 
+export interface EventCreate {
+  name: string
+  type: string
+  location: string
+  startsAt: string
+}
+
 export interface SurveyRow {
   id: string
   name: string

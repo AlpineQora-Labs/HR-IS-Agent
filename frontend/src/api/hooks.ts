@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMemo } from 'react'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
 import type {
   AnalyticsSummary,
@@ -12,6 +13,7 @@ import type {
   ChatReplyInput,
   ChatState,
   CopilotArtifact,
+  EventCreate,
   EventRow,
   GenerateCopilotInput,
   Integration,
@@ -135,6 +137,68 @@ export function useSlots(jobId: string | undefined) {
   })
 }
 
+// Pipelines for many jobs at once (jobs×stages matrix). /pipeline is per-job,
+// so fan out one query per job and key the result by jobId.
+export function useAllPipelines(jobIds: string[]) {
+  const results = useQueries({
+    queries: jobIds.map((id) => ({
+      enabled: !!id,
+      queryKey: qk.pipeline(id),
+      queryFn: () => api.get<PipelineColumn[]>('/pipeline', { params: { jobId: id } }).then((r) => r.data),
+    })),
+  })
+  const signature = results.map((r) => r.dataUpdatedAt).join(',')
+  const byJob = useMemo(() => {
+    const map: Record<string, PipelineColumn[]> = {}
+    jobIds.forEach((id, i) => {
+      map[id] = results[i]?.data ?? []
+    })
+    return map
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature, jobIds.join(',')])
+  const isLoading = results.length > 0 && results.some((r) => r.isLoading)
+  return { byJob, isLoading }
+}
+
+// Open/booked slots across many jobs (for the Overview schedule timeline).
+export function useAllSlots(jobIds: string[]) {
+  const results = useQueries({
+    queries: jobIds.map((id) => ({
+      enabled: !!id,
+      queryKey: qk.slots(id),
+      queryFn: () => api.get<Slot[]>('/slots', { params: { jobId: id } }).then((r) => r.data),
+    })),
+  })
+  const signature = results.map((r) => r.dataUpdatedAt).join(',')
+  const slots = useMemo(
+    () => results.flatMap((r) => r.data ?? []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [signature],
+  )
+  const isLoading = results.length > 0 && results.some((r) => r.isLoading)
+  return { slots, isLoading }
+}
+
+// All interviews for a job, aggregated across its applications.
+// (/interviews is application-scoped, so we fan out one query per application.)
+export function useJobInterviews(applicationIds: string[]) {
+  const results = useQueries({
+    queries: applicationIds.map((id) => ({
+      enabled: !!id,
+      queryKey: qk.interviews(id),
+      queryFn: () => api.get<Interview[]>('/interviews', { params: { applicationId: id } }).then((r) => r.data),
+    })),
+  })
+  const signature = results.map((r) => r.dataUpdatedAt).join(',')
+  const interviews = useMemo(
+    () => results.flatMap((r) => r.data ?? []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [signature],
+  )
+  const isLoading = results.length > 0 && results.some((r) => r.isLoading)
+  return { interviews, isLoading }
+}
+
 // ---- Assessments ----
 
 export function useAssessments(applicationId?: string) {
@@ -255,6 +319,16 @@ export function useCareerJob(id: string | undefined) {
   })
 }
 
+// Recruiter-facing: the Aria transcript tied to an application (null if none).
+export function useApplicationConversation(applicationId: string | undefined, enabled: boolean) {
+  return useQuery({
+    enabled: enabled && !!applicationId,
+    queryKey: ['conversation', 'by-application', applicationId],
+    queryFn: () =>
+      api.get<ChatState | null>(`/chat/by-application/${applicationId}`).then((r) => r.data),
+  })
+}
+
 export function useChat(conversationId: string | undefined) {
   return useQuery({
     enabled: !!conversationId,
@@ -300,5 +374,13 @@ export function useUpdateApplicationStage() {
       qc.invalidateQueries({ queryKey: ['applications'] })
       qc.invalidateQueries({ queryKey: qk.pipeline(data.jobId) })
     },
+  })
+}
+
+export function useCreateEvent() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: EventCreate) => api.post<EventRow>('/events', input).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.events }),
   })
 }

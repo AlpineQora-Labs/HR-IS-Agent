@@ -14,11 +14,16 @@ Full spec: [`CLAUDE.md`](CLAUDE.md) (always-loaded summary) and [`BUILD_SPEC.md`
 
 ## What's here
 
+> **Note:** the live career site is [`bofa-careers-home.html`](bofa-careers-home.html), served by
+> [`serve-home.mjs`](serve-home.mjs) on **:5173**, with **Aria's conversational apply running in-page**
+> against the recruiting backend (`/v1/chat`). The earlier React/Vite runtime has been archived to
+> `_archived-talentbridge-5174/` and is no longer part of the running setup.
+
 | Tier | Module | Stack |
 |---|---|---|
-| Presentation | [`frontend/`](frontend) — runtime, recruiter review, analytics, admin console | React + Vite + Zustand |
+| Front door + chat | [`bofa-careers-home.html`](bofa-careers-home.html) — careers home with in-page Aria apply (serve-home.mjs, :5173) | static HTML + vanilla JS → `/v1/chat` |
+| _Archived_ | `_archived-talentbridge-5174/` — earlier runtime / recruiter review / analytics / admin console (no longer used) | React + Vite + Zustand |
 | Application + Data | [`backend/`](backend) — screening engine, guardrails, audit, versioning, jobs, applications, scheduling, notifications, analytics, bias audit | Spring Boot + JPA, H2/Postgres (Oracle-compatible DDL) |
-| Front door | [`bofa-careers-home.html`](bofa-careers-home.html) | static, served by the backend |
 
 ## Surfaces
 

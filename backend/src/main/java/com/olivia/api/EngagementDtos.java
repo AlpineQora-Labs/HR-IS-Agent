@@ -40,6 +40,13 @@ public final class EngagementDtos {
             int attended,
             int hires) {}
 
+    /** Create payload for a new recruiting event. */
+    public record EventCreate(
+            String name,
+            String type,
+            String location,
+            OffsetDateTime startsAt) {}
+
     public record SurveyRow(
             UUID id,
             String name,
