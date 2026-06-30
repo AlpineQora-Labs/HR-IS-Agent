@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import SlideOver from '@/components/SlideOver'
 import { MODULES, PERMISSIONS, useConfig } from '@/state/config'
+import SurveyBuilder from './admin/SurveyBuilder'
 
 type Tab = 'users' | 'survey' | 'email'
 
@@ -268,12 +269,7 @@ export default function AdminPage() {
 
         <div>
           {tab === 'users' && <UsersAndAccess />}
-          {tab === 'survey' && (
-            <BuilderPlaceholder
-              title="Survey Builder"
-              line="A drag-and-drop builder for candidate-experience surveys — question types, logic, and a live preview — is being added in this section next."
-            />
-          )}
+          {tab === 'survey' && <SurveyBuilder />}
           {tab === 'email' && (
             <BuilderPlaceholder
               title="Email Builder"
