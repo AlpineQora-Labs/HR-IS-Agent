@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { useStore } from '@/state/store'
 import { MODULES, useConfig } from '@/state/config'
 import {
+  IconAdmin,
   IconAnalytics,
   IconArrowRight,
   IconAssessments,
@@ -56,6 +57,7 @@ const ICONS: Record<string, IconC> = {
   compliance: IconCompliance,
   integrations: IconIntegrations,
   audit: IconAudit,
+  admin: IconAdmin,
 }
 
 const ROUTES: Record<string, string> = {
@@ -80,6 +82,7 @@ const ROUTES: Record<string, string> = {
   compliance: '/compliance',
   integrations: '/integrations',
   audit: '/audit',
+  admin: '/admin',
 }
 
 const STORAGE_KEY = 'olivia.sidebarCollapsed'
