@@ -256,6 +256,53 @@ export interface EventCreate {
   startsAt: string
 }
 
+// ---- Write payloads (recruiter actions) ----
+
+export interface JobCreate {
+  title: string
+  department: string
+  location: string
+  workMode: string
+  employmentType: string
+  family: string
+  status: string
+  openings: number
+  summary?: string
+  description?: string
+  payMin?: number
+  payMax?: number
+  payPeriod?: string
+}
+
+export interface OfferCreate {
+  applicationId: string
+  title: string
+  compBase?: number
+  compPeriod?: string
+  compBonus?: number
+  equity?: string
+  startDate?: string
+  letterBody?: string
+}
+
+export interface InterviewCreate {
+  applicationId: string
+  type: string
+  durationMin?: number
+  interviewers?: string
+}
+
+export interface ScheduleInterviewInput {
+  id: string
+  slotId: string
+  scheduledAt?: string
+}
+
+export interface PoolCreate {
+  name: string
+  description?: string
+}
+
 export interface SurveyRow {
   id: string
   name: string

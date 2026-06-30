@@ -1,8 +1,87 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useJobs } from '../api/hooks'
+import SlideOver from '../components/SlideOver'
+import { useCreateJob, useJobs } from '../api/hooks'
 import { money } from '../lib/format'
-import type { JobSummary } from '../api/types'
+import type { JobCreate, JobSummary } from '../api/types'
+
+const WORK_MODES = ['On-site', 'Hybrid', 'Remote']
+const EMP_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship']
+const JOB_STATUSES = ['OPEN', 'DRAFT', 'PAUSED']
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: 'block' }}>
+      <div className="eyebrow" style={{ marginBottom: 6 }}>{label}</div>
+      {children}
+    </label>
+  )
+}
+
+function NewJobForm({ onClose }: { onClose: () => void }) {
+  const create = useCreateJob()
+  const [f, setF] = useState<JobCreate>({
+    title: '',
+    department: '',
+    location: '',
+    workMode: 'On-site',
+    employmentType: 'Full-time',
+    family: '',
+    status: 'OPEN',
+    openings: 1,
+  })
+  const set = (patch: Partial<JobCreate>) => setF((p) => ({ ...p, ...patch }))
+  const valid = f.title.trim() && f.department.trim() && f.location.trim()
+
+  function submit() {
+    const payload: JobCreate = {
+      ...f,
+      title: f.title.trim(),
+      department: f.department.trim(),
+      location: f.location.trim(),
+      family: f.family.trim() || f.department.trim(),
+    }
+    create.mutate(payload, { onSuccess: onClose })
+  }
+
+  return (
+    <SlideOver label="New job" onClose={onClose} width={460}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px 14px', borderBottom: '1px solid var(--line)' }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, color: 'var(--ink-0)' }}>New job</div>
+        <button type="button" onClick={onClose} aria-label="Close" style={{ border: 0, background: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--ink-4)' }}>×</button>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <Field label="Job title"><input className="input" value={f.title} onChange={(e) => set({ title: e.target.value })} placeholder="Software Engineer" /></Field>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1 }}><Field label="Department"><input className="input" value={f.department} onChange={(e) => set({ department: e.target.value })} placeholder="Global Technology" /></Field></div>
+          <div style={{ flex: 1 }}><Field label="Family"><input className="input" value={f.family} onChange={(e) => set({ family: e.target.value })} placeholder="Engineering" /></Field></div>
+        </div>
+        <Field label="Location"><input className="input" value={f.location} onChange={(e) => set({ location: e.target.value })} placeholder="Charlotte, NC" /></Field>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1 }}><Field label="Work mode"><select className="select" value={f.workMode} onChange={(e) => set({ workMode: e.target.value })}>{WORK_MODES.map((w) => <option key={w}>{w}</option>)}</select></Field></div>
+          <div style={{ flex: 1 }}><Field label="Type"><select className="select" value={f.employmentType} onChange={(e) => set({ employmentType: e.target.value })}>{EMP_TYPES.map((t) => <option key={t}>{t}</option>)}</select></Field></div>
+        </div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1 }}><Field label="Status"><select className="select" value={f.status} onChange={(e) => set({ status: e.target.value })}>{JOB_STATUSES.map((s) => <option key={s}>{s}</option>)}</select></Field></div>
+          <div style={{ flex: 1 }}><Field label="Openings"><input className="input" type="number" min={1} value={f.openings} onChange={(e) => set({ openings: Number(e.target.value) })} /></Field></div>
+        </div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1 }}><Field label="Pay min"><input className="input" type="number" value={f.payMin ?? ''} onChange={(e) => set({ payMin: e.target.value ? Number(e.target.value) : undefined })} /></Field></div>
+          <div style={{ flex: 1 }}><Field label="Pay max"><input className="input" type="number" value={f.payMax ?? ''} onChange={(e) => set({ payMax: e.target.value ? Number(e.target.value) : undefined })} /></Field></div>
+          <div style={{ width: 100 }}><Field label="Period"><select className="select" value={f.payPeriod ?? 'year'} onChange={(e) => set({ payPeriod: e.target.value })}><option value="year">year</option><option value="hour">hour</option></select></Field></div>
+        </div>
+        <Field label="Summary"><textarea className="input" rows={3} value={f.summary ?? ''} onChange={(e) => set({ summary: e.target.value })} placeholder="One-line role summary…" style={{ resize: 'vertical', fontFamily: 'inherit' }} /></Field>
+      </div>
+      <div style={{ display: 'flex', gap: 8, padding: '14px 20px', borderTop: '1px solid var(--line)' }}>
+        <button className="btn btn--ghost btn--sm" onClick={onClose}>Cancel</button>
+        <div style={{ flex: 1 }} />
+        <button className="btn btn--primary btn--sm" disabled={!valid || create.isPending} onClick={submit}>
+          {create.isPending ? 'Creating…' : 'Create job'}
+        </button>
+      </div>
+    </SlideOver>
+  )
+}
 
 function statusBadgeClass(status: string) {
   const s = status.toLowerCase()
@@ -34,6 +113,7 @@ function StatTile({ label, value, meta }: { label: string; value: string | numbe
 export default function JobsPage() {
   const { data, isLoading, isError, refetch } = useJobs()
   const [filter, setFilter] = useState('')
+  const [creating, setCreating] = useState(false)
 
   const kpis = useMemo(() => {
     const list = data ?? []
@@ -64,16 +144,21 @@ export default function JobsPage() {
             <h1 style={{ fontSize: 28 }}>Jobs</h1>
             <p className="sub">Open requisitions across the organization.</p>
           </div>
-          <div className="input-group" style={{ width: 280 }}>
-            <input
-              className="input"
-              placeholder="Filter by title, team, location…"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            />
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div className="input-group" style={{ width: 240 }}>
+              <input
+                className="input"
+                placeholder="Filter by title, team, location…"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              />
+            </div>
+            <button className="btn btn--primary" onClick={() => setCreating(true)}>New job</button>
           </div>
         </div>
       </div>
+
+      {creating && <NewJobForm onClose={() => setCreating(false)} />}
 
       {data && data.length > 0 ? (
         <div className="grid-stats" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 18 }}>

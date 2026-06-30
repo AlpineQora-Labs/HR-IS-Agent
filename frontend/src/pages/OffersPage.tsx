@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import SlideOver from '@/components/SlideOver'
-import { useOffers } from '@/api/hooks'
+import { useApplications, useCreateOffer, useOffers, useSendOffer } from '@/api/hooks'
 import { date, money } from '@/lib/format'
-import type { Offer } from '@/api/types'
+import type { Offer, OfferCreate } from '@/api/types'
 
 const statusBadge = (status: string) => {
   const s = status.toUpperCase()
@@ -48,6 +48,8 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 }
 
 function OfferDetail({ o, onClose }: { o: Offer; onClose: () => void }) {
+  const send = useSendOffer()
+  const isDraft = (o.status || '').toUpperCase() === 'DRAFT'
   return (
     <SlideOver label={`${o.candidateName} offer`} onClose={onClose} width={480}>
       <div style={{ padding: '18px 20px 16px', borderBottom: '1px solid var(--line)' }}>
@@ -77,6 +79,66 @@ function OfferDetail({ o, onClose }: { o: Offer; onClose: () => void }) {
           </div>
         </div>
       </div>
+      <div style={{ display: 'flex', gap: 8, padding: '14px 20px', borderTop: '1px solid var(--line)' }}>
+        {isDraft ? (
+          <button className="btn btn--primary btn--sm" style={{ flex: 1 }} disabled={send.isPending} onClick={() => send.mutate(o.id, { onSuccess: onClose })}>
+            {send.isPending ? 'Sending…' : 'Send offer'}
+          </button>
+        ) : (
+          <span style={{ flex: 1, fontSize: 12.5, color: 'var(--ink-4)', alignSelf: 'center' }}>
+            Offer {(o.status || '').toLowerCase()}.
+          </span>
+        )}
+      </div>
+    </SlideOver>
+  )
+}
+
+function NewOfferForm({ onClose }: { onClose: () => void }) {
+  const { data: apps } = useApplications()
+  const create = useCreateOffer()
+  const [f, setF] = useState<OfferCreate>({ applicationId: '', title: '', compPeriod: 'year' })
+  const set = (patch: Partial<OfferCreate>) => setF((p) => ({ ...p, ...patch }))
+  const valid = f.applicationId && f.title.trim()
+
+  return (
+    <SlideOver label="New offer" onClose={onClose} width={460}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px 14px', borderBottom: '1px solid var(--line)' }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, color: 'var(--ink-0)' }}>New offer</div>
+        <button type="button" onClick={onClose} aria-label="Close" style={{ border: 0, background: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--ink-4)' }}>×</button>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <label style={{ display: 'block' }}>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Candidate (application)</div>
+          <select className="select" value={f.applicationId} onChange={(e) => set({ applicationId: e.target.value })}>
+            <option value="">Select an application…</option>
+            {(apps ?? []).map((a) => (
+              <option key={a.id} value={a.id}>{a.candidateName} — {a.jobTitle} · {a.stage}</option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: 'block' }}>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Offer title</div>
+          <input className="input" value={f.title} onChange={(e) => set({ title: e.target.value })} placeholder="Software Engineer — New Grad" />
+        </label>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <label style={{ flex: 1 }}><div className="eyebrow" style={{ marginBottom: 6 }}>Base</div><input className="input" type="number" value={f.compBase ?? ''} onChange={(e) => set({ compBase: e.target.value ? Number(e.target.value) : undefined })} /></label>
+          <label style={{ width: 110 }}><div className="eyebrow" style={{ marginBottom: 6 }}>Period</div><select className="select" value={f.compPeriod ?? 'year'} onChange={(e) => set({ compPeriod: e.target.value })}><option value="year">year</option><option value="hour">hour</option></select></label>
+        </div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <label style={{ flex: 1 }}><div className="eyebrow" style={{ marginBottom: 6 }}>Bonus</div><input className="input" type="number" value={f.compBonus ?? ''} onChange={(e) => set({ compBonus: e.target.value ? Number(e.target.value) : undefined })} /></label>
+          <label style={{ flex: 1 }}><div className="eyebrow" style={{ marginBottom: 6 }}>Equity</div><input className="input" value={f.equity ?? ''} onChange={(e) => set({ equity: e.target.value })} placeholder="RSU grant" /></label>
+        </div>
+        <label style={{ display: 'block' }}><div className="eyebrow" style={{ marginBottom: 6 }}>Start date</div><input className="input" type="date" value={f.startDate ?? ''} onChange={(e) => set({ startDate: e.target.value || undefined })} /></label>
+        <label style={{ display: 'block' }}><div className="eyebrow" style={{ marginBottom: 6 }}>Letter</div><textarea className="input" rows={3} value={f.letterBody ?? ''} onChange={(e) => set({ letterBody: e.target.value })} placeholder="Offer letter body…" style={{ resize: 'vertical', fontFamily: 'inherit' }} /></label>
+      </div>
+      <div style={{ display: 'flex', gap: 8, padding: '14px 20px', borderTop: '1px solid var(--line)' }}>
+        <button className="btn btn--ghost btn--sm" onClick={onClose}>Cancel</button>
+        <div style={{ flex: 1 }} />
+        <button className="btn btn--primary btn--sm" disabled={!valid || create.isPending} onClick={() => create.mutate({ ...f, title: f.title.trim() }, { onSuccess: onClose })}>
+          {create.isPending ? 'Creating…' : 'Create draft'}
+        </button>
+      </div>
     </SlideOver>
   )
 }
@@ -84,6 +146,7 @@ function OfferDetail({ o, onClose }: { o: Offer; onClose: () => void }) {
 export default function OffersPage() {
   const { data, isLoading } = useOffers()
   const [selected, setSelected] = useState<Offer | null>(null)
+  const [creating, setCreating] = useState(false)
 
   const kpis = useMemo(() => {
     const list = data ?? []
@@ -111,8 +174,11 @@ export default function OffersPage() {
             <h1>Offers</h1>
             <p className="sub">Compensation packages from draft through acceptance, with the full offer letter on hand.</p>
           </div>
+          <button className="btn btn--primary" onClick={() => setCreating(true)}>New offer</button>
         </div>
       </div>
+
+      {creating && <NewOfferForm onClose={() => setCreating(false)} />}
 
       <div className="grid-stats" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 18 }}>
         <StatTile label="Total offers" value={kpis.total} />
