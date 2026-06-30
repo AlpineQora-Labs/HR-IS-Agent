@@ -1,5 +1,6 @@
 // Minimal static server for the designed careers front door (bofa-careers-home.html).
-// Serves it at http://localhost:5173/ ; the page opens the screening runtime on :5174.
+// Serves it at http://localhost:5173/ ; Aria's conversational apply runs in-page,
+// talking directly to the recruiting backend at /v1/chat (no external runtime).
 import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'

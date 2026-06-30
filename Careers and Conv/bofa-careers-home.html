@@ -260,7 +260,7 @@
     <div class="chat-body" id="chatBody">
       <div class="bubble">Welcome to Bank of America Careers. I&rsquo;m here to help you find the right role and walk you through applying &mdash; right here in chat. What would you like to do?
         <div class="chips">
-          <button class="chip" style="background:#012169;color:#fff;border-color:#012169" onclick="openRuntime()">Screen me for a role</button>
+          <button class="chip" style="background:#012169;color:#fff;border-color:#012169" onclick="startScreening()">Screen me for a role</button>
           <button class="chip" onclick="say('Tell me about the hiring process')">Hiring process</button>
           <button class="chip" onclick="say('I have a question')">Ask a question</button>
         </div>
@@ -273,16 +273,73 @@
   </div>
 
 <script>
-  // The chat launcher opens the TalentBridge runtime (Phase 2 React app). In dev the runtime is
-  // served by Vite on :5173; in a deployed build this would be the runtime's hosted path.
-  var RUNTIME_URL='http://localhost:5174';
-  function openRuntime(){addBubble('Screen me for a role','user');botReply('Opening the screening assistant…');window.open(RUNTIME_URL,'_blank','noopener');}
+  // Aria runs in-page here, talking to the recruiting backend (/v1/chat). The full
+  // conversational apply — collect profile → knockout screening → self-schedule — happens
+  // right in this overlay; no redirect.
+  var API='http://localhost:8092/v1';
+  var convId=null, ariaShown=0, busy=false;
+
   function openChat(){document.getElementById('panel').classList.add('open');document.getElementById('launch').style.display='none';document.getElementById('teaser').style.display='none';}
   function closeChat(){document.getElementById('panel').classList.remove('open');document.getElementById('launch').style.display='flex';}
-  function addBubble(t,who){var body=document.getElementById('chatBody');var b=document.createElement('div');b.className='bubble';if(who==='user'){b.style.marginLeft='auto';b.style.background='#012169';b.style.color='#fff';b.style.border='none';}b.textContent=t;body.appendChild(b);body.scrollTop=body.scrollHeight;}
-  function botReply(t){setTimeout(function(){addBubble(t,'bot');},350);}
-  function say(t){addBubble(t,'user');if(t==='Search jobs')botReply("Great — what kind of role are you looking for? Tell me a job title, skill, or location and I'll pull matching openings.");else if(t.indexOf('hiring')>-1)botReply("Our process is usually: apply in chat, a quick screening, then interviews. I can screen you for a specific role right now if you'd like.");else botReply("Happy to help — ask me anything about working at Bank of America.");}
-  function send(){var i=document.getElementById('chatInput');if(!i.value.trim())return;var t=i.value.trim();i.value='';addBubble(t,'user');botReply("Thanks — in the full build I'll route that into screening and scheduling. For now this is the Module 1 conversational surface.");}
+
+  function addBubble(t,who){var body=document.getElementById('chatBody');var b=document.createElement('div');b.className='bubble';if(who==='user'){b.style.marginLeft='auto';b.style.background='#012169';b.style.color='#fff';b.style.border='none';}b.textContent=t;body.appendChild(b);body.scrollTop=body.scrollHeight;return b;}
+  function botReply(t){return new Promise(function(r){setTimeout(function(){addBubble(t,'bot');r();},300);});}
+
+  function clearChips(){var c=document.getElementById('dynChips');if(c)c.remove();}
+  function showChips(items){clearChips();if(!items||!items.length)return;var body=document.getElementById('chatBody');var row=document.createElement('div');row.className='chips';row.id='dynChips';items.forEach(function(it){var b=document.createElement('button');b.className='chip';b.textContent=it.label;b.onclick=it.on;row.appendChild(b);});body.appendChild(row);body.scrollTop=body.scrollHeight;}
+
+  // Step 1: pick a role to apply for.
+  async function startScreening(){
+    clearChips();addBubble('Screen me for a role','user');
+    try{
+      var jobs=await fetch(API+'/careers/jobs').then(function(r){return r.json();});
+      if(!jobs.length){return botReply('There are no open roles right now — please check back soon.');}
+      await botReply('Great — which role would you like to apply for?');
+      showChips(jobs.slice(0,6).map(function(j){return {label:j.title,on:function(){beginApply(j.id,j.title);}};}));
+    }catch(e){botReply('Sorry, I could not load roles right now.');}
+  }
+
+  // Step 2: start the conversation for the chosen job.
+  async function beginApply(jobId,title){
+    if(busy)return;busy=true;clearChips();addBubble(title,'user');
+    try{
+      var st=await fetch(API+'/chat/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jobId:jobId,channel:'WEB_CHAT',language:'en'})}).then(function(r){return r.json();});
+      convId=st.conversationId;ariaShown=0;applyState(st);
+    }catch(e){botReply('Sorry — I could not start the application.');}
+    busy=false;
+  }
+
+  // Step 3+: each turn → reply, render Aria's new messages + any quick-reply options.
+  async function sendReply(text){
+    if(busy||!convId)return;busy=true;clearChips();
+    try{
+      var st=await fetch(API+'/chat/'+convId+'/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})}).then(function(r){return r.json();});
+      applyState(st);
+    }catch(e){botReply('Sorry — something went wrong.');}
+    busy=false;
+  }
+
+  function applyState(st){
+    var olivia=(st.messages||[]).filter(function(m){return m.sender==='OLIVIA';});
+    for(var i=ariaShown;i<olivia.length;i++){addBubble(olivia[i].body,'bot');}
+    ariaShown=olivia.length;
+    if(st.status==='COMPLETED'){clearChips();lockInput(true);return;}
+    if(st.options&&st.options.length){showChips(st.options.map(function(o){return {label:o,on:function(){echoSend(o);}};}));}
+  }
+  function echoSend(o){clearChips();addBubble(o,'user');sendReply(o);}
+  function lockInput(done){var i=document.getElementById('chatInput');if(i){i.disabled=done;i.placeholder=done?'Application complete ✅':'Type a message…';}}
+
+  // General (non-apply) questions stay scripted.
+  function say(t){
+    addBubble(t,'user');
+    if(t.indexOf('hiring')>-1)botReply("Our process: apply right here in chat, a quick screening, then interviews. Want me to screen you for a role?");
+    else botReply("Happy to help — ask me anything about working at Bank of America, or tap “Screen me for a role” to apply.");
+  }
+
+  function send(){
+    var i=document.getElementById('chatInput');if(!i.value.trim())return;var t=i.value.trim();i.value='';
+    if(convId){addBubble(t,'user');sendReply(t);}else{say(t);}
+  }
 </script>
 </body>
 </html>

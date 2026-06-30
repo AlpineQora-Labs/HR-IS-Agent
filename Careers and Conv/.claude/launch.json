@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "runtime",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "cwd": "frontend",
+      "name": "careers-home",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["serve-home.mjs"],
+      "cwd": ".",
       "port": 5173,
       "autoPort": false
     }
