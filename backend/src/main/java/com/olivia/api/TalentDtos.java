@@ -10,6 +10,12 @@ public final class TalentDtos {
 
     public record Pool(UUID id, String name, String description, long memberCount) {}
 
+    /** Create a talent pool. */
+    public record CreatePoolRequest(String name, String description) {}
+
+    /** Add a candidate to a pool. */
+    public record AddPoolMemberRequest(UUID candidateId) {}
+
     public record MatchRow(
             UUID candidateId,
             String candidateName,

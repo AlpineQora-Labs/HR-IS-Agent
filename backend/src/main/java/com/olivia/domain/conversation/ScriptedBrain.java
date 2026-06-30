@@ -7,13 +7,12 @@ import com.olivia.domain.job.KnockoutQuestion;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
-import org.springframework.stereotype.Component;
 
 /**
- * Deterministic, warm "Olivia" copy. No external API calls — this is the
- * default {@link AssistantBrain}. Steps mirror {@link ConversationEngine}.
+ * Deterministic, warm "Olivia" copy. No external API calls — the default
+ * {@link AssistantBrain} and the fallback for {@link ClaudeBrain}. Wired by
+ * {@link AriaConfig}. Steps mirror {@link ConversationEngine}.
  */
-@Component
 public class ScriptedBrain implements AssistantBrain {
 
     private static final DateTimeFormatter SLOT_FMT =

@@ -15,6 +15,11 @@ import type {
   CopilotArtifact,
   EventCreate,
   EventRow,
+  InterviewCreate,
+  JobCreate,
+  OfferCreate,
+  PoolCreate,
+  ScheduleInterviewInput,
   GenerateCopilotInput,
   Integration,
   Interview,
@@ -382,5 +387,64 @@ export function useCreateEvent() {
   return useMutation({
     mutationFn: (input: EventCreate) => api.post<EventRow>('/events', input).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.events }),
+  })
+}
+
+export function useCreateJob() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: JobCreate) => api.post<JobDetail>('/jobs', input).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.jobs }),
+  })
+}
+
+export function useCreateOffer() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: OfferCreate) => api.post<Offer>('/offers', input).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.offers }),
+  })
+}
+
+export function useSendOffer() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.post<Offer>(`/offers/${id}/send`, {}).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.offers }),
+  })
+}
+
+export function useCreateInterview() {
+  return useMutation({
+    mutationFn: (input: InterviewCreate) => api.post<Interview>('/interviews', input).then((r) => r.data),
+  })
+}
+
+export function useScheduleInterview() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, slotId, scheduledAt }: ScheduleInterviewInput) =>
+      api.post<Interview>(`/interviews/${id}/schedule`, { slotId, scheduledAt }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['slots'] })
+      qc.invalidateQueries({ queryKey: ['applications'] })
+    },
+  })
+}
+
+export function useCreatePool() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: PoolCreate) => api.post<Pool>('/pools', input).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.pools }),
+  })
+}
+
+export function useAddPoolMember() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ poolId, candidateId }: { poolId: string; candidateId: string }) =>
+      api.post(`/pools/${poolId}/members`, { candidateId }).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.pools }),
   })
 }

@@ -5,8 +5,11 @@ import {
   useAllPipelines,
   useApplicationConversation,
   useCandidate,
+  useCreateInterview,
   useJobs,
   usePipeline,
+  useScheduleInterview,
+  useSlots,
   useUpdateApplicationStage,
 } from '../api/hooks'
 import type { ApplicationRow, JobSummary } from '../api/types'
@@ -111,6 +114,72 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '7px 0', fontSize: 13 }}>
       <span style={{ color: 'var(--ink-4)' }}>{label}</span>
       <span style={{ color: 'var(--ink-1)', textAlign: 'right' }}>{children}</span>
+    </div>
+  )
+}
+
+// Book an interview for this application onto one of the job's open slots.
+function ScheduleInterview({ applicationId, jobId }: { applicationId: string; jobId: string }) {
+  const [open, setOpen] = useState(false)
+  const { data: slots } = useSlots(open ? jobId : undefined)
+  const create = useCreateInterview()
+  const schedule = useScheduleInterview()
+  const [booked, setBooked] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const free = (slots ?? []).filter((s) => !s.booked)
+
+  function book(slotId: string, label: string) {
+    if (busy) return
+    setBusy(true)
+    create.mutate(
+      { applicationId, type: 'PHONE_SCREEN', durationMin: 30 },
+      {
+        onSuccess: (iv) =>
+          schedule.mutate(
+            { id: iv.id, slotId },
+            { onSuccess: () => { setBooked(label); setBusy(false) }, onError: () => setBusy(false) },
+          ),
+        onError: () => setBusy(false),
+      },
+    )
+  }
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 0, cursor: 'pointer', padding: 0, color: 'var(--bofa-navy)', fontSize: 13, fontWeight: 600 }}
+      >
+        <span style={{ fontSize: 11 }}>{open ? '▾' : '▸'}</span>
+        Schedule interview
+      </button>
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          {booked ? (
+            <div style={{ fontSize: 12.5, color: 'var(--ok-fg)' }}>Booked for {booked} ✓</div>
+          ) : free.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>No open interview slots for this job.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {free.map((s) => {
+                const label = `${date(s.startsAt)} · ${new Date(s.startsAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+                return (
+                  <button
+                    key={s.id}
+                    className="btn btn--outline btn--sm"
+                    disabled={busy}
+                    style={{ justifyContent: 'flex-start' }}
+                    onClick={() => book(s.id, label)}
+                  >
+                    {label}{s.interviewerName ? ` · ${s.interviewerName}` : ''}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -269,6 +338,7 @@ function CandidateDrawer({
             </div>
           </div>
 
+          <ScheduleInterview applicationId={app.id} jobId={app.jobId} />
           <AriaTranscript applicationId={app.id} />
         </div>
 
