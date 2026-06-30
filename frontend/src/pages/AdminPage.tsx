@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import SlideOver from '@/components/SlideOver'
 import { MODULES, PERMISSIONS, useConfig } from '@/state/config'
 import SurveyBuilder from './admin/SurveyBuilder'
+import EmailBuilder from './admin/EmailBuilder'
 
 type Tab = 'users' | 'survey' | 'email'
 
@@ -213,17 +214,6 @@ function UsersAndAccess() {
   )
 }
 
-function BuilderPlaceholder({ title, line }: { title: string; line: string }) {
-  return (
-    <div className="card">
-      <div className="card__body" style={{ padding: '56px 20px', textAlign: 'center' }}>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--ink-0)' }}>{title}</div>
-        <div style={{ fontSize: 13.5, color: 'var(--ink-4)', margin: '8px auto 0', maxWidth: 420, lineHeight: 1.6 }}>{line}</div>
-      </div>
-    </div>
-  )
-}
-
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('users')
 
@@ -238,45 +228,18 @@ export default function AdminPage() {
         <p className="sub">Manage who has access and what they can do — plus the survey and email builders.</p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 220px) 1fr', gap: 20, alignItems: 'start' }}>
-        <nav className="card" style={{ padding: 8 }}>
-          {TABS.map((t) => {
-            const active = tab === t.key
-            return (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  textAlign: 'left',
-                  border: 0,
-                  cursor: 'pointer',
-                  borderRadius: 'var(--ra-2)',
-                  padding: '10px 12px',
-                  marginBottom: 2,
-                  background: active ? 'var(--navy-050)' : 'transparent',
-                  color: active ? 'var(--bofa-navy)' : 'var(--ink-1)',
-                  font: 'inherit',
-                }}
-              >
-                <div style={{ fontSize: 13.5, fontWeight: active ? 600 : 500 }}>{t.label}</div>
-                <div style={{ fontSize: 11.5, color: 'var(--ink-4)', marginTop: 2 }}>{t.blurb}</div>
-              </button>
-            )
-          })}
-        </nav>
+      <div className="tabs" style={{ marginBottom: 20 }}>
+        {TABS.map((t) => (
+          <button key={t.key} className="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)} title={t.blurb}>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-        <div>
-          {tab === 'users' && <UsersAndAccess />}
-          {tab === 'survey' && <SurveyBuilder />}
-          {tab === 'email' && (
-            <BuilderPlaceholder
-              title="Email Builder"
-              line="A block-based email builder with merge tags and a template library — feeding Nurture and Offers — is being added in this section next."
-            />
-          )}
-        </div>
+      <div>
+        {tab === 'users' && <UsersAndAccess />}
+        {tab === 'survey' && <SurveyBuilder />}
+        {tab === 'email' && <EmailBuilder />}
       </div>
     </div>
   )
