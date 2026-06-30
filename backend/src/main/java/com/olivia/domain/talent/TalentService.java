@@ -39,6 +39,35 @@ public class TalentService {
                 .toList();
     }
 
+    /** A single pool view with its current member count. */
+    public Pool poolView(UUID poolId) {
+        TalentPool p = poolRepository.findById(poolId).orElseThrow();
+        return new Pool(p.getId(), p.getName(), p.getDescription(), memberRepository.countByPoolId(p.getId()));
+    }
+
+    @Transactional
+    public Pool createPool(String name, String description) {
+        TalentPool p = new TalentPool();
+        p.setName(name);
+        p.setDescription(description);
+        p = poolRepository.save(p);
+        return new Pool(p.getId(), p.getName(), p.getDescription(), 0);
+    }
+
+    @Transactional
+    public Pool addMember(UUID poolId, UUID candidateId) {
+        TalentPoolMemberId id = new TalentPoolMemberId(poolId, candidateId);
+        if (!memberRepository.existsById(id)) {
+            memberRepository.save(new TalentPoolMember(poolId, candidateId, null));
+        }
+        return poolView(poolId);
+    }
+
+    @Transactional
+    public void removeMember(UUID poolId, UUID candidateId) {
+        memberRepository.deleteById(new TalentPoolMemberId(poolId, candidateId));
+    }
+
     public List<MobilityRow> mobility() {
         Map<UUID, InternalEmployee> employees = new HashMap<>();
         employeeRepository.findAll().forEach(e -> employees.put(e.getId(), e));
