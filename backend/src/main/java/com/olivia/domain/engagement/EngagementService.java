@@ -80,6 +80,28 @@ public class EngagementService {
                 .toList();
     }
 
+    @Transactional
+    public EventRow createEvent(com.olivia.api.EngagementDtos.EventCreate req) {
+        RecruitingEvent e = new RecruitingEvent();
+        e.setName(req.name());
+        e.setType(req.type() != null ? req.type() : "HIRING_EVENT");
+        e.setLocation(req.location());
+        e.setStartsAt(req.startsAt());
+        e.setRegistrations(0);
+        e.setAttended(0);
+        e.setHires(0);
+        RecruitingEvent saved = eventRepository.save(e);
+        return new EventRow(
+                saved.getId(),
+                saved.getName(),
+                saved.getType(),
+                saved.getLocation(),
+                saved.getStartsAt(),
+                saved.getRegistrations(),
+                saved.getAttended(),
+                saved.getHires());
+    }
+
     public List<SurveyRow> surveys() {
         return surveyRepository.findByOrderByNameAsc().stream()
                 .map(

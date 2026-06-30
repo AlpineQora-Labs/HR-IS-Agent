@@ -57,6 +57,14 @@ public class ConversationService {
         return toState(conversation, engine.optionsFor(conversation));
     }
 
+    /** Latest conversation tied to an application (recruiter-facing transcript), or null. */
+    public ChatState getByApplication(UUID applicationId) {
+        return conversations.findByApplicationId(applicationId).stream()
+                .max(java.util.Comparator.comparing(Conversation::getCreatedAt))
+                .map(c -> toState(c, engine.optionsFor(c)))
+                .orElse(null);
+    }
+
     // ---- mapping ----
 
     private ChatState toState(Conversation conversation, List<String> options) {

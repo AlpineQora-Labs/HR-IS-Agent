@@ -37,4 +37,10 @@ public class ChatController {
     public ChatState get(@PathVariable UUID conversationId) {
         return conversationService.get(conversationId);
     }
+
+    /** Recruiter-facing: the Aria transcript for an application (null if none). */
+    @GetMapping("/by-application/{applicationId}")
+    public ChatState byApplication(@PathVariable UUID applicationId) {
+        return conversationService.getByApplication(applicationId);
+    }
 }
