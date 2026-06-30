@@ -24,6 +24,12 @@ server:
 app:
   cors:
     allowed-origin: ${FRONTEND_ORIGIN:http://localhost:5177}
+  aria:
+    # LLM-powered Aria activates only when enabled AND ANTHROPIC_API_KEY is set;
+    # otherwise the conversation runs fully offline on the scripted brain.
+    enabled: ${ARIA_AI_ENABLED:true}
+    model: ${ARIA_MODEL:claude-opus-4-8}
+    nlu-model: ${ARIA_NLU_MODEL:claude-opus-4-8}
 
 management:
   endpoints:

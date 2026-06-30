@@ -45,6 +45,7 @@ public class ConversationEngine {
     public static final String STEP_DECLINED = "DECLINED";
 
     private final AssistantBrain brain;
+    private final AnswerInterpreter interpreter;
     private final ObjectMapper objectMapper;
     private final ConversationRepository conversations;
     private final MessageRepository messages;
@@ -58,6 +59,7 @@ public class ConversationEngine {
 
     public ConversationEngine(
             AssistantBrain brain,
+            AnswerInterpreter interpreter,
             ObjectMapper objectMapper,
             ConversationRepository conversations,
             MessageRepository messages,
@@ -69,6 +71,7 @@ public class ConversationEngine {
             InterviewSlotRepository slots,
             InterviewRepository interviews) {
         this.brain = brain;
+        this.interpreter = interpreter;
         this.objectMapper = objectMapper;
         this.conversations = conversations;
         this.messages = messages;
@@ -122,21 +125,21 @@ public class ConversationEngine {
         List<Message> emitted = new ArrayList<>();
         switch (state.step) {
             case STEP_COLLECT_NAME -> {
-                state.name = text.trim();
+                state.name = interpreter.extractField("NAME", text);
                 emitted.add(record(conversation, STEP_COLLECT_NAME,
-                        brain.acknowledge(STEP_COLLECT_NAME, text)));
+                        brain.acknowledge(STEP_COLLECT_NAME, state.name)));
                 state.step = STEP_COLLECT_EMAIL;
                 emitted.add(record(conversation, STEP_COLLECT_EMAIL,
                         brain.ask(STEP_COLLECT_EMAIL, job, null)));
             }
             case STEP_COLLECT_EMAIL -> {
-                state.email = text.trim();
+                state.email = interpreter.extractField("EMAIL", text);
                 state.step = STEP_COLLECT_PHONE;
                 emitted.add(record(conversation, STEP_COLLECT_PHONE,
                         brain.ask(STEP_COLLECT_PHONE, job, null)));
             }
             case STEP_COLLECT_PHONE -> {
-                state.phone = text.trim();
+                state.phone = interpreter.extractField("PHONE", text);
                 // Profile complete: create candidate + application.
                 createCandidateAndApplication(conversation, state, job);
                 emitted.add(record(conversation, STEP_COLLECT_PHONE,
@@ -180,14 +183,16 @@ public class ConversationEngine {
             return;
         }
         KnockoutQuestion q = qs.get(state.knockoutIndex);
-        boolean disqualified = isDisqualified(q, text);
+        // Understand the free-text reply, then evaluate the (unchanged) disqualify rule.
+        String answer = interpreter.normalizeAnswer(q, text);
+        boolean disqualified = isDisqualified(q, answer);
 
         // Persist the screening answer (passed = !disqualified).
         Application app = applications.findById(conversation.getApplicationId()).orElseThrow();
         ScreeningAnswer ans = new ScreeningAnswer();
         ans.setApplicationId(app.getId());
         ans.setQuestionId(q.getId());
-        ans.setAnswer(text.trim());
+        ans.setAnswer(answer);
         ans.setPassed(!disqualified);
         screeningAnswers.save(ans);
 
@@ -222,7 +227,12 @@ public class ConversationEngine {
     private void handleScheduleChoice(
             Conversation conversation, State state, Job job, String text, List<Message> emitted) {
         List<InterviewSlot> open = openSlots(job);
-        InterviewSlot chosen = matchSlot(open, text);
+        List<String> labels = new ArrayList<>();
+        for (InterviewSlot slot : open) {
+            labels.add(ScriptedBrain.formatSlot(slot));
+        }
+        int pick = interpreter.chooseSlot(labels, text);
+        InterviewSlot chosen = (pick >= 1 && pick <= open.size()) ? open.get(pick - 1) : null;
         if (chosen == null) {
             emitted.add(record(conversation, STEP_OFFER_SCHEDULE,
                     "Sorry, I didn't catch which time you'd like. Please reply with the number "
@@ -420,29 +430,6 @@ public class ConversationEngine {
 
     private List<InterviewSlot> openSlots(Job job) {
         return slots.findByJobIdAndBookedFalse(job.getId());
-    }
-
-    /** Match a candidate reply to a slot — by 1-based index or by formatted text. */
-    private static InterviewSlot matchSlot(List<InterviewSlot> open, String text) {
-        if (open.isEmpty() || text == null) {
-            return null;
-        }
-        String trimmed = text.trim();
-        // Try a leading number ("1", "2.", "option 3").
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\d+").matcher(trimmed);
-        if (m.find()) {
-            int idx = Integer.parseInt(m.group()) - 1;
-            if (idx >= 0 && idx < open.size()) {
-                return open.get(idx);
-            }
-        }
-        // Try matching the formatted slot text.
-        for (InterviewSlot slot : open) {
-            if (ScriptedBrain.formatSlot(slot).equalsIgnoreCase(trimmed)) {
-                return slot;
-            }
-        }
-        return null;
     }
 
     private Job loadJob(UUID jobId) {
