@@ -20,11 +20,8 @@ body {
   margin: 0;
 }
 
-/* Sans-serif headings (the DS default is an editorial serif) to match the
-   conversational, product feel of the app. */
-:root {
-  --font-display: var(--font-sans);
-}
+/* Display typography: the DS's editorial serif (Source Serif 4) for headings
+   and stat values — Inter body + mono micro-labels stay. */
 
 /* The main content area is a CSS-grid track; without min-width:0 a wide child
    (e.g. the horizontally-scrolling Pipeline board) expands the track past the
