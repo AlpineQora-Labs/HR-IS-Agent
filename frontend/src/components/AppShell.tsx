@@ -1,5 +1,6 @@
-import { useState, type ComponentType, type ReactNode } from 'react'
+import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
+import CommandPalette from '@/components/CommandPalette'
 import { useStore } from '@/state/store'
 import { MODULES, useConfig } from '@/state/config'
 import {
@@ -150,6 +151,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { toast } = useStore()
   const { isModuleOn, currentUser } = useConfig()
   const [collapsed, setCollapsed] = useState(readCollapsed)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+
+  // Cmd/Ctrl+K opens the command palette from anywhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const toggle = () =>
     setCollapsed((c) => {
@@ -187,10 +201,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           {collapsed ? <IconChevronRight className="ic" /> : <IconChevronLeft className="ic" />}
         </button>
         <div className="spacer" />
-        <div className="input-group" style={{ width: 320, maxWidth: '32vw' }}>
+        <button
+          className="input-group"
+          onClick={() => setPaletteOpen(true)}
+          aria-label="Search (⌘K)"
+          style={{ width: 320, maxWidth: '32vw', border: 0, background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+        >
           <IconSearch className="ic-lead" />
-          <input className="input" placeholder="Search jobs, candidates, pipelines…" />
-        </div>
+          <span className="input" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--ink-5)', cursor: 'pointer' }}>
+            Search jobs, candidates, pages…
+            <span className="badge" style={{ fontSize: 10.5 }}>⌘K</span>
+          </span>
+        </button>
         <a href="http://localhost:5173" target="_blank" rel="noreferrer" className="btn btn--ghost" title="Open the candidate-facing career site">
           Career site
           <IconArrowRight className="ic" />
@@ -215,6 +237,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       </nav>
 
       <main className="app__main">{children}</main>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
       {toast && (
         <div style={{ position: 'fixed', right: 24, bottom: 24, zIndex: 60 }}>

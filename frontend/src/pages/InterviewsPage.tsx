@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { defaultJobId } from '@/lib/jobs'
 import SlideOver from '@/components/SlideOver'
 import { useApplications, useJobInterviews, useJobs, useSlots } from '@/api/hooks'
@@ -599,7 +600,9 @@ function SlotsList({ slots, isLoading }: { slots: Slot[] | undefined; isLoading:
 
 export default function InterviewsPage() {
   const { data: jobs } = useJobs()
-  const [jobId, setJobId] = useState<string>('')
+  const [params, setParams] = useSearchParams()
+  const jobId = params.get('job') ?? ''
+  const setJobId = (id: string) => setParams(id ? { job: id } : {}, { replace: true })
   const [view, setView] = useState<'calendar' | 'list'>('calendar')
 
   const effectiveJobId = jobId || defaultJobId(jobs)

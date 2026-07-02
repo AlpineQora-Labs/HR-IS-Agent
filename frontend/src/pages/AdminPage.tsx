@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useStore } from '@/state/store'
+import ConfirmButton from '@/components/ConfirmButton'
 import SlideOver from '@/components/SlideOver'
 import { MODULES, PERMISSIONS, useConfig } from '@/state/config'
 import SurveyBuilder from './admin/SurveyBuilder'
@@ -24,6 +27,7 @@ function StatTile({ label, value, meta }: { label: string; value: string | numbe
 
 function InviteUser({ onClose }: { onClose: () => void }) {
   const { roles, addUser } = useConfig()
+  const { toastMsg } = useStore()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [roleKey, setRoleKey] = useState(roles.find((r) => r.key === 'recruiter')?.key ?? roles[0]?.key ?? '')
@@ -57,7 +61,7 @@ function InviteUser({ onClose }: { onClose: () => void }) {
       <div style={{ display: 'flex', gap: 8, padding: '14px 20px', borderTop: '1px solid var(--line)' }}>
         <button className="btn btn--ghost btn--sm" onClick={onClose}>Cancel</button>
         <div style={{ flex: 1 }} />
-        <button className="btn btn--primary btn--sm" disabled={!valid} onClick={() => { addUser(name, email, roleKey); onClose() }}>
+        <button className="btn btn--primary btn--sm" disabled={!valid} onClick={() => { addUser(name, email, roleKey); toastMsg(`Invite sent to ${email.trim()}`); onClose() }}>
           Send invite
         </button>
       </div>
@@ -131,7 +135,7 @@ function UsersAndAccess() {
                       {currentUser?.id !== u.id && (
                         <button className="btn btn--outline btn--sm" onClick={() => setCurrentUser(u.id)} title="View the app as this user">Act as</button>
                       )}
-                      <button className="btn btn--ghost btn--sm" onClick={() => removeUser(u.id)} aria-label="Remove">Remove</button>
+                      <ConfirmButton label="Remove" confirmLabel="Remove user?" onConfirm={() => removeUser(u.id)} />
                     </div>
                   </td>
                 </tr>
@@ -215,7 +219,10 @@ function UsersAndAccess() {
 }
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<Tab>('users')
+  const [params, setParams] = useSearchParams()
+  const rawTab = params.get('tab')
+  const tab: Tab = rawTab === 'survey' || rawTab === 'email' ? rawTab : 'users'
+  const setTab = (t: Tab) => setParams(t === 'users' ? {} : { tab: t }, { replace: true })
 
   return (
     <div>

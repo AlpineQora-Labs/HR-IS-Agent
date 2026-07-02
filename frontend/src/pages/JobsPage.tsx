@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useStore } from '@/state/store'
 import { Link } from 'react-router-dom'
 import SlideOver from '../components/SlideOver'
 import { useCreateJob, useJobs } from '../api/hooks'
@@ -20,6 +21,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function NewJobForm({ onClose }: { onClose: () => void }) {
   const create = useCreateJob()
+  const { toastMsg } = useStore()
   const [f, setF] = useState<JobCreate>({
     title: '',
     department: '',
@@ -41,7 +43,7 @@ function NewJobForm({ onClose }: { onClose: () => void }) {
       location: f.location.trim(),
       family: f.family.trim() || f.department.trim(),
     }
-    create.mutate(payload, { onSuccess: onClose })
+    create.mutate(payload, { onSuccess: (j) => { toastMsg(`Job "${j.title}" created`); onClose() } })
   }
 
   return (

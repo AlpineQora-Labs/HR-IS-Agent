@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useStore } from '@/state/store'
 import SlideOver from '@/components/SlideOver'
 import { useCreateEvent, useEvents } from '@/api/hooks'
 import { date } from '@/lib/format'
@@ -183,6 +184,7 @@ const STEPS = ['Basics', 'Sessions', 'Registration', 'Review']
 
 function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const create = useCreateEvent()
+  const { toastMsg } = useStore()
   const [step, setStep] = useState(0)
   const [d, setD] = useState<Draft>(EMPTY_DRAFT)
   const set = (patch: Partial<Draft>) => setD((prev) => ({ ...prev, ...patch }))
@@ -194,7 +196,7 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
     const startsAt = new Date(`${d.day}T${d.time || '09:00'}:00`).toISOString()
     create.mutate(
       { name: d.name.trim(), type: d.type, location: d.location.trim(), startsAt },
-      { onSuccess: () => { onCreated(); onClose() } },
+      { onSuccess: () => { toastMsg(`Event "${d.name.trim()}" created`); onCreated(); onClose() } },
     )
   }
 

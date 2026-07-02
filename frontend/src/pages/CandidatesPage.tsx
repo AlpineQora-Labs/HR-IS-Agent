@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { rowAction } from '@/lib/a11y'
 import { Link } from 'react-router-dom'
 import SlideOver from '../components/SlideOver'
 import { useCandidate, useCandidates, useJobInterviews } from '../api/hooks'
@@ -329,7 +330,7 @@ export default function CandidatesPage() {
             </thead>
             <tbody>
               {rows.map((c) => (
-                <tr key={c.id} onClick={() => setSelected(c)} style={{ cursor: 'pointer' }}>
+                <tr key={c.id} {...rowAction(() => setSelected(c))}>
                   <td>
                     <div className="who">
                       <div className="avatar">{initials(c.name)}</div>

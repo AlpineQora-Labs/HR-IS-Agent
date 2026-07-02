@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { defaultJobId } from '@/lib/jobs'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import SlideOver from '../components/SlideOver'
+import ConfirmButton from '../components/ConfirmButton'
+import { useStore } from '@/state/store'
 import {
   useAllPipelines,
   useApplicationConversation,
@@ -241,6 +243,7 @@ function CandidateDrawer({
 }) {
   const { data: c, isLoading } = useCandidate(app.candidateId)
   const advance = useUpdateApplicationStage()
+  const { toastMsg } = useStore()
   const [stage, setStage] = useState(app.stage)
 
   useEffect(() => setStage(app.stage), [app.id, app.stage])
@@ -249,7 +252,19 @@ function CandidateDrawer({
   const nextStage = idx >= 0 && idx < stages.length - 1 ? stages[idx + 1] : null
 
   function move(to: string) {
-    advance.mutate({ id: app.id, stage: to }, { onSuccess: (row) => setStage(row.stage) })
+    advance.mutate(
+      { id: app.id, stage: to },
+      {
+        onSuccess: (row) => {
+          setStage(row.stage)
+          toastMsg(
+            to === 'REJECTED'
+              ? `${app.candidateName} rejected`
+              : `${app.candidateName} advanced to ${titleCase(row.stage)}`,
+          )
+        },
+      },
+    )
   }
 
   return (
@@ -350,9 +365,7 @@ function CandidateDrawer({
             Full profile
           </Link>
           {!CLOSED_STAGES.has(stage) && (
-            <button className="btn btn--ghost btn--sm" disabled={advance.isPending} onClick={() => move('REJECTED')}>
-              Reject
-            </button>
+            <ConfirmButton label="Reject" confirmLabel="Confirm reject?" onConfirm={() => move('REJECTED')} />
           )}
         </div>
     </SlideOver>
@@ -455,7 +468,11 @@ function PipelineMatrix({ jobs, onPick }: { jobs: JobSummary[]; onPick: (jobId: 
 
 export default function PipelinePage() {
   const { data: jobs, isLoading: jobsLoading } = useJobs()
-  const [jobId, setJobId] = useState<string | undefined>(undefined)
+  const [params, setParams] = useSearchParams()
+  const jobId = params.get('job') ?? undefined
+  // Keep the selected requisition in the URL so pipeline views are shareable.
+  const setJobId = (id: string | undefined) =>
+    setParams(id ? { job: id } : {}, { replace: true })
   const [closedOpen, setClosedOpen] = useState(false)
   const [selected, setSelected] = useState<ApplicationRow | null>(null)
   const [mode, setMode] = useState<'board' | 'matrix'>('board')

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import ConfirmButton from '@/components/ConfirmButton'
 import { usePersistentState, uid } from './builderStore'
 
 // ── Survey model ───────────────────────────────────────────────────────────
@@ -279,7 +280,7 @@ export default function SurveyBuilder() {
           <div style={{ flex: 1 }} />
           <span className="eyebrow">{active.questions.length} questions · ~{estMinutes} min</span>
           <span className="badge badge--ok" title="Saved automatically">Saved</span>
-          <button className="btn btn--ghost btn--sm" onClick={deleteSurvey} disabled={surveys.length <= 1}>Delete</button>
+          <ConfirmButton label="Delete" confirmLabel="Delete survey?" onConfirm={deleteSurvey} disabled={surveys.length <= 1} />
         </div>
       </div>
 

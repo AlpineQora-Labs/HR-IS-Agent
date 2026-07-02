@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { rowAction } from '@/lib/a11y'
 import { defaultJobId } from '@/lib/jobs'
 import SlideOver from '@/components/SlideOver'
 import { useJobs, useReactivation, useSourcing } from '@/api/hooks'
@@ -121,7 +122,7 @@ function PassiveTable({ rows, onSelect }: { rows: SourcingRow[]; onSelect: (r: S
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.candidateId} onClick={() => onSelect(r)} style={{ cursor: 'pointer' }}>
+            <tr key={r.candidateId} {...rowAction(() => onSelect(r))}>
               <td>
                 <div className="who__name">{r.candidateName}</div>
                 <div className="who__sub">{r.headline}</div>
@@ -155,7 +156,7 @@ function ReactivationTable({ rows, onSelect }: { rows: MatchRow[]; onSelect: (r:
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.candidateId} onClick={() => onSelect(r)} style={{ cursor: 'pointer' }}>
+            <tr key={r.candidateId} {...rowAction(() => onSelect(r))}>
               <td>
                 <div className="who__name">{r.candidateName}</div>
                 <div className="who__sub">{r.headline}</div>

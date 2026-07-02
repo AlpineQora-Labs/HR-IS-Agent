@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import ConfirmButton from '@/components/ConfirmButton'
 import { usePersistentState, uid } from './builderStore'
 
 // ── Email model ─────────────────────────────────────────────────────────────
@@ -246,7 +247,7 @@ export default function EmailBuilder() {
           <div style={{ flex: 1 }} />
           <span className="eyebrow">{active.blocks.length} blocks</span>
           <span className="badge badge--ok" title="Saved automatically">Saved</span>
-          <button className="btn btn--ghost btn--sm" onClick={deleteTemplate} disabled={templates.length <= 1}>Delete</button>
+          <ConfirmButton label="Delete" confirmLabel="Delete template?" onConfirm={deleteTemplate} disabled={templates.length <= 1} />
         </div>
       </div>
 
