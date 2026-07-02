@@ -5,14 +5,16 @@ import ConfirmButton from '@/components/ConfirmButton'
 import SlideOver from '@/components/SlideOver'
 import { MODULES, PERMISSIONS, useConfig } from '@/state/config'
 import SurveyBuilder from './admin/SurveyBuilder'
+import { usePersistentState } from './admin/builderStore'
 import EmailBuilder from './admin/EmailBuilder'
 
-type Tab = 'users' | 'survey' | 'email'
+type Tab = 'users' | 'survey' | 'comms' | 'config'
 
 const TABS: { key: Tab; label: string; blurb: string }[] = [
-  { key: 'users', label: 'Users & Access', blurb: 'People, roles, permissions, modules' },
-  { key: 'survey', label: 'Survey Builder', blurb: 'Design candidate-experience surveys' },
-  { key: 'email', label: 'Email Builder', blurb: 'Templates for nurture & offers' },
+  { key: 'users', label: 'Users & Access', blurb: 'People, roles, and what each role can do' },
+  { key: 'survey', label: 'Survey', blurb: 'Design candidate-experience surveys' },
+  { key: 'comms', label: 'Communication', blurb: 'Templates for every candidate touchpoint' },
+  { key: 'config', label: 'Configuration', blurb: 'Workspace settings and module access' },
 ]
 
 function StatTile({ label, value, meta }: { label: string; value: string | number; meta?: string }) {
@@ -70,21 +72,13 @@ function InviteUser({ onClose }: { onClose: () => void }) {
 }
 
 function UsersAndAccess() {
-  const { users, roles, currentUser, setUserRole, removeUser, setCurrentUser, setRolePermission, toggleModule, isModuleOn } = useConfig()
+  const { users, roles, currentUser, setUserRole, removeUser, setCurrentUser, setRolePermission } = useConfig()
   const [inviting, setInviting] = useState(false)
 
   const kpis = useMemo(() => {
     const admins = users.filter((u) => u.roleKey === 'admin').length
-    const activeModules = MODULES.filter((m) => isModuleOn(m.key)).length
-    return { users: users.length, roles: roles.length, admins, activeModules }
-  }, [users, roles, isModuleOn])
-
-  const groups: { group: string; keys: string[] }[] = []
-  for (const m of MODULES) {
-    const g = groups.find((x) => x.group === m.group)
-    if (g) g.keys.push(m.key)
-    else groups.push({ group: m.group, keys: [m.key] })
-  }
+    return { users: users.length, roles: roles.length, admins }
+  }, [users, roles])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -92,7 +86,7 @@ function UsersAndAccess() {
         <StatTile label="Team members" value={kpis.users} />
         <StatTile label="Roles" value={kpis.roles} />
         <StatTile label="Admins" value={kpis.admins} />
-        <StatTile label="Active modules" value={`${kpis.activeModules}/${MODULES.length}`} />
+        <StatTile label="Permissions" value={PERMISSIONS.length} />
       </div>
 
       {/* Team */}
@@ -186,11 +180,64 @@ function UsersAndAccess() {
         </div>
       </div>
 
-      {/* Module access */}
+      {inviting && <InviteUser onClose={() => setInviting(false)} />}
+    </div>
+  )
+}
+
+/** Communication: channel templates. Email today; SMS & notifications later. */
+function Communication() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="tabs">
+        <button className="tab" aria-selected>Email</button>
+        <button className="tab" disabled title="Coming soon" style={{ opacity: 0.45, cursor: 'default' }}>SMS</button>
+        <button className="tab" disabled title="Coming soon" style={{ opacity: 0.45, cursor: 'default' }}>Notifications</button>
+      </div>
+      <EmailBuilder />
+    </div>
+  )
+}
+
+/** Configuration: workspace identity + which modules the console shows. */
+function Configuration() {
+  const { toggleModule, isModuleOn } = useConfig()
+  const [workspace, setWorkspace] = usePersistentState('olivia.workspace', {
+    name: 'Bank of America Careers',
+    careerSiteUrl: 'http://localhost:5173',
+  })
+
+  const groups: { group: string; keys: string[] }[] = []
+  for (const m of MODULES) {
+    const g = groups.find((x) => x.group === m.group)
+    if (g) g.keys.push(m.key)
+    else groups.push({ group: m.group, keys: [m.key] })
+  }
+  const activeModules = MODULES.filter((m) => isModuleOn(m.key)).length
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div className="card">
+        <div className="card__head">
+          <h3 style={{ fontSize: 15 }}>Workspace</h3>
+          <span className="eyebrow">Identity used across the console</span>
+        </div>
+        <div className="card__body" style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          <label style={{ flex: 1, minWidth: 220 }}>
+            <div className="eyebrow" style={{ marginBottom: 6 }}>Workspace name</div>
+            <input className="input" value={workspace.name} onChange={(e) => setWorkspace({ ...workspace, name: e.target.value })} />
+          </label>
+          <label style={{ flex: 1, minWidth: 220 }}>
+            <div className="eyebrow" style={{ marginBottom: 6 }}>Career site URL</div>
+            <input className="input" value={workspace.careerSiteUrl} onChange={(e) => setWorkspace({ ...workspace, careerSiteUrl: e.target.value })} />
+          </label>
+        </div>
+      </div>
+
       <div className="card">
         <div className="card__head">
           <h3 style={{ fontSize: 15 }}>Module access</h3>
-          <span className="eyebrow">Turn console sections on or off</span>
+          <span className="eyebrow">{activeModules}/{MODULES.length} sections on</span>
         </div>
         <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {groups.map((g) => (
@@ -212,8 +259,6 @@ function UsersAndAccess() {
           ))}
         </div>
       </div>
-
-      {inviting && <InviteUser onClose={() => setInviting(false)} />}
     </div>
   )
 }
@@ -232,26 +277,32 @@ function storedCount(key: string): number {
 
 /** Hub landing: one tile per Admin component. Adding a component = adding a tile. */
 function AdminHub({ onOpen }: { onOpen: (t: Tab) => void }) {
-  const { users, roles } = useConfig()
+  const { users, roles, isModuleOn } = useConfig()
   const admins = users.filter((u) => u.roleKey === 'admin').length
   const surveys = storedCount('olivia.surveys')
   const templates = storedCount('olivia.emailTemplates')
+  const activeModules = MODULES.filter((m) => isModuleOn(m.key)).length
 
   const tiles: { key: Tab; glyph: string; title: string; blurb: string; stat: string }[] = [
     {
       key: 'users', glyph: '👥', title: 'Users & Access',
-      blurb: 'Invite teammates, assign roles, and control which modules and permissions each role gets.',
+      blurb: 'Invite teammates, assign roles, and control what each role is allowed to do.',
       stat: `${users.length} members · ${roles.length} roles · ${admins} admin${admins === 1 ? '' : 's'}`,
     },
     {
-      key: 'survey', glyph: '★', title: 'Survey Builder',
+      key: 'survey', glyph: '★', title: 'Survey',
       blurb: 'Design candidate-experience surveys with a live preview — ratings, NPS, choices, free text.',
       stat: `${surveys} survey${surveys === 1 ? '' : 's'}`,
     },
     {
-      key: 'email', glyph: '✉', title: 'Email Builder',
-      blurb: 'Compose block-based templates with merge tags, feeding Nurture and Offers.',
-      stat: `${templates} template${templates === 1 ? '' : 's'}`,
+      key: 'comms', glyph: '✉', title: 'Communication',
+      blurb: 'Block-based templates with merge tags for every candidate touchpoint — email now, SMS and notifications next.',
+      stat: `${templates} email template${templates === 1 ? '' : 's'}`,
+    },
+    {
+      key: 'config', glyph: '⚙', title: 'Configuration',
+      blurb: 'Workspace identity and which console modules are switched on.',
+      stat: `${activeModules}/${MODULES.length} modules on`,
     },
   ]
 
@@ -285,7 +336,8 @@ export default function AdminPage() {
   const [params, setParams] = useSearchParams()
   const rawTab = params.get('tab')
   // No ?tab → the hub of component tiles; a tab value → that component.
-  const tab: Tab | null = rawTab === 'users' || rawTab === 'survey' || rawTab === 'email' ? rawTab : null
+  const tab: Tab | null =
+    rawTab === 'users' || rawTab === 'survey' || rawTab === 'comms' || rawTab === 'config' ? rawTab : null
   const openTab = (t: Tab) => setParams({ tab: t })
   const goHub = () => setParams({})
 
@@ -321,7 +373,8 @@ export default function AdminPage() {
 
           {tab === 'users' && <UsersAndAccess />}
           {tab === 'survey' && <SurveyBuilder />}
-          {tab === 'email' && <EmailBuilder />}
+          {tab === 'comms' && <Communication />}
+          {tab === 'config' && <Configuration />}
         </>
       )}
     </div>
