@@ -1,14 +1,45 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAllSlots, useAnalyticsSummary, useJobs } from '../api/hooks'
 import { date, percent } from '../lib/format'
 import type { FunnelStage, JobSummary } from '../api/types'
 
+/**
+ * Animates the leading number in a stat value (e.g. "1,930", "28d", "50%")
+ * counting up over ~600ms on first paint; the suffix renders immediately.
+ */
+function CountUp({ value }: { value: string | number }) {
+  const text = String(value)
+  const match = text.match(/^([\d,]+(?:\.\d+)?)(.*)$/)
+  const target = match ? Number(match[1].replace(/,/g, '')) : NaN
+  const suffix = match ? match[2] : ''
+  const [shown, setShown] = useState(Number.isFinite(target) ? 0 : NaN)
+  const raf = useRef(0)
+
+  useEffect(() => {
+    if (!Number.isFinite(target)) return
+    const t0 = performance.now()
+    const dur = 600
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - t0) / dur)
+      const eased = 1 - Math.pow(1 - p, 3)
+      setShown(target * eased)
+      if (p < 1) raf.current = requestAnimationFrame(tick)
+    }
+    raf.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf.current)
+  }, [target])
+
+  if (!Number.isFinite(target)) return <>{text}</>
+  const decimals = match && match[1].includes('.') ? 1 : 0
+  return <>{shown.toLocaleString('en-US', { maximumFractionDigits: decimals, minimumFractionDigits: decimals })}{suffix}</>
+}
+
 function StatTile({ label, value, meta }: { label: string; value: string | number; meta?: string }) {
   return (
     <div className="stat">
       <div className="stat__label">{label}</div>
-      <div className="stat__value">{value}</div>
+      <div className="stat__value"><CountUp value={value} /></div>
       {meta ? <div className="stat__meta">{meta}</div> : null}
     </div>
   )

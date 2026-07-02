@@ -17,6 +17,7 @@ import {
 } from '../api/hooks'
 import type { ApplicationRow, JobSummary } from '../api/types'
 import { date, initials } from '../lib/format'
+import { stageHue } from '@/lib/stages'
 
 // Terminal stages folded into the collapsible "Closed" lane so the active board
 // fits the viewport without horizontal scrolling.
@@ -95,7 +96,9 @@ function StageStepper({ stages, current }: { stages: string[]; current: string }
               flex: 1,
               height: 4,
               borderRadius: 2,
-              background: idx >= 0 && i <= idx ? 'var(--bofa-navy)' : 'var(--app-sunken)',
+              // Completed segments wear their own stage color — the same hue
+              // language as the board columns.
+              background: idx >= 0 && i <= idx ? stageHue(s).fg : 'var(--app-sunken)',
             }}
           />
         ))}
@@ -610,18 +613,21 @@ export default function PipelinePage() {
               alignItems: 'start',
             }}
           >
-            {activeCols.map((col) => (
+            {activeCols.map((col) => {
+              const hue = stageHue(col.stage)
+              return (
               <div
                 key={col.stage}
-                style={{ background: 'var(--app-sunken)', borderRadius: 'var(--ra-3)', padding: 10, minWidth: 0 }}
+                style={{ background: 'var(--app-sunken)', borderRadius: 'var(--ra-3)', padding: 10, minWidth: 0, borderTop: `3px solid ${hue.fg}` }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, padding: '2px 4px 10px' }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.02em', color: 'var(--ink-2)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.02em', color: 'var(--ink-2)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: hue.fg, flexShrink: 0 }} />
                     {col.stage}
                   </span>
                   <span
                     className="t-num"
-                    style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-4)', background: 'var(--app-panel)', borderRadius: 999, padding: '1px 8px' }}
+                    style={{ fontSize: 11.5, fontWeight: 600, color: hue.fg, background: hue.bg, borderRadius: 999, padding: '1px 8px' }}
                   >
                     {col.count}
                   </span>
@@ -634,7 +640,8 @@ export default function PipelinePage() {
                   )}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Collapsible "Closed" lane — terminal stages folded away by default. */}
