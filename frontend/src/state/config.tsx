@@ -43,7 +43,8 @@ export const MODULES: ModuleDef[] = [
   { key: 'integrations', label: 'Integrations', group: 'Platform' },
   { key: 'audit', label: 'Audit', group: 'Platform' },
   // Admin
-  { key: 'admin', label: 'Admin', group: 'Admin' },
+  // Locked: hiding Admin would lock you out of the module toggles themselves.
+  { key: 'admin', label: 'Admin', group: 'Admin', locked: true },
 ]
 
 export const PERMISSIONS = [
@@ -179,7 +180,11 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     }
   }, [cfg])
 
-  const isModuleOn = useCallback((key: string) => cfg.modules[key] !== false, [cfg.modules])
+  const isModuleOn = useCallback(
+    // Locked modules are always on, even if an older stored config disabled them.
+    (key: string) => MODULES.find((m) => m.key === key)?.locked === true || cfg.modules[key] !== false,
+    [cfg.modules],
+  )
 
   const toggleModule = useCallback((key: string) => {
     const mod = MODULES.find((m) => m.key === key)
