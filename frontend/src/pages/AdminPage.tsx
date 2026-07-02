@@ -218,36 +218,112 @@ function UsersAndAccess() {
   )
 }
 
+// Count of items in a localStorage-persisted builder store (POC persistence).
+function storedCount(key: string): number {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return 0
+    const v = JSON.parse(raw)
+    return Array.isArray(v) ? v.length : 0
+  } catch {
+    return 0
+  }
+}
+
+/** Hub landing: one tile per Admin component. Adding a component = adding a tile. */
+function AdminHub({ onOpen }: { onOpen: (t: Tab) => void }) {
+  const { users, roles } = useConfig()
+  const admins = users.filter((u) => u.roleKey === 'admin').length
+  const surveys = storedCount('olivia.surveys')
+  const templates = storedCount('olivia.emailTemplates')
+
+  const tiles: { key: Tab; glyph: string; title: string; blurb: string; stat: string }[] = [
+    {
+      key: 'users', glyph: '👥', title: 'Users & Access',
+      blurb: 'Invite teammates, assign roles, and control which modules and permissions each role gets.',
+      stat: `${users.length} members · ${roles.length} roles · ${admins} admin${admins === 1 ? '' : 's'}`,
+    },
+    {
+      key: 'survey', glyph: '★', title: 'Survey Builder',
+      blurb: 'Design candidate-experience surveys with a live preview — ratings, NPS, choices, free text.',
+      stat: `${surveys} survey${surveys === 1 ? '' : 's'}`,
+    },
+    {
+      key: 'email', glyph: '✉', title: 'Email Builder',
+      blurb: 'Compose block-based templates with merge tags, feeding Nurture and Offers.',
+      stat: `${templates} template${templates === 1 ? '' : 's'}`,
+    },
+  ]
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+      {tiles.map((t) => (
+        <button
+          key={t.key}
+          className="card"
+          onClick={() => onOpen(t.key)}
+          style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit', border: '1px solid var(--line)', padding: 0 }}
+        >
+          <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '20px 20px 16px', minHeight: 150 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 'var(--ra-2)', background: 'var(--navy-050)', color: 'var(--bofa-navy)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>
+              {t.glyph}
+            </div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 17.5, color: 'var(--ink-0)' }}>{t.title}</div>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-4)', lineHeight: 1.5, flex: 1 }}>{t.blurb}</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+              <span className="eyebrow">{t.stat}</span>
+              <span style={{ color: 'var(--bofa-navy)', fontSize: 14 }}>→</span>
+            </div>
+          </div>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function AdminPage() {
   const [params, setParams] = useSearchParams()
   const rawTab = params.get('tab')
-  const tab: Tab = rawTab === 'survey' || rawTab === 'email' ? rawTab : 'users'
-  const setTab = (t: Tab) => setParams(t === 'users' ? {} : { tab: t }, { replace: true })
+  // No ?tab → the hub of component tiles; a tab value → that component.
+  const tab: Tab | null = rawTab === 'users' || rawTab === 'survey' || rawTab === 'email' ? rawTab : null
+  const openTab = (t: Tab) => setParams({ tab: t })
+  const goHub = () => setParams({})
+
+  const active = TABS.find((t) => t.key === tab)
 
   return (
     <div>
       <div className="page-head" style={{ marginBottom: 18 }}>
         <div className="crumb">
           <span className="dot" />
-          Platform · Admin
+          Platform · Admin{active ? ` · ${active.label}` : ''}
         </div>
-        <h1 style={{ fontSize: 28 }}>Admin</h1>
-        <p className="sub">Manage who has access and what they can do — plus the survey and email builders.</p>
+        <h1 style={{ fontSize: 28 }}>{active ? active.label : 'Admin'}</h1>
+        <p className="sub">
+          {active ? active.blurb : 'Everything for running the platform — pick a component to configure.'}
+        </p>
       </div>
 
-      <div className="tabs" style={{ marginBottom: 20 }}>
-        {TABS.map((t) => (
-          <button key={t.key} className="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)} title={t.blurb}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {tab === null ? (
+        <AdminHub onOpen={openTab} />
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+            <button className="btn btn--ghost btn--sm" onClick={goHub}>← All Admin</button>
+            <div className="tabs" style={{ marginBottom: 0 }}>
+              {TABS.map((t) => (
+                <button key={t.key} className="tab" aria-selected={tab === t.key} onClick={() => openTab(t.key)} title={t.blurb}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-      <div>
-        {tab === 'users' && <UsersAndAccess />}
-        {tab === 'survey' && <SurveyBuilder />}
-        {tab === 'email' && <EmailBuilder />}
-      </div>
+          {tab === 'users' && <UsersAndAccess />}
+          {tab === 'survey' && <SurveyBuilder />}
+          {tab === 'email' && <EmailBuilder />}
+        </>
+      )}
     </div>
   )
 }
