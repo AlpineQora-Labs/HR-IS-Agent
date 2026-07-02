@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import SlideOver from '../components/SlideOver'
 import { useCandidate, useCandidates, useJobInterviews } from '../api/hooks'
 import type { CandidateSummary } from '../api/types'
-import { date, initials } from '../lib/format'
+import { date, humanize, initials } from '../lib/format'
 
 const ivTime = (iso: string | null | undefined) => {
   if (!iso) return ''
@@ -86,7 +86,7 @@ function CandidateDrawer({ summary, onClose }: { summary: CandidateSummary; onCl
           ) : null}
           <div style={{ display: 'flex', gap: 6, marginTop: 9 }}>
             <span className={`badge ${lifecycleClass(summary.lifecycle)}`}>{summary.lifecycle}</span>
-            <span className="badge">{summary.source}</span>
+            <span className="badge">{humanize(summary.source)}</span>
           </div>
         </div>
         <button
@@ -342,7 +342,7 @@ export default function CandidatesPage() {
                     </div>
                   </td>
                   <td className="t-muted">{c.location || '—'}</td>
-                  <td className="t-muted">{c.source || '—'}</td>
+                  <td className="t-muted">{humanize(c.source)}</td>
                   <td>
                     <span className={`badge ${lifecycleClass(c.lifecycle)}`}>{c.lifecycle}</span>
                   </td>

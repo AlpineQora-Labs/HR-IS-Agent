@@ -128,8 +128,11 @@ function ScheduleTimeline({ jobs }: { jobs: JobSummary[] }) {
           }}
         >
           <div style={{ width: 116, flexShrink: 0 }}>
-            <div className="t-num" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-1)' }}>
-              {ivTime(s.startsAt)} – {ivTime(s.endsAt)}
+            <div className="t-num" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-1)', whiteSpace: 'nowrap' }}>
+              {/* Drop the first meridiem when both ends share it: "10:30 – 11:00 AM". */}
+              {ivTime(s.startsAt).endsWith(ivTime(s.endsAt).slice(-2))
+                ? `${ivTime(s.startsAt).replace(/ (AM|PM)$/, '')} – ${ivTime(s.endsAt)}`
+                : `${ivTime(s.startsAt)} – ${ivTime(s.endsAt)}`}
             </div>
             <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>{date(s.startsAt)}</div>
           </div>

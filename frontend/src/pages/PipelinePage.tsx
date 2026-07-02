@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { defaultJobId } from '@/lib/jobs'
 import { Link } from 'react-router-dom'
 import SlideOver from '../components/SlideOver'
 import {
@@ -45,11 +46,6 @@ function stageClass(stage: string) {
   if (s.includes('reject') || s.includes('declin') || s.includes('withdraw')) return 'badge--neutral'
   if (s.includes('interview') || s.includes('screen')) return 'badge--info'
   return 'badge--neutral'
-}
-
-function isOpen(status: string) {
-  const s = status.toLowerCase()
-  return s === 'open' || s === 'active' || s === 'published'
 }
 
 function CandidateCard({ app, tag, onSelect }: { app: ApplicationRow; tag?: string; onSelect: (app: ApplicationRow) => void }) {
@@ -466,8 +462,7 @@ export default function PipelinePage() {
 
   useEffect(() => {
     if (jobId || !jobs || jobs.length === 0) return
-    const firstOpen = jobs.find((j) => isOpen(j.status)) ?? jobs[0]
-    setJobId(firstOpen.id)
+    setJobId(defaultJobId(jobs))
   }, [jobs, jobId])
 
   // Close the drawer when the requisition changes.
@@ -571,10 +566,20 @@ export default function PipelinePage() {
             </button>
           </div>
         </div>
-      ) : !columns || columns.length === 0 ? (
+      ) : !columns || columns.length === 0 || stageCols.every((c) => c.count === 0) ? (
         <div className="card">
-          <div className="card__body" style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--ink-4)' }}>
-            No candidates in the pipeline {selectedJob ? `for ${selectedJob.title}` : ''} yet.
+          <div className="card__body" style={{ padding: '52px 20px', textAlign: 'center' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, color: 'var(--ink-0)' }}>
+              No candidates in this pipeline yet
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--ink-4)', marginTop: 6 }}>
+              {selectedJob ? `${selectedJob.title} has no active applications.` : 'This requisition has no active applications.'}
+              {' '}Try AI Matching to surface people already in your database.
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16 }}>
+              <Link className="btn btn--primary btn--sm" to="/matching">View AI matches</Link>
+              <button className="btn btn--outline btn--sm" onClick={() => setMode('matrix')}>See all pipelines</button>
+            </div>
           </div>
         </div>
       ) : (

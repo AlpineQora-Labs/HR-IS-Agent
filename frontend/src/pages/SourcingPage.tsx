@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { defaultJobId } from '@/lib/jobs'
 import SlideOver from '@/components/SlideOver'
 import { useJobs, useReactivation, useSourcing } from '@/api/hooks'
 import type { MatchRow, SourcingRow } from '@/api/types'
@@ -187,7 +188,7 @@ export default function SourcingPage() {
   const [jobId, setJobId] = useState<string>('')
   const [tab, setTab] = useState<Tab>('passive')
   const [selected, setSelected] = useState<Selected | null>(null)
-  const selectedJob = jobId || jobs?.[0]?.id
+  const selectedJob = jobId || defaultJobId(jobs)
 
   const { data: passive, isLoading: passiveLoading } = useSourcing(selectedJob)
   const { data: dormant, isLoading: dormantLoading } = useReactivation()

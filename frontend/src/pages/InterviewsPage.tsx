@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { defaultJobId } from '@/lib/jobs'
 import SlideOver from '@/components/SlideOver'
 import { useApplications, useJobInterviews, useJobs, useSlots } from '@/api/hooks'
 import { date } from '@/lib/format'
@@ -148,6 +149,13 @@ function TimeGrid({
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: cols, position: 'relative' }}>
+          {inRange.length === 0 && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 1 }}>
+              <div style={{ background: 'var(--app-panel)', border: '1px solid var(--line)', borderRadius: 'var(--ra-2)', padding: '10px 18px', fontSize: 13, color: 'var(--ink-4)', boxShadow: 'var(--shadow-2)' }}>
+                Nothing scheduled in this range — try another week or pick a different role.
+              </div>
+            </div>
+          )}
           <div style={{ position: 'relative', height: gridHeight }}>
             {hours.map((h, i) => (
               <div key={h} style={{ position: 'absolute', top: i * HOUR_PX - 6, right: 6, fontSize: 11, color: 'var(--ink-5)' }}>
@@ -594,7 +602,7 @@ export default function InterviewsPage() {
   const [jobId, setJobId] = useState<string>('')
   const [view, setView] = useState<'calendar' | 'list'>('calendar')
 
-  const effectiveJobId = jobId || jobs?.[0]?.id
+  const effectiveJobId = jobId || defaultJobId(jobs)
 
   // Every interview for the job = the interviews of all its applications.
   const { data: apps } = useApplications(effectiveJobId ? { jobId: effectiveJobId } : undefined)

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import SlideOver from '../components/SlideOver'
 import { useCreateJob, useJobs } from '../api/hooks'
-import { money } from '../lib/format'
+import { humanize, money } from '../lib/format'
 import type { JobCreate, JobSummary } from '../api/types'
 
 const WORK_MODES = ['On-site', 'Hybrid', 'Remote']
@@ -229,7 +229,7 @@ export default function JobsPage() {
                     </div>
                   </td>
                   <td className="t-muted">{j.location}</td>
-                  <td className="t-muted">{j.family}</td>
+                  <td className="t-muted">{humanize(j.family)}</td>
                   <td>
                     <span className={`badge ${statusBadgeClass(j.status)}`}>{j.status}</span>
                   </td>
