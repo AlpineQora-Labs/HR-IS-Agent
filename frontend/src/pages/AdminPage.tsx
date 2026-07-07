@@ -6,14 +6,16 @@ import SlideOver from '@/components/SlideOver'
 import { MODULES, PERMISSIONS, useConfig } from '@/state/config'
 import SurveyBuilder from './admin/SurveyBuilder'
 import { usePersistentState } from './admin/builderStore'
+import FormBuilder from './admin/FormBuilder'
 import EmailBuilder from './admin/EmailBuilder'
 
-type Tab = 'users' | 'survey' | 'comms' | 'config'
+type Tab = 'users' | 'survey' | 'comms' | 'forms' | 'config'
 
 const TABS: { key: Tab; label: string; blurb: string }[] = [
   { key: 'users', label: 'Users & Access', blurb: 'People, roles, and what each role can do' },
   { key: 'survey', label: 'Survey', blurb: 'Design candidate-experience surveys' },
   { key: 'comms', label: 'Communication', blurb: 'Templates for every candidate touchpoint' },
+  { key: 'forms', label: 'Forms', blurb: 'Intake forms that feed event creation' },
   { key: 'config', label: 'Configuration', blurb: 'Workspace settings and module access' },
 ]
 
@@ -275,6 +277,18 @@ function storedCount(key: string): number {
   }
 }
 
+// The intake form persists as { fields: [...] }, not an array.
+function intakeFieldCount(): number {
+  try {
+    const raw = localStorage.getItem('olivia.eventIntakeForm')
+    if (!raw) return 6 // default form ships with 6 fields
+    const v = JSON.parse(raw)
+    return Array.isArray(v?.fields) ? v.fields.length : 0
+  } catch {
+    return 0
+  }
+}
+
 /** Hub landing: one tile per Admin component. Adding a component = adding a tile. */
 function AdminHub({ onOpen }: { onOpen: (t: Tab) => void }) {
   const { users, roles, isModuleOn } = useConfig()
@@ -298,6 +312,11 @@ function AdminHub({ onOpen }: { onOpen: (t: Tab) => void }) {
       key: 'comms', glyph: '✉', title: 'Communication',
       blurb: 'Block-based templates with merge tags for every candidate touchpoint — email now, SMS and notifications next.',
       stat: `${templates} email template${templates === 1 ? '' : 's'}`,
+    },
+    {
+      key: 'forms', glyph: '▤', title: 'Forms',
+      blurb: 'Design the intake recruiters fill when creating events — registration rules, targeting, ops.',
+      stat: `${intakeFieldCount()} intake field${intakeFieldCount() === 1 ? '' : 's'}`,
     },
     {
       key: 'config', glyph: '⚙', title: 'Configuration',
@@ -337,7 +356,7 @@ export default function AdminPage() {
   const rawTab = params.get('tab')
   // No ?tab → the hub of component tiles; a tab value → that component.
   const tab: Tab | null =
-    rawTab === 'users' || rawTab === 'survey' || rawTab === 'comms' || rawTab === 'config' ? rawTab : null
+    rawTab === 'users' || rawTab === 'survey' || rawTab === 'comms' || rawTab === 'forms' || rawTab === 'config' ? rawTab : null
   const openTab = (t: Tab) => setParams({ tab: t })
   const goHub = () => setParams({})
 
@@ -374,6 +393,7 @@ export default function AdminPage() {
           {tab === 'users' && <UsersAndAccess />}
           {tab === 'survey' && <SurveyBuilder />}
           {tab === 'comms' && <Communication />}
+          {tab === 'forms' && <FormBuilder />}
           {tab === 'config' && <Configuration />}
         </>
       )}
