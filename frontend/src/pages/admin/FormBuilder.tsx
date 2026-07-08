@@ -12,8 +12,9 @@ import { usePersistentState, uid } from './builderStore'
 
 // ── Model ───────────────────────────────────────────────────────────────────
 export type IntakeFieldType =
-  | 'dropdown' | 'typeahead' | 'single' | 'multi'
-  | 'short' | 'long' | 'number' | 'date' | 'yesno'
+  | 'date' | 'email' | 'fullname' | 'header' | 'phone'
+  | 'short' | 'long' | 'dropdown' | 'single' | 'multi'
+  | 'number' | 'image' | 'file' | 'typeahead' | 'yesno'
 
 export interface IntakeField {
   id: string
@@ -22,7 +23,11 @@ export interface IntakeField {
   help?: string
   required: boolean
   options?: string[]
+  src?: string // image URL (Image display block)
 }
+
+/** Display-only blocks: render content, collect no answer. */
+export const DISPLAY_TYPES: IntakeFieldType[] = ['header', 'image']
 
 /** A canvas row: one full-width slot or two side-by-side slots. */
 export interface IntakeRow {
@@ -46,14 +51,20 @@ export const SYSTEM_FIELDS: { label: string; hint: string }[] = [
 ]
 
 const FIELD_PALETTE: { type: IntakeFieldType; label: string; hint: string; glyph: string }[] = [
-  { type: 'dropdown', label: 'Drop down', hint: 'Pick one from a list', glyph: '▾' },
-  { type: 'typeahead', label: 'Type ahead', hint: 'Search-as-you-type', glyph: '⌕' },
-  { type: 'single', label: 'Single select', hint: 'Radio buttons', glyph: '◉' },
+  { type: 'date', label: 'Date picker', hint: 'Calendar date', glyph: '▦' },
+  { type: 'email', label: 'Email', hint: 'Validated email address', glyph: '@' },
+  { type: 'fullname', label: 'Full Name', hint: 'First + last name', glyph: '👤' },
+  { type: 'header', label: 'Header', hint: 'Section heading (display)', glyph: 'H' },
+  { type: 'phone', label: 'Phone', hint: 'Phone number', glyph: '☎' },
+  { type: 'short', label: 'Short Text', hint: 'One line', glyph: '—' },
+  { type: 'long', label: 'Long Text', hint: 'Paragraph answer', glyph: '¶' },
+  { type: 'dropdown', label: 'Dropdown', hint: 'Pick one from a list', glyph: '▾' },
+  { type: 'single', label: 'Single choice', hint: 'Radio buttons', glyph: '◉' },
   { type: 'multi', label: 'Multiple choice', hint: 'Checkboxes', glyph: '☑' },
-  { type: 'long', label: 'Free text', hint: 'Paragraph answer', glyph: '¶' },
-  { type: 'short', label: 'Short text', hint: 'One line', glyph: '—' },
   { type: 'number', label: 'Number', hint: 'Capacity, headcount…', glyph: '#' },
-  { type: 'date', label: 'Date', hint: 'Deadlines', glyph: '▦' },
+  { type: 'image', label: 'Image', hint: 'Show an image (display)', glyph: '🖼' },
+  { type: 'file', label: 'File upload', hint: 'Attach a document', glyph: '📎' },
+  { type: 'typeahead', label: 'Type ahead', hint: 'Search-as-you-type', glyph: '⌕' },
   { type: 'yesno', label: 'Yes / No', hint: 'Waitlist, approval…', glyph: '⇄' },
 ]
 
@@ -63,8 +74,10 @@ const LAYOUT_PALETTE: { kind: 'single' | 'double'; label: string; hint: string; 
 ]
 
 const TYPE_LABEL: Record<IntakeFieldType, string> = {
-  dropdown: 'Drop down', typeahead: 'Type ahead', single: 'Single select', multi: 'Multiple choice',
-  short: 'Short text', long: 'Free text', number: 'Number', date: 'Date', yesno: 'Yes / No',
+  date: 'Date picker', email: 'Email', fullname: 'Full Name', header: 'Header', phone: 'Phone',
+  short: 'Short Text', long: 'Long Text', dropdown: 'Dropdown', single: 'Single choice',
+  multi: 'Multiple choice', number: 'Number', image: 'Image', file: 'File upload',
+  typeahead: 'Type ahead', yesno: 'Yes / No',
 }
 
 const optionTypes: IntakeFieldType[] = ['dropdown', 'typeahead', 'single', 'multi']
@@ -72,6 +85,7 @@ const optionTypes: IntakeFieldType[] = ['dropdown', 'typeahead', 'single', 'mult
 function newField(t: IntakeFieldType): IntakeField {
   const f: IntakeField = { id: uid(), type: t, label: '', required: false }
   if (optionTypes.includes(t)) f.options = ['Option 1', 'Option 2']
+  if (t === 'header') f.label = 'Section title'
   return f
 }
 
@@ -149,21 +163,31 @@ function FieldCard({ f, locked, onChange, onRemove }: {
   onRemove: () => void
 }) {
   const hasOpts = optionTypes.includes(f.type)
+  const isDisplay = DISPLAY_TYPES.includes(f.type)
   return (
     <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--ra-2)', background: 'var(--app-panel)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderBottom: '1px solid var(--line)' }}>
         <span className="badge badge--info">{TYPE_LABEL[f.type]}</span>
         <div style={{ flex: 1 }} />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--ink-3)' }}>
-          <input type="checkbox" checked={f.required} disabled={locked} onChange={(e) => onChange({ ...f, required: e.target.checked })} />
-          Required
-        </label>
+        {!isDisplay && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--ink-3)' }}>
+            <input type="checkbox" checked={f.required} disabled={locked} onChange={(e) => onChange({ ...f, required: e.target.checked })} />
+            Required
+          </label>
+        )}
         <button className="btn btn--ghost btn--sm" disabled={locked} onClick={onRemove} aria-label="Remove field">×</button>
       </div>
       <div style={{ padding: '10px 10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <input className="input" value={f.label} disabled={locked} placeholder="Field label" style={{ fontSize: 13, fontWeight: 500 }}
+        <input className="input" value={f.label} disabled={locked} placeholder={f.type === 'header' ? 'Heading text' : f.type === 'image' ? 'Caption (optional)' : 'Field label'} style={{ fontSize: 13, fontWeight: 500 }}
           onChange={(e) => onChange({ ...f, label: e.target.value })} />
-        <input className="input" value={f.help ?? ''} disabled={locked} placeholder="Help text (optional)" style={{ fontSize: 12 }}
+        {f.type === 'image' && (
+          <>
+            <input className="input" value={f.src ?? ''} disabled={locked} placeholder="Image URL (https://…)" style={{ fontSize: 12 }}
+              onChange={(e) => onChange({ ...f, src: e.target.value || undefined })} />
+            {f.src ? <img src={f.src} alt={f.label || 'Form image'} style={{ maxWidth: '100%', maxHeight: 120, borderRadius: 'var(--ra-2)', border: '1px solid var(--line)', objectFit: 'cover' }} /> : null}
+          </>
+        )}
+        <input className="input" value={f.help ?? ''} disabled={locked} placeholder={f.type === 'header' ? 'Subheading (optional)' : 'Help text (optional)'} style={{ fontSize: 12 }}
           onChange={(e) => onChange({ ...f, help: e.target.value || undefined })} />
         {hasOpts && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -189,6 +213,25 @@ function FieldCard({ f, locked, onChange, onRemove }: {
 
 // ── Preview rendering (toolbar toggle + used by the wizard docs) ────────────
 export function IntakePreviewField({ f }: { f: IntakeField }) {
+  if (f.type === 'header') {
+    return (
+      <div style={{ margin: '6px 0 2px' }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: 'var(--ink-0)' }}>{f.label || 'Section title'}</div>
+        {f.help ? <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 2 }}>{f.help}</div> : null}
+        <div style={{ borderTop: '1px solid var(--line)', marginTop: 8 }} />
+      </div>
+    )
+  }
+  if (f.type === 'image') {
+    return (
+      <div style={{ marginBottom: 4 }}>
+        {f.src
+          ? <img src={f.src} alt={f.label || 'Form image'} style={{ maxWidth: '100%', borderRadius: 'var(--ra-2)', border: '1px solid var(--line)' }} />
+          : <div style={{ border: '1px dashed var(--line)', borderRadius: 'var(--ra-2)', padding: '26px 12px', textAlign: 'center', fontSize: 12, color: 'var(--ink-5)' }}>🖼 Image — set a URL in the builder</div>}
+        {f.label ? <div style={{ fontSize: 11.5, color: 'var(--ink-4)', marginTop: 4 }}>{f.label}</div> : null}
+      </div>
+    )
+  }
   return (
     <div style={{ marginBottom: 4 }}>
       <div style={{ fontSize: 13, color: 'var(--ink-1)', fontWeight: 500, marginBottom: 6 }}>
@@ -200,6 +243,15 @@ export function IntakePreviewField({ f }: { f: IntakeField }) {
       {f.type === 'long' && <textarea className="input" rows={3} placeholder="Your answer" style={{ resize: 'vertical' }} />}
       {f.type === 'number' && <input className="input" type="number" placeholder="0" style={{ width: 140 }} />}
       {f.type === 'date' && <input className="input" type="date" style={{ width: 180 }} />}
+      {f.type === 'email' && <input className="input" type="email" placeholder="name@example.com" />}
+      {f.type === 'phone' && <input className="input" type="tel" placeholder="(555) 000-0000" />}
+      {f.type === 'fullname' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <input className="input" placeholder="First name" />
+          <input className="input" placeholder="Last name" />
+        </div>
+      )}
+      {f.type === 'file' && <input className="input" type="file" style={{ padding: 7 }} />}
       {f.type === 'dropdown' && (
         <select className="select">
           <option value="">Select…</option>
