@@ -4,7 +4,7 @@ import { useStore } from '@/state/store'
 import ConfirmButton from '@/components/ConfirmButton'
 import SlideOver from '@/components/SlideOver'
 import { MODULES, PERMISSIONS, useConfig } from '@/state/config'
-import SurveyBuilder from './admin/SurveyBuilder'
+import SurveyStudio from './admin/SurveyEditor'
 import { usePersistentState } from './admin/builderStore'
 import FormBuilder from './admin/FormBuilder'
 import EmailBuilder from './admin/EmailBuilder'
@@ -293,7 +293,7 @@ function intakeFieldCount(): number {
 function AdminHub({ onOpen }: { onOpen: (t: Tab) => void }) {
   const { users, roles, isModuleOn } = useConfig()
   const admins = users.filter((u) => u.roleKey === 'admin').length
-  const surveys = storedCount('olivia.surveys')
+  const surveys = storedCount('olivia.surveysV2') || storedCount('olivia.surveys')
   const templates = storedCount('olivia.emailTemplates')
   const activeModules = MODULES.filter((m) => isModuleOn(m.key)).length
 
@@ -305,7 +305,7 @@ function AdminHub({ onOpen }: { onOpen: (t: Tab) => void }) {
     },
     {
       key: 'survey', glyph: '★', title: 'Survey',
-      blurb: 'Design candidate-experience surveys with a live preview — ratings, NPS, choices, free text.',
+      blurb: 'Multi-page survey studio — ten question types, live preview, and a draft → publish → clone lifecycle.',
       stat: `${surveys} survey${surveys === 1 ? '' : 's'}`,
     },
     {
@@ -391,7 +391,7 @@ export default function AdminPage() {
           </div>
 
           {tab === 'users' && <UsersAndAccess />}
-          {tab === 'survey' && <SurveyBuilder />}
+          {tab === 'survey' && <SurveyStudio />}
           {tab === 'comms' && <Communication />}
           {tab === 'forms' && <FormBuilder />}
           {tab === 'config' && <Configuration />}
