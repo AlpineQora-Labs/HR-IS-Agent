@@ -4,7 +4,7 @@ import SlideOver from '@/components/SlideOver'
 import { useCreateEvent, useEvents } from '@/api/hooks'
 import { date } from '@/lib/format'
 import type { EventRow } from '@/api/types'
-import { INTAKE_KEY, defaultIntakeForm, type IntakeField, type IntakeForm } from './admin/FormBuilder'
+import { INTAKE_KEY, defaultIntakeForm, flattenIntake, normalizeIntake, type IntakeField, type IntakeForm } from './admin/FormBuilder'
 
 // Campus & hiring events, modeled on how Handshake / Yello / RippleMatch run them:
 // a conversion funnel (registered → attended → hires), event formats, and a
@@ -186,7 +186,7 @@ const RESPONSES_KEY = 'olivia.eventIntakeResponses'
 function readIntakeForm(): IntakeForm {
   try {
     const raw = localStorage.getItem(INTAKE_KEY)
-    if (raw) return JSON.parse(raw) as IntakeForm
+    if (raw) return normalizeIntake(JSON.parse(raw))
   } catch { /* fall through */ }
   return defaultIntakeForm()
 }
@@ -203,7 +203,7 @@ function saveResponses(eventId: string, form: IntakeForm, answers: Record<string
   try {
     const raw = localStorage.getItem(RESPONSES_KEY)
     const all = raw ? JSON.parse(raw) : {}
-    all[eventId] = form.fields
+    all[eventId] = flattenIntake(form)
       .filter((f) => answerText(answers[f.id]).trim() !== '')
       .map((f) => ({ label: f.label, value: answerText(answers[f.id]) }))
     localStorage.setItem(RESPONSES_KEY, JSON.stringify(all))
@@ -241,11 +241,19 @@ function IntakeInput({ f, value, onChange }: { f: IntakeField; value: Answer | u
           ))}
         </div>
       )}
-      {f.type === 'single' && (
+      {(f.type === 'single' || f.type === 'dropdown') && (
         <select className="select" value={text} onChange={(e) => onChange(e.target.value)}>
           <option value="">Choose…</option>
           {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
+      )}
+      {f.type === 'typeahead' && (
+        <>
+          <input className="input" list={`wiz-ta-${f.id}`} value={text} placeholder="Start typing…" onChange={(e) => onChange(e.target.value)} />
+          <datalist id={`wiz-ta-${f.id}`}>
+            {(f.options ?? []).map((o) => <option key={o} value={o} />)}
+          </datalist>
+        </>
       )}
       {f.type === 'multi' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -276,7 +284,8 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
   const [answers, setAnswers] = useState<Record<string, Answer>>({})
 
   const basicsValid = d.name.trim().length > 0 && d.day.length > 0
-  const detailsValid = intake.fields.every((f) => !f.required || answerText(answers[f.id]).trim() !== '')
+  const intakeFields = flattenIntake(intake)
+  const detailsValid = intakeFields.every((f) => !f.required || answerText(answers[f.id]).trim() !== '')
   const isLast = step === STEPS.length - 1
 
   function submit() {
@@ -345,13 +354,21 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
 
         {step === 1 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {intake.fields.length === 0 ? (
+            {intakeFields.length === 0 ? (
               <p className="sub" style={{ fontSize: 12.5, margin: 0 }}>
                 No custom intake fields are configured. Admins can design this step under Admin → Forms.
               </p>
             ) : (
-              intake.fields.map((f) => (
-                <IntakeInput key={f.id} f={f} value={answers[f.id]} onChange={(v) => setAnswers((prev) => ({ ...prev, [f.id]: v }))} />
+              intake.rows.map((row) => (
+                <div key={row.id} style={{ display: 'grid', gridTemplateColumns: `repeat(${row.slots.length}, minmax(0, 1fr))`, gap: 12 }}>
+                  {row.slots.map((f, i) =>
+                    f ? (
+                      <IntakeInput key={f.id} f={f} value={answers[f.id]} onChange={(v) => setAnswers((prev) => ({ ...prev, [f.id]: v }))} />
+                    ) : (
+                      <span key={`gap-${i}`} />
+                    ),
+                  )}
+                </div>
               ))
             )}
           </div>
@@ -364,7 +381,7 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
             <Fact label="Format">{d.format}</Fact>
             <Fact label={d.format === 'Virtual' ? 'Link' : 'Location'}>{d.location || '—'}</Fact>
             <Fact label="When">{d.day ? `${d.day} ${d.time}` : '—'}</Fact>
-            {intake.fields
+            {intakeFields
               .filter((f) => answerText(answers[f.id]).trim() !== '')
               .map((f) => (
                 <Fact key={f.id} label={f.label}>{answerText(answers[f.id])}</Fact>

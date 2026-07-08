@@ -277,12 +277,13 @@ function storedCount(key: string): number {
   }
 }
 
-// The intake form persists as { fields: [...] }, not an array.
+// The intake form persists as { rows: [{ slots: [...] }] } (older: { fields }).
 function intakeFieldCount(): number {
   try {
     const raw = localStorage.getItem('olivia.eventIntakeForm')
     if (!raw) return 6 // default form ships with 6 fields
     const v = JSON.parse(raw)
+    if (Array.isArray(v?.rows)) return v.rows.reduce((n: number, r: { slots?: unknown[] }) => n + (r.slots ?? []).filter(Boolean).length, 0)
     return Array.isArray(v?.fields) ? v.fields.length : 0
   } catch {
     return 0
