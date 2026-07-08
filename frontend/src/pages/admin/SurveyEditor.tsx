@@ -3,13 +3,14 @@ import ConfirmButton from '@/components/ConfirmButton'
 import { useStore } from '@/state/store'
 import { usePersistentState, uid } from './builderStore'
 
-// Survey studio — a port of the Arya "Teammate Voices" survey editor design
-// (REBUILD-SURVEY-EDITOR.md) onto Olivia's design system: a survey library in
-// front of a five-tab authoring workspace (Details · Form Builder · Form
-// Viewer · Configuration · Settings), multi-page surveys, ten question types,
-// and a Draft → Published → Clone lifecycle with an edit lock.
-// Phase 1 ships the shell + Details + Builder + Viewer + lifecycle;
-// Configuration (logic rules) and Settings (email dispatch) are Phases 2–3.
+// Survey studio — an exact port of the Arya "Teammate Voices" survey editor
+// (packages/teammate-voices/src/pages/SurveyEditor.tsx) onto Olivia's design
+// system: survey library (Program · Name · Summary · Cycle · Status columns),
+// six-tab editor (Details · Form Builder · Form Viewer · Configuration ·
+// Participants · Distribute), dual status pills (survey + build), Program
+// mapping with the exact fallback list, ✉️ Email Communications on Details,
+// the 🚀 pre-flight publish modal, and the ACTIVE/CLOSED read-only lock.
+// Configuration/Participants/Distribute panels are ported in later phases.
 
 // ── Model ───────────────────────────────────────────────────────────────────
 export type QuestionType =
@@ -42,23 +43,30 @@ export interface Page {
 
 export interface SurveyV2 {
   id: string
-  name: string
-  summary: string
+  name: string // Survey Name (Arya: title)
+  summary: string // Summary (Arya: description)
   status: 'DRAFT' | 'ACTIVE' | 'CLOSED'
-  touchpoint: string
-  participantType: 'ALL' | 'CANDIDATES' | 'NEW_HIRES' | 'EMPLOYEES'
-  audienceSource: string
+  buildStatus: 'DRAFT' | 'PUBLISHED'
+  programId?: number
   cycle: string
   startDate: string
   endDate: string
-  isAnonymous: boolean
   pages: Page[]
+  createdAt: string
   updatedAt: string
 }
 
 export const SURVEYS_V2_KEY = 'olivia.surveysV2'
 
-const TOUCHPOINTS = ['Application', 'Post-interview', 'Offer', 'Onboarding', 'Candidate withdrew', 'Not selected']
+// Exact fallback program list from Teammate Voices' SurveyEditor.
+const FALLBACK_PROGRAMS = [
+  { programId: 1, name: 'Teammate Voices' },
+  { programId: 2, name: 'ESAT' },
+  { programId: 3, name: 'Intern Program' },
+  { programId: 4, name: 'NPS Survey' },
+]
+
+const programName = (id?: number) => FALLBACK_PROGRAMS.find((p) => p.programId === id)?.name ?? '—'
 
 const TYPE_OPTIONS: { value: QuestionType; label: string }[] = [
   { value: 'SINGLE_SELECT', label: 'Single Select' },
@@ -105,11 +113,30 @@ function newPage(label: string): Page {
 function freshSurvey(): SurveyV2 {
   const page = newPage('Welcome')
   page.questions = [{ ...newQuestion('RATING_SCALE'), text: 'How would you rate your experience so far?', label: 'overall' }]
+  const now = new Date().toISOString()
   return {
-    id: uid(), name: 'Untitled survey', summary: '', status: 'DRAFT',
-    touchpoint: 'Post-interview', participantType: 'CANDIDATES', audienceSource: '', cycle: '',
-    startDate: '', endDate: '', isAnonymous: true,
-    pages: [page], updatedAt: new Date().toISOString(),
+    id: uid(), name: '', summary: '', status: 'DRAFT', buildStatus: 'DRAFT',
+    programId: undefined, cycle: '', startDate: '', endDate: '',
+    pages: [page], createdAt: now, updatedAt: now,
+  }
+}
+
+// Older stored shapes (touchpoint-era) normalize into the exact Arya model.
+function normalize(s: Partial<SurveyV2> & { touchpoint?: string }): SurveyV2 {
+  const now = new Date().toISOString()
+  return {
+    id: s.id ?? uid(),
+    name: s.name ?? '',
+    summary: s.summary ?? '',
+    status: s.status ?? 'DRAFT',
+    buildStatus: s.buildStatus ?? (s.status === 'ACTIVE' ? 'PUBLISHED' : 'DRAFT'),
+    programId: s.programId,
+    cycle: s.cycle ?? '',
+    startDate: s.startDate ?? '',
+    endDate: s.endDate ?? '',
+    pages: s.pages ?? [],
+    createdAt: s.createdAt ?? s.updatedAt ?? now,
+    updatedAt: s.updatedAt ?? now,
   }
 }
 
@@ -136,12 +163,8 @@ function migrateOld(): SurveyV2[] {
         if (q.type === 'yesno') nq.options = [{ text: 'Yes', value: 1 }, { text: 'No', value: 0 }]
         return nq
       })
-      return {
-        id: o.id ?? uid(), name: o.name ?? 'Untitled survey', summary: '', status: 'DRAFT' as const,
-        touchpoint: o.stage ?? 'Post-interview', participantType: 'CANDIDATES' as const,
-        audienceSource: '', cycle: '', startDate: '', endDate: '', isAnonymous: true,
-        pages: [page], updatedAt: new Date().toISOString(),
-      }
+      const now = new Date().toISOString()
+      return normalize({ id: o.id ?? uid(), name: o.name ?? 'Untitled survey', pages: [page], createdAt: now, updatedAt: now })
     })
   } catch {
     return [freshSurvey()]
@@ -152,8 +175,25 @@ const questionCount = (s: SurveyV2) => s.pages.reduce((n, p) => n + p.questions.
 
 function StatusPill({ status }: { status: SurveyV2['status'] }) {
   const cls = status === 'ACTIVE' ? 'badge--ok' : status === 'DRAFT' ? 'badge--warn' : 'badge--neutral'
-  const label = status === 'ACTIVE' ? 'Published' : status === 'DRAFT' ? 'Draft' : 'Closed'
+  const label = status === 'ACTIVE' ? 'Active' : status === 'DRAFT' ? 'Draft' : 'Closed'
   return <span className={`badge ${cls}`}>{label}</span>
+}
+
+function BuildPill({ buildStatus }: { buildStatus: SurveyV2['buildStatus'] }) {
+  return (
+    <span className={`badge ${buildStatus === 'PUBLISHED' ? 'badge--ok' : 'badge--warn'}`}>
+      {buildStatus === 'PUBLISHED' ? 'Published' : 'Draft'}
+    </span>
+  )
+}
+
+// Exact amber read-only chip from the Teammate Voices header.
+function ReadOnlyChip({ text }: { text: string }) {
+  return (
+    <span style={{ fontSize: 12, color: '#d97706', background: '#fefce8', border: '1px solid #fde68a', borderRadius: 6, padding: '3px 10px' }}>
+      🔒 {text}
+    </span>
+  )
 }
 
 // ── Library ─────────────────────────────────────────────────────────────────
@@ -164,36 +204,38 @@ function Library({ surveys, onEdit, onNew, onClone, onDelete }: {
   onClone: (id: string) => void
   onDelete: (id: string) => void
 }) {
+  const d = (iso: string) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—')
   return (
     <div className="card">
       <div className="card__head">
-        <h3 style={{ fontSize: 15 }}>Survey library</h3>
-        <button className="btn btn--primary btn--sm" onClick={onNew}>New survey</button>
+        <h3 style={{ fontSize: 15 }}>Survey</h3>
+        <button className="btn btn--primary btn--sm" onClick={onNew}>Create survey</button>
       </div>
       <div className="table-wrap">
         <table className="data-table">
           <thead>
             <tr>
-              <th>Survey</th>
+              <th>Program</th>
+              <th>Survey Name</th>
+              <th>Summary</th>
+              <th>Cycle</th>
               <th>Status</th>
-              <th>Touchpoint</th>
-              <th className="t-right">Pages</th>
-              <th className="t-right">Questions</th>
-              <th />
+              <th>Last Updated</th>
+              <th>Date Created</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {surveys.map((s) => (
               <tr key={s.id}>
-                <td>
-                  <div className="who__name">{s.name}</div>
-                  {s.summary ? <div className="who__sub">{s.summary}</div> : null}
-                </td>
+                <td className="t-muted">{programName(s.programId)}</td>
+                <td className="t-strong">{s.name || 'Untitled survey'}</td>
+                <td className="t-muted">{s.summary || '—'}</td>
+                <td className="t-muted">{s.cycle || '—'}</td>
                 <td><StatusPill status={s.status} /></td>
-                <td className="t-muted">{s.touchpoint}</td>
-                <td className="t-right t-num">{s.pages.length}</td>
-                <td className="t-right t-num">{questionCount(s)}</td>
-                <td className="t-right">
+                <td className="t-muted">{d(s.updatedAt)}</td>
+                <td className="t-muted">{d(s.createdAt)}</td>
+                <td>
                   <div style={{ display: 'inline-flex', gap: 6 }}>
                     <button className="btn btn--outline btn--sm" onClick={() => onEdit(s.id)}>{s.status === 'DRAFT' ? 'Edit' : 'Open'}</button>
                     <button className="btn btn--ghost btn--sm" onClick={() => onClone(s.id)}>Clone</button>
@@ -253,55 +295,64 @@ function DetailsTab({ s, patch, locked, onSaved, onNext }: {
   onSaved: () => void
   onNext: () => void
 }) {
+  const [saveMessage, setSaveMessage] = useState('')
+
+  function save() {
+    if (!s.name.trim()) return
+    onSaved()
+    setSaveMessage('Survey saved successfully')
+    setTimeout(() => setSaveMessage(''), 3000)
+  }
+
   return (
     <div className="card">
       <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <h3 style={{ fontSize: 15, margin: 0 }}>Survey information</h3>
+
         <Row>
-          <L label="Survey name" help="Create a name for the survey." required>
-            <input className="input" value={s.name} disabled={locked} onChange={(e) => patch({ name: e.target.value })} />
+          <L label="Survey Name" help="Create a name for the survey." required>
+            <input className="input" placeholder="Add name" value={s.name} disabled={locked} onChange={(e) => patch({ name: e.target.value })} />
           </L>
           <L label="Summary" help="Add a short description of the survey.">
-            <input className="input" value={s.summary} disabled={locked} onChange={(e) => patch({ summary: e.target.value })} />
+            <input className="input" placeholder="Add description" value={s.summary} disabled={locked} onChange={(e) => patch({ summary: e.target.value })} />
           </L>
           <L label="Survey status">
-            <Toggle on={s.status === 'ACTIVE'} disabled={locked} labels={['Active', 'Draft']} onChange={(v) => patch({ status: v ? 'ACTIVE' : 'DRAFT' })} />
+            <Toggle
+              on={s.status === 'ACTIVE'}
+              labels={['Active', 'Inactive']}
+              onChange={(v) => patch({ status: v ? 'ACTIVE' : 'DRAFT' })}
+            />
           </L>
         </Row>
-        <div style={{ borderTop: '1px solid var(--line)' }} />
+
         <Row>
-          <L label="Touchpoint" help="Where in the candidate journey this survey is sent." required>
-            <select className="select" value={s.touchpoint} disabled={locked} onChange={(e) => patch({ touchpoint: e.target.value })}>
-              {TOUCHPOINTS.map((t) => <option key={t} value={t}>{t}</option>)}
+          <L label="Program" help="Map the survey to a program." required>
+            <select
+              className="select"
+              value={s.programId ? String(s.programId) : ''}
+              disabled={locked}
+              onChange={(e) => patch({ programId: Number(e.target.value) || undefined })}
+            >
+              <option value="">Select</option>
+              {FALLBACK_PROGRAMS.map((prog) => (
+                <option key={prog.programId} value={String(prog.programId)}>{prog.name}</option>
+              ))}
             </select>
           </L>
-          <L label="Participant type">
-            <select className="select" value={s.participantType} disabled={locked} onChange={(e) => patch({ participantType: e.target.value as SurveyV2['participantType'] })}>
-              <option value="ALL">All</option>
-              <option value="CANDIDATES">Candidates</option>
-              <option value="NEW_HIRES">New hires</option>
-              <option value="EMPLOYEES">Employees</option>
-            </select>
-          </L>
-          <L label="Audience source">
-            <input className="input" value={s.audienceSource} disabled={locked} onChange={(e) => patch({ audienceSource: e.target.value })} placeholder="Pipeline stage, pool, CSV…" />
-          </L>
-          <L label="Cycle">
-            <input className="input" value={s.cycle} disabled={locked} onChange={(e) => patch({ cycle: e.target.value })} placeholder="2026-Q3" />
-          </L>
-          <L label="Start date">
+          <L label="Start Date">
             <input className="input" type="date" value={s.startDate} disabled={locked} onChange={(e) => patch({ startDate: e.target.value })} />
           </L>
-          <L label="End date">
+          <L label="End Date">
             <input className="input" type="date" value={s.endDate} disabled={locked} onChange={(e) => patch({ endDate: e.target.value })} />
           </L>
         </Row>
-        <div>
-          <L label="Anonymous responses">
-            <Toggle on={s.isAnonymous} disabled={locked} labels={['On', 'Off']} onChange={(v) => patch({ isAnonymous: v })} />
-          </L>
-        </div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button className="btn btn--outline btn--sm" onClick={onSaved} disabled={locked}>Save</button>
+
+        <div style={{ borderTop: '1px solid var(--line)' }} />
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+          {saveMessage && <span style={{ fontSize: 12.5, color: 'var(--c-green)' }}>{saveMessage}</span>}
+          {locked && <ReadOnlyChip text={`This survey is ${s.status.toLowerCase()} — clone it to make changes`} />}
+          <button className="btn btn--outline btn--sm" onClick={save} disabled={locked}>Save</button>
           <button className="btn btn--primary btn--sm" onClick={onNext}>Next</button>
         </div>
       </div>
@@ -637,7 +688,7 @@ function ViewerTab({ s }: { s: SurveyV2 }) {
   return (
     <div className="card" style={{ maxWidth: 760 }}>
       <div style={{ background: 'var(--bofa-navy)', color: '#fff', padding: '16px 22px' }}>
-        <div style={{ fontSize: 11, opacity: 0.8, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Preview · {s.touchpoint}</div>
+        <div style={{ fontSize: 11, opacity: 0.8, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Preview · {programName(s.programId)}</div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginTop: 2 }}>{s.name}</div>
         {s.summary ? <div style={{ fontSize: 12.5, opacity: 0.85, marginTop: 4 }}>{s.summary}</div> : null}
       </div>
@@ -672,15 +723,170 @@ function ComingSoon({ title, line }: { title: string; line: string }) {
   )
 }
 
-// ── Editor shell ────────────────────────────────────────────────────────────
-type EditorTab = 'details' | 'builder' | 'viewer' | 'logic' | 'settings'
+// ── Email Communications (exact Teammate Voices EMAIL_STEPS) ────────────────
+const EMAIL_STEPS = [
+  { trigger: 'PROGRAM_WELCOME', label: 'Program Welcome', icon: '👋', color: '#5856d6', bg: '#f0f0ff', border: '#c7c6f5', description: 'Sent when a participant is added to the program', delayLabel: null as string | null, defaultDelay: 0 },
+  { trigger: 'INITIAL_INVITE', label: 'Survey Invitation', icon: '📧', color: '#007aff', bg: '#eff6ff', border: '#bfdbfe', description: 'Sent immediately when the survey is dispatched to participants', delayLabel: null as string | null, defaultDelay: 0 },
+  { trigger: 'REMINDER_1', label: 'Reminder 1', icon: '🔔', color: '#ff9500', bg: '#fffbeb', border: '#fde68a', description: "First nudge to participants who haven't responded yet", delayLabel: 'Days after dispatch' as string | null, defaultDelay: 3 },
+  { trigger: 'REMINDER_2', label: 'Reminder 2', icon: '⏰', color: '#ff6b00', bg: '#fff7f0', border: '#fed7aa', description: 'Final nudge before the survey closes', delayLabel: 'Days after dispatch' as string | null, defaultDelay: 7 },
+  { trigger: 'THANK_YOU', label: 'Thank You', icon: '🎉', color: '#34c759', bg: '#f0fdf4', border: '#bbf7d0', description: 'Sent automatically when a participant submits their response', delayLabel: null as string | null, defaultDelay: 0 },
+]
+
+interface StepConfig { templateId: string; delayDays: number }
+
+function readCommTemplates(): { id: string; name: string }[] {
+  try {
+    const raw = localStorage.getItem('olivia.emailTemplates')
+    if (!raw) return []
+    const v = JSON.parse(raw)
+    return Array.isArray(v) ? v.map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })) : []
+  } catch {
+    return []
+  }
+}
+
+function SurveyEmailConfig({ surveyId }: { surveyId: string }) {
+  const [templates] = useState(readCommTemplates)
+  const [configs, setConfigs] = usePersistentState<Record<string, StepConfig>>(
+    `olivia.surveyEmail.${surveyId}`,
+    Object.fromEntries(EMAIL_STEPS.map((st) => [st.trigger, { templateId: '', delayDays: st.defaultDelay }])),
+  )
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="card__head">
+        <h3 style={{ fontSize: 15 }}>✉️ Email Communications</h3>
+        <span className="eyebrow">Templates from Communication</span>
+      </div>
+      <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {EMAIL_STEPS.map((st) => {
+          const cfg = configs[st.trigger] ?? { templateId: '', delayDays: st.defaultDelay }
+          return (
+            <div key={st.trigger} style={{ display: 'flex', alignItems: 'center', gap: 14, border: `1px solid ${st.border}`, background: st.bg, borderRadius: 'var(--ra-2)', padding: '12px 14px', flexWrap: 'wrap' }}>
+              <span style={{ width: 34, height: 34, borderRadius: 'var(--ra-2)', background: '#fff', border: `1px solid ${st.border}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+                {st.icon}
+              </span>
+              <span style={{ flex: 1, minWidth: 200 }}>
+                <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: st.color }}>{st.label}</span>
+                <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-4)' }}>{st.description}</span>
+              </span>
+              <label style={{ minWidth: 220 }}>
+                <span className="eyebrow" style={{ display: 'block', marginBottom: 4 }}>Email Template</span>
+                <select
+                  className="select"
+                  value={cfg.templateId}
+                  onChange={(e) => setConfigs((prev) => ({ ...prev, [st.trigger]: { ...cfg, templateId: e.target.value } }))}
+                >
+                  <option value="">Select</option>
+                  {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </label>
+              {st.delayLabel && (
+                <label style={{ width: 130 }}>
+                  <span className="eyebrow" style={{ display: 'block', marginBottom: 4 }}>{st.delayLabel}</span>
+                  <input
+                    className="input t-num"
+                    type="number"
+                    min={0}
+                    value={cfg.delayDays}
+                    onChange={(e) => setConfigs((prev) => ({ ...prev, [st.trigger]: { ...cfg, delayDays: Number(e.target.value) } }))}
+                  />
+                </label>
+              )}
+            </div>
+          )
+        })}
+        {templates.length === 0 && (
+          <div style={{ fontSize: 12, color: 'var(--ink-4)' }}>
+            No templates yet — create them under Admin → Communication.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Publish pre-flight modal (exact Teammate Voices flow) ───────────────────
+interface Check { key: string; label: string; passed: boolean; detail: string }
+
+function runChecks(s: SurveyV2): Check[] {
+  const email = (() => {
+    try {
+      const raw = localStorage.getItem(`olivia.surveyEmail.${s.id}`)
+      return raw ? (JSON.parse(raw) as Record<string, StepConfig>) : {}
+    } catch { return {} }
+  })()
+  return [
+    { key: 'name', label: 'Survey is named', passed: !!s.name.trim(), detail: s.name.trim() ? `"${s.name}"` : 'Give the survey a name on the Details tab.' },
+    { key: 'program', label: 'Survey is mapped to a program', passed: !!s.programId, detail: s.programId ? programName(s.programId) : 'Pick a program on the Details tab.' },
+    { key: 'pages', label: 'Has at least one page', passed: s.pages.length > 0, detail: `${s.pages.length} page${s.pages.length === 1 ? '' : 's'}` },
+    { key: 'questions', label: 'Has at least one question', passed: questionCount(s) > 0, detail: `${questionCount(s)} question${questionCount(s) === 1 ? '' : 's'}` },
+    { key: 'invite', label: 'Survey Invitation template assigned', passed: !!email['INITIAL_INVITE']?.templateId, detail: email['INITIAL_INVITE']?.templateId ? 'Assigned' : 'Assign one under Email Communications.' },
+  ]
+}
+
+function PublishPreflightModal({ s, onClose, onConfirm }: { s: SurveyV2; onClose: () => void; onConfirm: () => void }) {
+  const checks = useMemo(() => runChecks(s), [s])
+  const passedCount = checks.filter((c) => c.passed).length
+  const allPassed = passedCount === checks.length
+
+  return (
+    <div
+      role="dialog"
+      aria-label="Pre-flight Checklist"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(14,26,51,0.4)', zIndex: 95, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+    >
+      <div style={{ width: 540, maxWidth: '94vw', background: 'var(--app-panel)', borderRadius: 'var(--ra-3)', boxShadow: '0 18px 50px rgba(14,26,51,0.3)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '18px 22px', borderBottom: '1px solid var(--line)' }}>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <span style={{ fontSize: 22 }}>🚀</span>
+            <div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--ink-0)' }}>Pre-flight Checklist</div>
+              <div style={{ fontSize: 12.5, color: 'var(--ink-4)', marginTop: 2 }}>Review these checks before publishing your survey.</div>
+            </div>
+          </div>
+          <span className={`badge ${allPassed ? 'badge--ok' : 'badge--warn'}`}>{passedCount} / {checks.length} passed</span>
+        </div>
+        <div style={{ padding: '16px 22px', maxHeight: 380, overflowY: 'auto' }}>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {checks.map((c) => (
+              <li key={c.key} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <span style={{ fontSize: 14 }}>{c.passed ? '✅' : '❌'}</span>
+                <span>
+                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: 'var(--ink-0)' }}>{c.label}</span>
+                  <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-4)' }}>{c.detail}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {!allPassed && (
+            <div style={{ marginTop: 14, fontSize: 12.5, color: '#d97706', background: '#fefce8', border: '1px solid #fde68a', borderRadius: 'var(--ra-2)', padding: '10px 12px' }}>
+              ⚠️ Some checks failed. You can still publish, but emails may not send correctly until all issues are resolved.
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '14px 22px', borderTop: '1px solid var(--line)' }}>
+          <button className="btn btn--ghost btn--sm" onClick={onClose}>Cancel</button>
+          <button className="btn btn--primary btn--sm" onClick={() => { onConfirm(); onClose() }}>
+            {allPassed ? '✓ Publish' : 'Publish Anyway'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Editor shell (exact Teammate Voices header + six tabs) ──────────────────
+type EditorTab = 'details' | 'formBuilder' | 'formViewer' | 'logic' | 'participants' | 'distribute'
 
 const EDITOR_TABS: { key: EditorTab; label: string }[] = [
   { key: 'details', label: 'Details' },
-  { key: 'builder', label: 'Form Builder' },
-  { key: 'viewer', label: 'Form Viewer' },
+  { key: 'formBuilder', label: 'Form Builder' },
+  { key: 'formViewer', label: 'Form Viewer' },
   { key: 'logic', label: 'Configuration' },
-  { key: 'settings', label: 'Settings' },
+  { key: 'participants', label: 'Participants' },
+  { key: 'distribute', label: 'Distribute' },
 ]
 
 function Editor({ s, patch, onBack, onClone, onDelete }: {
@@ -692,47 +898,46 @@ function Editor({ s, patch, onBack, onClone, onDelete }: {
 }) {
   const { toastMsg } = useStore()
   const [tab, setTab] = useState<EditorTab>('details')
-  const locked = s.status !== 'DRAFT'
+  const [showPreflight, setShowPreflight] = useState(false)
+  const isLocked = s.status === 'ACTIVE' || s.status === 'CLOSED'
 
-  function publish() {
-    const problems: string[] = []
-    if (!s.name.trim()) problems.push('Survey needs a name.')
-    if (s.pages.length === 0) problems.push('Add at least one page.')
-    if (questionCount(s) === 0) problems.push('Add at least one question.')
-    if (problems.length) {
-      toastMsg(problems[0])
-      return
-    }
-    patch({ status: 'ACTIVE' })
-    toastMsg(`"${s.name}" published`)
+  function confirmPublish() {
+    patch({ status: 'ACTIVE', buildStatus: 'PUBLISHED' })
+    toastMsg(`"${s.name || 'Untitled survey'}" published`)
+  }
+
+  function next() {
+    const idx = EDITOR_TABS.findIndex((t) => t.key === tab)
+    if (idx < EDITOR_TABS.length - 1) setTab(EDITOR_TABS[idx + 1].key)
   }
 
   return (
     <div>
-      {/* Header: breadcrumb, title, status, lifecycle actions */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
+      {/* Breadcrumb + header (exact structure) */}
+      <div style={{ fontSize: 12, color: 'var(--ink-4)', marginBottom: 6 }}>
+        <button className="link" onClick={onBack} style={{ border: 0, background: 'none', padding: 0 }}>Survey</button>
+        {' '}/ {s.name || 'Edit survey'}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12, color: 'var(--ink-4)', marginBottom: 4 }}>
-            <button className="link" onClick={onBack} style={{ border: 0, background: 'none', padding: 0 }}>Surveys</button>
-            {' '}/ {s.name || 'Untitled'}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h2 style={{ fontSize: 22, margin: 0 }}>{s.name || 'Untitled survey'}</h2>
+          <h2 style={{ fontSize: 22, margin: 0 }}>{s.name || 'Edit survey'}</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>Survey status:</span>
             <StatusPill status={s.status} />
+            <span style={{ fontSize: 12, color: 'var(--ink-4)', marginLeft: 12 }}>Build:</span>
+            <BuildPill buildStatus={s.buildStatus} />
+            {isLocked && <span style={{ marginLeft: 12 }}><ReadOnlyChip text="Read-only — clone to edit" /></span>}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          {s.status === 'DRAFT' ? (
-            <>
-              <ConfirmButton label="Delete" confirmLabel="Delete survey?" onConfirm={onDelete} />
-              <button className="btn btn--ghost btn--sm" onClick={onBack}>Cancel</button>
-              <button className="btn btn--primary btn--sm" onClick={publish}>Publish</button>
-            </>
+          {!isLocked && (
+            <ConfirmButton label="Delete" confirmLabel="Delete this survey?" onConfirm={onDelete} className="btn btn--outline btn--sm" />
+          )}
+          <button className="btn btn--ghost btn--sm" onClick={onBack}>Cancel</button>
+          {isLocked ? (
+            <button className="btn btn--primary btn--sm" onClick={onClone}>Clone</button>
           ) : (
-            <>
-              <button className="btn btn--ghost btn--sm" onClick={onBack}>Cancel</button>
-              <button className="btn btn--primary btn--sm" onClick={onClone}>Clone</button>
-            </>
+            <button className="btn btn--outline btn--sm" onClick={() => setShowPreflight(true)}>Publish</button>
           )}
         </div>
       </div>
@@ -745,22 +950,26 @@ function Editor({ s, patch, onBack, onClone, onDelete }: {
         ))}
       </div>
 
-      {locked && tab !== 'viewer' && (
-        <div style={{ fontSize: 12, color: 'var(--ink-4)', marginBottom: 12 }}>
-          Published surveys are locked for editing — Clone to make changes.
-        </div>
-      )}
-
       {tab === 'details' && (
-        <DetailsTab s={s} patch={patch} locked={locked} onSaved={() => toastMsg('Survey saved')} onNext={() => setTab('builder')} />
+        <>
+          <DetailsTab s={s} patch={patch} locked={isLocked} onSaved={() => undefined} onNext={next} />
+          <SurveyEmailConfig surveyId={s.id} />
+        </>
       )}
-      {tab === 'builder' && <BuilderTab s={s} patch={patch} locked={locked} />}
-      {tab === 'viewer' && <ViewerTab s={s} />}
+      {tab === 'formBuilder' && <BuilderTab s={s} patch={patch} locked={isLocked} />}
+      {tab === 'formViewer' && <ViewerTab s={s} />}
       {tab === 'logic' && (
         <ComingSoon title="Configuration" line="Conditional logic — show/hide, require, skip-to, and text piping rules with AND/OR condition groups — lands here in the next phase." />
       )}
-      {tab === 'settings' && (
-        <ComingSoon title="Settings" line="Email template assignments (from Communication) for invitations, reminders, and thank-yous, plus the dispatch-readiness checklist — the phase after logic." />
+      {tab === 'participants' && (
+        <ComingSoon title="Participants" line="Participant roster with CSV import (total rows, uploaded, already-exists, and error counts) — ported from Teammate Voices in a later phase." />
+      )}
+      {tab === 'distribute' && (
+        <ComingSoon title="Distribute" line="Dispatch the survey to participants and track delivery — ported from Teammate Voices in a later phase." />
+      )}
+
+      {showPreflight && (
+        <PublishPreflightModal s={s} onClose={() => setShowPreflight(false)} onConfirm={confirmPublish} />
       )}
     </div>
   )
@@ -768,7 +977,9 @@ function Editor({ s, patch, onBack, onClone, onDelete }: {
 
 // ── Studio root ─────────────────────────────────────────────────────────────
 export default function SurveyStudio() {
-  const [surveys, setSurveys] = usePersistentState<SurveyV2[]>(SURVEYS_V2_KEY, migrateOld())
+  const [stored, setSurveys] = usePersistentState<SurveyV2[]>(SURVEYS_V2_KEY, migrateOld())
+  // Surveys saved by earlier builds may miss newer fields — normalize on read.
+  const surveys = useMemo(() => stored.map(normalize), [stored])
   const [editingId, setEditingId] = useState<string | null>(null)
   const { toastMsg } = useStore()
 
