@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import ConfirmButton from '@/components/ConfirmButton'
 import { useStore } from '@/state/store'
 import { usePersistentState, uid } from './builderStore'
+import LogicTab, { type LogicRule } from './SurveyLogic'
 
 // Survey studio — an exact port of the Arya "Teammate Voices" survey editor
 // (packages/teammate-voices/src/pages/SurveyEditor.tsx) onto Olivia's design
@@ -52,6 +53,7 @@ export interface SurveyV2 {
   startDate: string
   endDate: string
   pages: Page[]
+  logicRules?: LogicRule[]
   createdAt: string
   updatedAt: string
 }
@@ -135,6 +137,7 @@ function normalize(s: Partial<SurveyV2> & { touchpoint?: string }): SurveyV2 {
     startDate: s.startDate ?? '',
     endDate: s.endDate ?? '',
     pages: s.pages ?? [],
+    logicRules: s.logicRules ?? [],
     createdAt: s.createdAt ?? s.updatedAt ?? now,
     updatedAt: s.updatedAt ?? now,
   }
@@ -959,7 +962,12 @@ function Editor({ s, patch, onBack, onClone, onDelete }: {
       {tab === 'formBuilder' && <BuilderTab s={s} patch={patch} locked={isLocked} />}
       {tab === 'formViewer' && <ViewerTab s={s} />}
       {tab === 'logic' && (
-        <ComingSoon title="Configuration" line="Conditional logic — show/hide, require, skip-to, and text piping rules with AND/OR condition groups — lands here in the next phase." />
+        <LogicTab
+          pages={s.pages}
+          logicRules={s.logicRules ?? []}
+          onRulesChange={(rules) => patch({ logicRules: rules })}
+          readOnly={isLocked}
+        />
       )}
       {tab === 'participants' && (
         <ComingSoon title="Participants" line="Participant roster with CSV import (total rows, uploaded, already-exists, and error counts) — ported from Teammate Voices in a later phase." />
