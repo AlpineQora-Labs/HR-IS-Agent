@@ -187,17 +187,22 @@ function ScheduleInterview({ applicationId, jobId }: { applicationId: string; jo
 
 // Recruiter view of the candidate's Aria chat (collapsed until opened).
 function AriaTranscript({ applicationId }: { applicationId: string }) {
-  const [open, setOpen] = useState(false)
-  const { data: convo, isLoading } = useApplicationConversation(applicationId, open)
+  // Load eagerly so the toggle can advertise that a transcript exists.
+  const { data: convo, isLoading } = useApplicationConversation(applicationId, true)
+  const msgCount = convo?.messages?.length ?? 0
+  const [userToggled, setUserToggled] = useState<boolean | null>(null)
+  // Auto-expand when a conversation exists; the user's own toggle wins.
+  const open = userToggled ?? msgCount > 0
 
   return (
     <div style={{ marginTop: 18 }}>
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setUserToggled(!open)}
         style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 0, cursor: 'pointer', padding: 0, color: 'var(--bofa-navy)', fontSize: 13, fontWeight: 600 }}
       >
         <span style={{ fontSize: 11 }}>{open ? '▾' : '▸'}</span>
         Aria chat transcript
+        {msgCount > 0 && <span className="badge badge--info">{msgCount} messages</span>}
       </button>
       {open && (
         <div style={{ marginTop: 10 }}>
