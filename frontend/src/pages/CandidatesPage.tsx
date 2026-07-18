@@ -82,18 +82,18 @@ function CandidateDetailPane({ summary, tab, setTab }: {
 
   return (
     <div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '18px 20px 14px', borderBottom: '1px solid var(--line)' }}>
-        <div className="avatar" style={{ width: 46, height: 46, fontSize: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '13px 16px 11px', borderBottom: '1px solid var(--line)' }}>
+        <div className="avatar" style={{ width: 38, height: 38, fontSize: 13.5 }}>
           {initials(summary.name)}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--ink-0)', lineHeight: 1.2 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 17.5, color: 'var(--ink-0)', lineHeight: 1.2 }}>
             {summary.name}
           </div>
           {summary.headline ? (
-            <div className="sub" style={{ marginTop: 3, fontSize: 12.5 }}>{summary.headline}</div>
+            <div className="sub" style={{ marginTop: 2, fontSize: 12 }}>{summary.headline}</div>
           ) : null}
-          <div style={{ display: 'flex', gap: 6, marginTop: 9 }}>
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
             <span className={`badge ${lifecycleClass(summary.lifecycle)}`}>{summary.lifecycle}</span>
             <span className="badge">{humanize(summary.source)}</span>
           </div>
@@ -113,8 +113,8 @@ function CandidateDetailPane({ summary, tab, setTab }: {
               border: 0,
               background: 'none',
               cursor: 'pointer',
-              padding: '11px 12px',
-              fontSize: 13,
+              padding: '9px 11px',
+              fontSize: 12.5,
               fontWeight: tab === t.key ? 600 : 500,
               color: tab === t.key ? 'var(--bofa-navy)' : 'var(--ink-4)',
               borderBottom: tab === t.key ? '2px solid var(--bofa-navy)' : '2px solid transparent',
@@ -127,7 +127,7 @@ function CandidateDetailPane({ summary, tab, setTab }: {
         ))}
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '13px 16px' }}>
         {tab === 'overview' && (
           <>
             <div className="eyebrow" style={{ marginBottom: 4 }}>Personal</div>
@@ -341,10 +341,10 @@ export default function CandidatesPage() {
           </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '310px minmax(0, 1fr)', gap: 16, height: 'calc(100vh - 240px)', minHeight: 440 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '264px minmax(0, 1fr)', gap: 14, height: 'calc(100vh - 232px)', minHeight: 420 }}>
           {/* Master list */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--line)' }}>
+            <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--line)' }}>
               <span className="eyebrow">{rows.length} of {data.length} candidates</span>
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -369,21 +369,21 @@ export default function CandidatesPage() {
                         border: 0,
                         cursor: 'pointer',
                         font: 'inherit',
-                        padding: '10px 12px',
+                        padding: '7px 10px',
                         background: active ? 'var(--navy-050)' : 'transparent',
                         borderLeft: active ? '3px solid var(--bofa-navy)' : '3px solid transparent',
                         borderBottom: '1px solid var(--line)',
                       }}
                     >
-                      <span className="avatar" style={{ width: 32, height: 32, fontSize: 12, flexShrink: 0 }}>{initials(c.name)}</span>
+                      <span className="avatar" style={{ width: 26, height: 26, fontSize: 10.5, flexShrink: 0 }}>{initials(c.name)}</span>
                       <span style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: active ? 'var(--bofa-navy)' : 'var(--ink-0)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: 12.5, fontWeight: 600, color: active ? 'var(--bofa-navy)' : 'var(--ink-0)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {c.name}
                           </span>
                           <span className={`badge ${lifecycleClass(c.lifecycle)}`} style={{ flexShrink: 0 }}>{c.lifecycle}</span>
                         </span>
-                        <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
+                        <span style={{ display: 'block', fontSize: 11, color: 'var(--ink-4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
                           {c.headline || humanize(c.source)}
                         </span>
                       </span>
