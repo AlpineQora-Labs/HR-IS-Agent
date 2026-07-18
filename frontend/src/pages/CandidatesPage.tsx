@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { rowAction } from '@/lib/a11y'
 import { Link } from 'react-router-dom'
 import SlideOver from '../components/SlideOver'
-import { useApplicationConversation, useCandidate, useCandidates, useJobInterviews } from '../api/hooks'
+import { useCandidate, useCandidates, useJobInterviews } from '../api/hooks'
+import AriaConversations from '@/components/AriaConversations'
 import type { CandidateSummary } from '../api/types'
 import { date, humanize, initials } from '../lib/format'
 
@@ -50,63 +51,6 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
       <span style={{ color: 'var(--ink-4)' }}>{label}</span>
       <span style={{ color: 'var(--ink-1)', textAlign: 'right' }}>{children}</span>
     </div>
-  )
-}
-
-/** Transcript for one application, labeled with its role. Renders nothing when empty. */
-function AppTranscript({ appId, jobTitle, onLoaded }: { appId: string; jobTitle: string; onLoaded: (appId: string, count: number) => void }) {
-  const { data: convo, isLoading } = useApplicationConversation(appId, true)
-  const msgs = useMemo(() => convo?.messages ?? [], [convo])
-  useEffect(() => {
-    if (!isLoading) onLoaded(appId, msgs.length)
-  }, [isLoading, msgs.length, appId, onLoaded])
-  if (isLoading || msgs.length === 0) return null
-  return (
-    <div style={{ marginBottom: 18 }}>
-      <div className="eyebrow" style={{ marginBottom: 8 }}>{jobTitle} · {msgs.length} messages</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 7, maxHeight: 320, overflowY: 'auto', padding: '2px 2px 2px 0' }}>
-        {msgs.map((m) => {
-          const me = m.sender === 'CANDIDATE'
-          return (
-            <div
-              key={m.id}
-              style={{
-                alignSelf: me ? 'flex-end' : 'flex-start',
-                maxWidth: '85%',
-                fontSize: 12.5,
-                lineHeight: 1.45,
-                padding: '7px 10px',
-                borderRadius: 10,
-                background: me ? 'var(--bofa-navy)' : 'var(--app-sunken)',
-                color: me ? '#fff' : 'var(--ink-1)',
-              }}
-            >
-              {m.body}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-/** The Aria tab body: transcripts for every application, or an honest empty note. */
-function AriaTab({ apps }: { apps: { id: string; jobTitle: string }[] }) {
-  const [counts, setCounts] = useState<Record<string, number>>({})
-  const onLoaded = useCallback((appId: string, count: number) => {
-    setCounts((prev) => (prev[appId] === count ? prev : { ...prev, [appId]: count }))
-  }, [])
-  const allLoaded = apps.every((a) => counts[a.id] !== undefined)
-  const total = Object.values(counts).reduce((n, c) => n + c, 0)
-  return (
-    <>
-      {apps.map((a) => <AppTranscript key={a.id} appId={a.id} jobTitle={a.jobTitle} onLoaded={onLoaded} />)}
-      {allLoaded && total === 0 && (
-        <div style={{ fontSize: 12.5, color: 'var(--ink-4)', textAlign: 'center', padding: '24px 0' }}>
-          No Aria conversations for this candidate — transcripts appear here when they apply through the career-site chat.
-        </div>
-      )}
-    </>
   )
 }
 
@@ -262,13 +206,7 @@ function CandidateDrawer({ summary, onClose }: { summary: CandidateSummary; onCl
         )}
 
         {tab === 'aria' && (
-          apps.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: 'var(--ink-4)', textAlign: 'center', padding: '24px 0' }}>
-              No applications yet — Aria conversations appear once they apply.
-            </div>
-          ) : (
-            <AriaTab apps={apps} />
-          )
+          <AriaConversations apps={apps.map((a) => ({ id: a.id, jobTitle: a.jobTitle }))} />
         )}
 
         {tab === 'interviews' && (
