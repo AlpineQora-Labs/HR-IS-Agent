@@ -241,3 +241,47 @@ button.card:hover {
   from { background-position: 200% 0; }
   to   { background-position: -200% 0; }
 }
+
+/* ── Navy sidebar ─────────────────────────────────────────────────────────
+   The nav rail wears the brand navy (same as the dashboard's Hiring-progress
+   card); light text/icons, white active bar. Overrides ds-product defaults. */
+.app__brand {
+  background: var(--bofa-navy);
+}
+.app__brand .wordmark {
+  color: #fff;
+}
+.app__brand .wordmark small {
+  color: rgba(255, 255, 255, 0.62);
+}
+.app__side {
+  background: var(--bofa-navy);
+}
+.app__side .nav-group {
+  color: rgba(255, 255, 255, 0.52);
+}
+.app__side .nav-item {
+  color: rgba(255, 255, 255, 0.8);
+}
+.app__side .nav-item .ic {
+  color: rgba(255, 255, 255, 0.55);
+}
+.app__side .nav-item:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+}
+.app__side .nav-item:hover .ic {
+  color: rgba(255, 255, 255, 0.85);
+}
+.app__side .nav-item[aria-current="page"] {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  box-shadow: inset 3px 0 0 #fff;
+}
+.app__side .nav-item[aria-current="page"] .ic {
+  color: #fff;
+}
+.app__side .nav-item .count {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.8);
+}
