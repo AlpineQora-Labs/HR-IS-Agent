@@ -123,9 +123,7 @@ function Brand({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => vo
     return (
       <button className="brand-toggle" onClick={onToggle} title="Toggle sidebar" aria-label="Toggle sidebar">
         {!markFailed ? (
-          <span className="brand-plate brand-plate--mark">
-            <img src={MARK_SRCS[markIdx]} alt="" className="brand-mark-img" onError={() => setMarkIdx((i) => i + 1)} />
-          </span>
+          <img src={MARK_SRCS[markIdx]} alt="" className="brand-mark-img" onError={() => setMarkIdx((i) => i + 1)} />
         ) : (
           <div className="mark">B</div>
         )}
@@ -136,10 +134,8 @@ function Brand({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => vo
   return (
     <button className="brand-toggle" onClick={onToggle} title="Toggle sidebar" aria-label="Toggle sidebar">
       {!logoFailed ? (
-        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 5 }}>
-          <span className="brand-plate">
-            <img src={LOGO_SRCS[logoIdx]} alt="Bank of America" className="brand-logo" onError={() => setLogoIdx((i) => i + 1)} />
-          </span>
+        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+          <img src={LOGO_SRCS[logoIdx]} alt="Bank of America" className="brand-logo" onError={() => setLogoIdx((i) => i + 1)} />
           <small className="brand-sub">Careers · Recruiting</small>
         </span>
       ) : (
