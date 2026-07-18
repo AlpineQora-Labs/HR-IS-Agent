@@ -243,10 +243,14 @@ button.card:hover {
 }
 
 /* ── Navy sidebar ─────────────────────────────────────────────────────────
-   The nav rail wears the brand navy (same as the dashboard's Hiring-progress
-   card); light text/icons, white active bar. Overrides ds-product defaults. */
+   The nav rail wears a deep Bank of America navy (one step darker than
+   --bofa-navy, matching BofA's dark chrome); light text/icons, white active
+   bar. Overrides ds-product defaults. */
+:root {
+  --bofa-navy-deep: #01184C;
+}
 .app__brand {
-  background: var(--bofa-navy);
+  background: var(--bofa-navy-deep);
 }
 .app__brand .wordmark {
   color: #fff;
@@ -255,7 +259,7 @@ button.card:hover {
   color: rgba(255, 255, 255, 0.62);
 }
 .app__side {
-  background: var(--bofa-navy);
+  background: var(--bofa-navy-deep);
 }
 .app__side .nav-group {
   color: rgba(255, 255, 255, 0.52);
