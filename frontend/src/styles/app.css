@@ -119,6 +119,8 @@ a {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   line-height: 1;
+  /* Start where the wordmark starts: (flag 133 + gap 28) / lockup height 73 × 19px. */
+  margin-left: 42px;
 }
 .brand-mark-img {
   height: 24px;
