@@ -106,13 +106,22 @@ a {
   letter-spacing: 0.02em;
 }
 .brand-logo {
-  height: 26px;
+  height: 19px;
   width: auto;
-  max-width: 180px;
+  max-width: 200px;
   display: block;
 }
+.brand-sub {
+  display: block;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1;
+}
 .brand-mark-img {
-  height: 26px;
+  height: 24px;
   width: auto;
   display: block;
 }

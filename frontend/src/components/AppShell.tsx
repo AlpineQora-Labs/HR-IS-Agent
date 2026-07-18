@@ -134,7 +134,10 @@ function Brand({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => vo
   return (
     <button className="brand-toggle" onClick={onToggle} title="Toggle sidebar" aria-label="Toggle sidebar">
       {!logoFailed ? (
-        <img src={LOGO_SRCS[logoIdx]} alt="Bank of America" className="brand-logo" onError={() => setLogoIdx((i) => i + 1)} />
+        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+          <img src={LOGO_SRCS[logoIdx]} alt="Bank of America" className="brand-logo" onError={() => setLogoIdx((i) => i + 1)} />
+          <small className="brand-sub">Careers · Recruiting</small>
+        </span>
       ) : (
         <>
           <div className="mark">B</div>
