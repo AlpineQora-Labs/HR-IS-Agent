@@ -8,6 +8,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional(readOnly = true)
+/**
+ * Assessment domain service: assignment and scoring of candidate assessments.
+ */
 public class AssessmentService {
 
     private final AssessmentRepository repository;

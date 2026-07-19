@@ -11,6 +11,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/v1/assessments")
+/**
+ * Assessment endpoints: assign and score candidate assessments.
+ */
 public class AssessmentController {
 
     private final AssessmentService assessmentService;

@@ -86,3 +86,22 @@ seam (`AssistantBrain` interface) so a Claude-backed implementation can be dropp
 without touching the controller. Flow/state machine:
 
 `GREETING → COLLECT_PROFILE (name/email/phone) → KNOCKOUT (ask each knockout_question in order, evaluate disqualify rule) → [if passed] OFFER_SCHEDULE (present interview_slots, book one → create interview) → DONE` (creates candidate + application, advances stage APPLIED→SCREENED→INTERVIEW). On knockout failure → polite decline, stage REJECTED. Each reply returns the next message(s) + `step` + optional quick-reply `options`.
+
+## Error contract (GlobalExceptionHandler)
+
+Every failed request returns one envelope, translated by `api/GlobalExceptionHandler`
+(three-tier rule: no framework or database detail reaches the client):
+
+```json
+{ "code": "BUSINESS_RULE_VIOLATION", "message": "Required question has no answer: School", "fieldErrors": { "email": "must not be blank" } }
+```
+
+| Status | code | When |
+| --- | --- | --- |
+| 400 | `VALIDATION_ERROR` | Bean Validation on DTOs (`fieldErrors` populated) or malformed input |
+| 404 | `NOT_FOUND` | Missing aggregate (service `EntityNotFoundException` / 404 RSE) |
+| 409 | `CONFLICT` | Duplicates & races: service checks, DB unique constraints, optimistic locks |
+| 422 | `BUSINESS_RULE_VIOLATION` | Service-layer rule rejections (form logic, workflow state) |
+| 500 | `INTERNAL_ERROR` | Unexpected — logged server-side, generic message only |
+
+Clients should read `message` for display and `code` for branching.

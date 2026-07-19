@@ -15,6 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/v1/offers")
+/**
+ * Offer lifecycle endpoints: extend, track and resolve offers.
+ */
 public class OfferController {
 
     private final OfferService offerService;

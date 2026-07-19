@@ -15,6 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/v1/applications")
+/**
+ * Application endpoints: stage moves and per-application detail (screening, interviews).
+ */
 public class ApplicationController {
 
     private final ApplicationService applicationService;

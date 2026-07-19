@@ -17,6 +17,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/v1/jobs")
+/**
+ * Job requisition endpoints: postings, knockout questions and hiring-team setup.
+ */
 public class JobController {
 
     private final JobService jobService;

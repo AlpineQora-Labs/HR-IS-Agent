@@ -11,6 +11,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/v1/onboarding")
+/**
+ * Onboarding task endpoints: per-hire checklists and completion tracking.
+ */
 public class OnboardingController {
 
     private final OnboardingService onboardingService;

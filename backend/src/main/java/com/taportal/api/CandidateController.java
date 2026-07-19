@@ -12,6 +12,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/v1/candidates")
+/**
+ * Candidate endpoints: profiles, search and detail views.
+ */
 public class CandidateController {
 
     private final CandidateService candidateService;

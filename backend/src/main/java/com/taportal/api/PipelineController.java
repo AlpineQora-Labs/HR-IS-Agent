@@ -11,6 +11,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/v1/pipeline")
+/**
+ * Pipeline endpoints: the per-job stage board (columns of applications).
+ */
 public class PipelineController {
 
     private final ApplicationService applicationService;

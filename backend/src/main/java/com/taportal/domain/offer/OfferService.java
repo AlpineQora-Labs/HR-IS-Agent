@@ -20,6 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional(readOnly = true)
+/**
+ * Offer domain service: create/extend offers and record outcomes.
+ */
 public class OfferService {
 
     private final OfferRepository repository;

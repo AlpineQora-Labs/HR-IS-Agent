@@ -18,6 +18,12 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @Transactional(readOnly = true)
+/**
+ * Candidate domain service: profile aggregation, skills and lifecycle reads.
+ *
+ * <p>Business rules for creating candidates from events live in
+ * {@link com.taportal.domain.engagement.CampusService}; from conversational apply in the aria module.</p>
+ */
 public class CandidateService {
 
     private final CandidateRepository candidateRepository;

@@ -8,6 +8,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional(readOnly = true)
+/**
+ * Onboarding domain service: checklist generation and task completion for new hires.
+ */
 public class OnboardingService {
 
     private final OnboardingTaskRepository repository;
