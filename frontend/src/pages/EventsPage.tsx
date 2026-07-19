@@ -139,9 +139,39 @@ function EventDetail({ e, onClose }: { e: EventRow; onClose: () => void }) {
           </div>
         )}
 
+        <RegistrationQr eventId={e.id} />
+
         <Roster eventId={e.id} />
       </div>
     </SlideOver>
+  )
+}
+
+/* The QR block recruiters print for the booth banner: scanning opens the
+   shell-less registration page (form or Aria chat — student's choice).
+   QR image comes from api.qrserver.com for the POC; swap for a local
+   generator at delivery if offline rendering is required. */
+function RegistrationQr({ eventId }: { eventId: string }) {
+  const url = `${window.location.origin}/register/${eventId}`
+  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(url)}`
+  const [copied, setCopied] = useState(false)
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div className="eyebrow" style={{ marginBottom: 8 }}>Registration QR · booth banner</div>
+      <div style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '12px 14px', border: '1px solid var(--line)', borderRadius: 'var(--ra-2)' }}>
+        <img src={qr} alt="Registration QR code" width={96} height={96} style={{ borderRadius: 6, border: '1px solid var(--line)' }} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, color: 'var(--ink-2)', wordBreak: 'break-all' }}>{url}</div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button className="btn btn--outline btn--sm" style={{ fontSize: 11.5 }}
+              onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500) }}>
+              {copied ? 'Copied!' : 'Copy link'}
+            </button>
+            <a className="btn btn--outline btn--sm" style={{ fontSize: 11.5 }} href={url} target="_blank" rel="noreferrer">Open</a>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

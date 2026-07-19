@@ -37,4 +37,12 @@ public final class CampusDtos {
     }
 
     public record TransitionRequest(@NotBlank String status) {}
+
+    /** What the public registration page needs to render the event header. */
+    public record EventPublicInfo(
+            UUID id, String name, String type, String location, OffsetDateTime startsAt) {
+    }
+
+    /** Form-driven registration: the builder-defined answers array as JSON. */
+    public record RegisterFormRequest(@NotBlank String answers) {}
 }

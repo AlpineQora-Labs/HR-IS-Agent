@@ -58,7 +58,12 @@ public class FormLogicService {
         this.objectMapper = objectMapper;
     }
 
-    private record Field(String id, String label, String type, boolean required) {}
+    /**
+     * A parsed, answerable-or-display field from the schema, in form order.
+     * Public so other renderers (the Aria conversational flow, mapping helpers)
+     * share this service's single parse of the schema.
+     */
+    public record Field(String id, String label, String type, boolean required, List<String> options) {}
 
     private record Rule(String action, String targetId, String sourceId, String op, String value) {}
 
@@ -160,16 +165,36 @@ public class FormLogicService {
         };
     }
 
+    /** All fields of a schema, in form order (display blocks included). */
+    public List<Field> fields(String schemaJson) {
+        return readFields(parse(schemaJson, "form schema"));
+    }
+
+    /** Answerable fields currently visible given the in-progress answers, in form order. */
+    public List<Field> visibleAnswerableFields(String schemaJson, Map<String, String> answers) {
+        JsonNode schema = parse(schemaJson, "form schema");
+        List<Rule> rules = readRules(schema);
+        return readFields(schema).stream()
+                .filter(f -> !DISPLAY_TYPES.contains(f.type()))
+                .filter(f -> isVisible(f.id(), rules, answers))
+                .toList();
+    }
+
     private List<Field> readFields(JsonNode schema) {
         List<Field> out = new ArrayList<>();
         for (JsonNode row : schema.path("rows")) {
             for (JsonNode slot : row.path("slots")) {
                 if (slot != null && !slot.isNull() && slot.hasNonNull("id")) {
+                    List<String> options = new ArrayList<>();
+                    for (JsonNode o : slot.path("options")) {
+                        options.add(o.asText());
+                    }
                     out.add(new Field(
                             slot.path("id").asText(),
                             slot.path("label").asText("Untitled"),
                             slot.path("type").asText(""),
-                            slot.path("required").asBoolean(false)));
+                            slot.path("required").asBoolean(false),
+                            options));
                 }
             }
         }

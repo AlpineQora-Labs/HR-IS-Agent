@@ -3,8 +3,14 @@ package com.taportal.domain.engagement;
 import com.taportal.api.CampusDtos.RegisterRequest;
 import com.taportal.api.CampusDtos.RegistrationRow;
 import com.taportal.api.CampusDtos.SchoolRow;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.taportal.domain.candidate.Candidate;
 import com.taportal.domain.candidate.CandidateRepository;
+import com.taportal.domain.forms.FormDefinitionRepository;
+import com.taportal.domain.forms.FormLogicService;
+import com.taportal.domain.forms.FormResponse;
+import com.taportal.domain.forms.FormResponseRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -31,16 +37,28 @@ public class CampusService {
     private final EventRegistrationRepository registrations;
     private final RecruitingEventRepository events;
     private final CandidateRepository candidates;
+    private final FormDefinitionRepository formDefinitions;
+    private final FormLogicService formLogic;
+    private final FormResponseRepository formResponses;
+    private final ObjectMapper objectMapper;
 
     public CampusService(
             SchoolRepository schools,
             EventRegistrationRepository registrations,
             RecruitingEventRepository events,
-            CandidateRepository candidates) {
+            CandidateRepository candidates,
+            FormDefinitionRepository formDefinitions,
+            FormLogicService formLogic,
+            FormResponseRepository formResponses,
+            ObjectMapper objectMapper) {
         this.schools = schools;
         this.registrations = registrations;
         this.events = events;
         this.candidates = candidates;
+        this.formDefinitions = formDefinitions;
+        this.formLogic = formLogic;
+        this.formResponses = formResponses;
+        this.objectMapper = objectMapper;
     }
 
     public List<SchoolRow> schools() {
@@ -98,6 +116,84 @@ public class CampusService {
         String schoolName = reg.getSchoolId() == null ? null
                 : schools.findById(reg.getSchoolId()).map(School::getName).orElse(null);
         return toRow(reg, schoolName);
+    }
+
+    /**
+     * Register a student from an EVENT_REGISTRATION form submission — the single
+     * business path shared by the public QR/web form and Aria's conversational
+     * flow (three-tier rule: one authoritative service, many renderers).
+     *
+     * <p>Pipeline: validate against the form's if/then rules (hidden answers
+     * stripped, required-if-visible enforced by {@link FormLogicService}) →
+     * map well-known fields onto the roster row → {@link #register} (dedupes and
+     * materializes the candidate) → attach the full sanitized answers to the
+     * registration as a {@code form_response}.</p>
+     *
+     * <p>Field mapping is type-first (fullname → name, email → email — types are
+     * unambiguous), then label heuristics for the rest (School / Major /
+     * Graduation year). Unmapped answers still persist in the form response.</p>
+     *
+     * @param eventId     the event being registered for
+     * @param answersJson submitted answers: [{fieldId, label, value}]
+     * @return the created roster row
+     * @throws ResponseStatusException 422 on rule violations, 409 on duplicates
+     */
+    @Transactional
+    public RegistrationRow registerFromForm(UUID eventId, String answersJson) {
+        var definition = formDefinitions.findByPurpose("EVENT_REGISTRATION")
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "No registration form is configured"));
+        String sanitized = formLogic.validateAndFilter(definition.getSchema(), answersJson);
+
+        Map<String, String> byId = new java.util.HashMap<>();
+        try {
+            for (JsonNode a : objectMapper.readTree(sanitized)) {
+                byId.put(a.path("fieldId").asText(""), a.path("value").asText(""));
+            }
+        } catch (Exception ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unparseable answers");
+        }
+
+        String name = null, email = null, major = null, schoolName = null;
+        Integer gradYear = null;
+        for (FormLogicService.Field f : formLogic.fields(definition.getSchema())) {
+            String v = byId.get(f.id());
+            if (v == null || v.isBlank()) {
+                continue;
+            }
+            String label = f.label().toLowerCase(java.util.Locale.ROOT);
+            if (f.type().equals("fullname") && name == null) {
+                name = v;
+            } else if (f.type().equals("email") && email == null) {
+                email = v;
+            } else if (label.contains("school") && schoolName == null) {
+                schoolName = v;
+            } else if (label.contains("grad") && gradYear == null) {
+                try { gradYear = Integer.valueOf(v.replaceAll("\\D", "")); } catch (NumberFormatException ignored) { }
+            } else if (label.contains("major") && major == null) {
+                major = v;
+            }
+        }
+        if (name == null || email == null) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "The registration form must collect a full name and an email");
+        }
+        final String wanted = schoolName;
+        UUID schoolId = wanted == null ? null
+                : schools.findAll().stream()
+                        .filter(s -> s.getName().equalsIgnoreCase(wanted))
+                        .map(School::getId)
+                        .findFirst().orElse(null);
+
+        RegistrationRow row = register(eventId, new RegisterRequest(name, email, schoolId, major, gradYear, false));
+
+        // Keep the complete answer set (interests etc.) attached to the roster row.
+        FormResponse response = new FormResponse();
+        response.setFormPurpose("EVENT_REGISTRATION");
+        response.setSubjectType("REGISTRATION");
+        response.setSubjectId(row.id());
+        response.setAnswers(sanitized);
+        formResponses.save(response);
+        return row;
     }
 
     @Transactional

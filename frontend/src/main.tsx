@@ -12,6 +12,7 @@ import.meta.glob('./styles/*.local.css', { eager: true })
 import { AppShell } from './components/AppShell'
 import { StoreProvider } from './state/store'
 import { ConfigProvider, useConfig } from './state/config'
+import EventRegisterPage from './pages/EventRegisterPage'
 
 // Recruiter / ATS pages
 import OverviewPage from './pages/OverviewPage'
@@ -106,6 +107,8 @@ createRoot(document.getElementById('root')!).render(
         <StoreProvider>
           <BrowserRouter>
             <Routes>
+              {/* Shell-less public surface: the QR/event registration page. */}
+              <Route path="/register/:eventId" element={<EventRegisterPage />} />
               {/* The recruiter console. The candidate-facing "Careers and Conv"
                   app is integrated separately. */}
               <Route path="/*" element={<RecruiterApp />} />

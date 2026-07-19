@@ -1,5 +1,7 @@
 package com.taportal.api;
 
+import com.taportal.api.CampusDtos.EventPublicInfo;
+import com.taportal.api.CampusDtos.RegisterFormRequest;
 import com.taportal.api.CampusDtos.RegisterRequest;
 import com.taportal.api.CampusDtos.RegistrationRow;
 import com.taportal.api.CampusDtos.SchoolRow;
@@ -14,14 +16,35 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Campus module: schools + event rosters (register, walk-in, check-in). */
+/** Campus module: schools + event rosters (register, walk-in, check-in, QR/web + Aria registration). */
 @RestController
 public class CampusController {
 
     private final CampusService campusService;
+    private final com.taportal.domain.engagement.RecruitingEventRepository events;
 
-    public CampusController(CampusService campusService) {
+    public CampusController(CampusService campusService,
+            com.taportal.domain.engagement.RecruitingEventRepository events) {
         this.campusService = campusService;
+        this.events = events;
+    }
+
+    /** Public event header for the QR/registration page (no auth in this POC). */
+    @GetMapping("/v1/events/{id}/public")
+    public EventPublicInfo publicInfo(@PathVariable UUID id) {
+        var e = events.findById(id)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("Event not found: " + id));
+        return new EventPublicInfo(e.getId(), e.getName(), e.getType(), e.getLocation(), e.getStartsAt());
+    }
+
+    /**
+     * Form-driven registration (QR / career-site surface). Validation and
+     * candidate materialization happen in {@link CampusService#registerFromForm}
+     * — the same authoritative path Aria's conversational flow uses.
+     */
+    @PostMapping("/v1/events/{id}/register-form")
+    public RegistrationRow registerForm(@PathVariable UUID id, @Valid @RequestBody RegisterFormRequest request) {
+        return campusService.registerFromForm(id, request.answers());
     }
 
     @GetMapping("/v1/schools")
