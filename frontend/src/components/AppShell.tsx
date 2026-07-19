@@ -95,6 +95,21 @@ const readCollapsed = () => {
   }
 }
 
+function RailNav({ groups }: { groups: { group: string; keys: string[] }[] }) {
+  return (
+    <nav className="app__side">
+      {groups.map((g) => (
+        <div key={g.group}>
+          <div className="nav-group">{g.group}</div>
+          {g.keys.map((k) => (
+            <Item key={k} to={ROUTES[k]} Icon={ICONS[k]} label={MODULES.find((m) => m.key === k)!.label} />
+          ))}
+        </div>
+      ))}
+    </nav>
+  )
+}
+
 function Item({ to, Icon, label }: { to: string; Icon: IconC; label: string }) {
   return (
     <NavLink to={to} end={to === '/'} className="nav-item" title={label}>
@@ -190,8 +205,13 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className={collapsed ? 'app app--collapsed' : 'app'}>
-      <div className="app__brand">
-        <Brand collapsed={collapsed} onToggle={toggle} />
+      {/* Floating rail: brand + nav as one rounded card, detached from the
+          viewport edge (matches the floating SlideOver drawers). */}
+      <div className="app__rail">
+        <div className="app__brand">
+          <Brand collapsed={collapsed} onToggle={toggle} />
+        </div>
+        <RailNav groups={groups} />
       </div>
 
       <div className="app__top">
@@ -227,17 +247,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           {currentUser?.initials ?? 'OA'}
         </div>
       </div>
-
-      <nav className="app__side">
-        {groups.map((g) => (
-          <div key={g.group}>
-            <div className="nav-group">{g.group}</div>
-            {g.keys.map((k) => (
-              <Item key={k} to={ROUTES[k]} Icon={ICONS[k]} label={MODULES.find((m) => m.key === k)!.label} />
-            ))}
-          </div>
-        ))}
-      </nav>
 
       <main className="app__main">{children}</main>
 
