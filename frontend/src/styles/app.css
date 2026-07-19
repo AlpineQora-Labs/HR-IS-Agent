@@ -324,3 +324,17 @@ button.card:hover {
   border-radius: 18px;
   box-shadow: 0 10px 32px rgba(16, 22, 38, 0.18), 0 2px 8px rgba(16, 22, 38, 0.1);
 }
+
+/* ---- Floating content card ----
+   The main column floats like the nav card: same 12px gutters, same 18px
+   radius, so both share the exact top and bottom lines (the height-mismatch
+   fix). The shell behind them deepens a step so the cards read as cards. */
+.app {
+  background: #e2e7f0;
+}
+.app__main {
+  margin: 12px 12px 12px 12px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 32px rgba(16, 22, 38, 0.08), 0 2px 8px rgba(16, 22, 38, 0.05);
+}
