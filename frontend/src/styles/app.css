@@ -162,7 +162,7 @@ a {
   font-size: 0;
   overflow: hidden;
 }
-.app--collapsed .app__side > div:first-child .nav-group {
+.app--collapsed .app__side-scroll > div:first-child .nav-group {
   display: none;
 }
 
@@ -318,11 +318,32 @@ button.card:hover {
 .app__rail .app__side {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   border-right: 0;
   margin: 12px 0 12px 12px;
   border-radius: 18px;
   box-shadow: 0 10px 32px rgba(16, 22, 38, 0.18), 0 2px 8px rgba(16, 22, 38, 0.1);
+}
+.app__side-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.app__side-pin {
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+/* Overlays (SlideOver drawers) read this to sit level with the floating
+   cards — i.e. below the top chrome band. Absent outside the shell. */
+.app {
+  --shell-chrome-h: 60px;
 }
 
 /* ---- Floating content card ----

@@ -96,16 +96,28 @@ const readCollapsed = () => {
 }
 
 function RailNav({ groups }: { groups: { group: string; keys: string[] }[] }) {
+  // Admin is pinned to the card's bottom edge, outside the scrolling list.
+  const scrollGroups = groups
+    .map((g) => ({ ...g, keys: g.keys.filter((k) => k !== 'admin') }))
+    .filter((g) => g.keys.length > 0)
+  const hasAdmin = groups.some((g) => g.keys.includes('admin'))
   return (
     <nav className="app__side">
-      {groups.map((g) => (
-        <div key={g.group}>
-          <div className="nav-group">{g.group}</div>
-          {g.keys.map((k) => (
-            <Item key={k} to={ROUTES[k]} Icon={ICONS[k]} label={MODULES.find((m) => m.key === k)!.label} />
-          ))}
+      <div className="app__side-scroll">
+        {scrollGroups.map((g) => (
+          <div key={g.group}>
+            <div className="nav-group">{g.group}</div>
+            {g.keys.map((k) => (
+              <Item key={k} to={ROUTES[k]} Icon={ICONS[k]} label={MODULES.find((m) => m.key === k)!.label} />
+            ))}
+          </div>
+        ))}
+      </div>
+      {hasAdmin && (
+        <div className="app__side-pin">
+          <Item to={ROUTES.admin} Icon={ICONS.admin} label={MODULES.find((m) => m.key === 'admin')!.label} />
         </div>
-      ))}
+      )}
     </nav>
   )
 }

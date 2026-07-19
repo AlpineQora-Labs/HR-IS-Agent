@@ -67,7 +67,7 @@ export default function SlideOver({
         aria-label={label}
         style={{
           position: 'fixed',
-          top: 12,
+          top: 'calc(var(--shell-chrome-h, 0px) + 12px)',
           right: 12,
           bottom: 12,
           width,
