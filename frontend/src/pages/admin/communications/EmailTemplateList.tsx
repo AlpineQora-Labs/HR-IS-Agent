@@ -83,19 +83,19 @@ function ActionsCellRenderer({ data, onEdit, onClone, onDelete }: {
 }
 
 /* ===== Status pill renderer ===== */
-const STATUS_STYLES: Record<string, { bg: string; color: string; label: string }> = {
-  ACTIVE: { bg: '#dcfce7', color: '#166534', label: 'Active' },
-  DRAFT: { bg: '#fef9c3', color: '#854d0e', label: 'Draft' },
-  ARCHIVED: { bg: '#f3f4f6', color: '#6b7280', label: 'Archived' },
+// Neutral, colorless pills for now — labels carry the meaning, no color coding.
+const NEUTRAL_PILL = { bg: '#f0f0f2', color: '#5c5c63' }
+const STATUS_LABELS: Record<string, string> = {
+  ACTIVE: 'Active', DRAFT: 'Draft', ARCHIVED: 'Archived',
 }
 
 function StatusCellRenderer({ value }: { value: string }) {
-  const style = STATUS_STYLES[value] || STATUS_STYLES.DRAFT
+  const label = STATUS_LABELS[value] || 'Draft'
   return (
     <span style={{
       display: 'inline-block', padding: '3px 10px', borderRadius: 999,
-      fontSize: 12, fontWeight: 600, backgroundColor: style.bg, color: style.color, lineHeight: '18px',
-    }}>{style.label}</span>
+      fontSize: 12, fontWeight: 600, backgroundColor: NEUTRAL_PILL.bg, color: NEUTRAL_PILL.color, lineHeight: '18px',
+    }}>{label}</span>
   )
 }
 
@@ -107,7 +107,7 @@ function CategoryCellRenderer({ value }: { value: string }) {
     <span style={{
       display: 'inline-block', padding: '3px 10px', borderRadius: 4,
       fontSize: 11, fontWeight: 700, letterSpacing: '0.3px', textTransform: 'uppercase',
-      backgroundColor: cat.color + '18', color: cat.color,
+      backgroundColor: NEUTRAL_PILL.bg, color: NEUTRAL_PILL.color,
     }}>{cat.label}</span>
   )
 }
