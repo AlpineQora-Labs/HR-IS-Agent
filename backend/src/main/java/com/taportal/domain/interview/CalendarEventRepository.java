@@ -13,4 +13,6 @@ public interface CalendarEventRepository extends JpaRepository<CalendarEvent, UU
     List<CalendarEvent> findByInterviewId(UUID interviewId);
 
     void deleteByInterviewId(UUID interviewId);
+
+    long countByUserIdAndKindAndStartsAtBetween(UUID userId, String kind, OffsetDateTime from, OffsetDateTime to);
 }

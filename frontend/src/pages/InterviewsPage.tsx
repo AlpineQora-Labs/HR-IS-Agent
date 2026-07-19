@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { defaultJobId } from '@/lib/jobs'
 import SlideOver from '@/components/SlideOver'
+import { SchedulingRadar } from '@/components/SchedulingRadar'
 import { useApplications, useJobInterviews, useJobs, useProposeTimes, useRescheduleInterview, useSlots, useTransitionInterview } from '@/api/hooks'
 import { date } from '@/lib/format'
 import type { Interview, Slot } from '@/api/types'
@@ -709,6 +710,9 @@ export default function InterviewsPage() {
           </div>
         </div>
       </div>
+
+      {/* Cross-job radar: what's stuck, what's today, who's loaded. */}
+      <SchedulingRadar />
 
       <div className="toolbar" style={{ marginBottom: 18 }}>
         <select

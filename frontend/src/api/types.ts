@@ -135,6 +135,36 @@ export interface Slot {
   status: string
 }
 
+// ---- Scheduling radar ----
+
+export interface AttentionItem {
+  interviewId: string
+  applicationId: string
+  candidateName: string
+  jobTitle: string
+  status: string
+  scheduledAt: string | null
+  waitingHours: number
+  meetingLink: string | null
+  interviewers: string[]
+}
+
+export interface InterviewerLoad {
+  userId: string
+  name: string
+  initials: string
+  role: string
+  next7Days: number
+}
+
+export interface SchedulingOverview {
+  awaitingCandidate: AttentionItem[]
+  needsOutcome: AttentionItem[]
+  noShows: AttentionItem[]
+  today: AttentionItem[]
+  load: InterviewerLoad[]
+}
+
 // ---- Assessments ----
 
 export interface Assessment {

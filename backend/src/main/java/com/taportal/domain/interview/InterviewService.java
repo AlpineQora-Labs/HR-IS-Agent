@@ -37,6 +37,7 @@ public class InterviewService {
     private final JobRepository jobs;
     private final CandidateRepository candidates;
     private final RecruiterUserRepository recruiterUsers;
+    private final InterviewPanelistRepository panelists;
 
     public InterviewService(
             InterviewRepository interviewRepository,
@@ -46,7 +47,8 @@ public class InterviewService {
             ApplicationRepository applications,
             JobRepository jobs,
             CandidateRepository candidates,
-            RecruiterUserRepository recruiterUsers) {
+            RecruiterUserRepository recruiterUsers,
+            InterviewPanelistRepository panelists) {
         this.interviewRepository = interviewRepository;
         this.slotRepository = slotRepository;
         this.calendarEvents = calendarEvents;
@@ -55,6 +57,7 @@ public class InterviewService {
         this.jobs = jobs;
         this.candidates = candidates;
         this.recruiterUsers = recruiterUsers;
+        this.panelists = panelists;
     }
 
     public List<InterviewResponse> listByApplication(UUID applicationId) {
@@ -126,9 +129,24 @@ public class InterviewService {
     /** Compute fresh options from participants' calendars and offer them. */
     @Transactional
     public List<SlotResponse> autoPropose(UUID interviewId) {
+        return autoPropose(interviewId, null);
+    }
+
+    /**
+     * Compute fresh options and offer them. A non-empty {@code panel} replaces the
+     * interview's panel first; availability then honors every panelist's calendar.
+     */
+    @Transactional
+    public List<SlotResponse> autoPropose(UUID interviewId, List<UUID> panel) {
         Interview interview = load(interviewId);
         Application app = applications.findById(interview.getApplicationId()).orElseThrow();
-        List<RecruiterUser> team = participantsFor(app);
+        if (panel != null && !panel.isEmpty()) {
+            panelists.deleteByInterviewId(interviewId);
+            for (UUID userId : panel.stream().distinct().toList()) {
+                panelists.save(new InterviewPanelist(interviewId, userId));
+            }
+        }
+        List<RecruiterUser> team = participantsFor(interview, app);
 
         // Retract any previous offer before making a new one.
         expireSlots(interviewId);
@@ -170,7 +188,7 @@ public class InterviewService {
         }
         Interview interview = load(slot.getInterviewId());
         Application app = applications.findById(interview.getApplicationId()).orElseThrow();
-        List<RecruiterUser> team = participantsFor(app);
+        List<RecruiterUser> team = participantsFor(interview, app);
         List<UUID> ids = team.stream().map(RecruiterUser::getId).toList();
 
         if (!ids.isEmpty() && availability.hasConflict(ids, slot.getStartsAt(), slot.getEndsAt(), interview.getId())) {
@@ -242,8 +260,17 @@ public class InterviewService {
         return toResponse(interviewRepository.save(interview));
     }
 
-    /** Hiring team for an application: the job's hiring manager + recruiter. */
-    public List<RecruiterUser> participantsFor(Application app) {
+    /**
+     * The interview's hiring team: its panel when one is set, otherwise the job's
+     * hiring manager + recruiter.
+     */
+    public List<RecruiterUser> participantsFor(Interview interview, Application app) {
+        List<UUID> panel = panelists.findByInterviewId(interview.getId()).stream()
+                .map(InterviewPanelist::getUserId)
+                .toList();
+        if (!panel.isEmpty()) {
+            return recruiterUsers.findAllById(panel);
+        }
         Job job = jobs.findById(app.getJobId()).orElse(null);
         List<UUID> ids = new ArrayList<>();
         if (job != null && job.getHiringManagerId() != null) {

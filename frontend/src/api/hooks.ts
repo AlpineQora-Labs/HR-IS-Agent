@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
 import type {
+  SchedulingOverview,
   AnalyticsSummary,
   ApplicationRow,
   Assessment,
@@ -151,13 +152,25 @@ function useSchedulingMutation<TArg>(fn: (arg: TArg) => Promise<unknown>) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['interviews'] })
       qc.invalidateQueries({ queryKey: ['slots'] })
+      qc.invalidateQueries({ queryKey: ['scheduling-overview'] })
     },
   })
 }
 
-/** Recruiter one-click: offer times computed from the hiring team's calendars. */
+/** Recruiter one-click: offer times computed from the hiring team's calendars.
+ *  Pass interviewerUserIds to set/replace the panel first. */
 export function useProposeTimes() {
-  return useSchedulingMutation((interviewId: string) => api.post(`/interviews/${interviewId}/propose`))
+  return useSchedulingMutation(({ interviewId, interviewerUserIds }: { interviewId: string; interviewerUserIds?: string[] }) =>
+    api.post(`/interviews/${interviewId}/propose`, interviewerUserIds ? { interviewerUserIds } : {}))
+}
+
+/** The cross-job scheduling radar: what's stuck, what's today, who's loaded. */
+export function useSchedulingOverview() {
+  return useQuery({
+    queryKey: ['scheduling-overview'],
+    queryFn: () => api.get<SchedulingOverview>('/scheduling/overview').then((r) => r.data),
+    refetchInterval: 15_000,
+  })
 }
 
 /** Free the booked time and immediately re-offer fresh options. */

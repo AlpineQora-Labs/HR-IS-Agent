@@ -47,10 +47,15 @@ public class InterviewController {
 
     // ---- Calendar-driven self-scheduling (ported from the VMS engine) ----
 
-    /** Recruiter one-click: compute options from the hiring team's calendars and offer them. */
+    /**
+     * Recruiter one-click: compute options from the hiring team's calendars and offer
+     * them. An optional body {@code {interviewerUserIds: [...]}} sets the panel first.
+     */
     @PostMapping("/v1/interviews/{id}/propose")
-    public List<SlotResponse> propose(@PathVariable UUID id) {
-        return interviewService.autoPropose(id);
+    public List<SlotResponse> propose(
+            @PathVariable UUID id,
+            @RequestBody(required = false) SchedulingDtos.ProposeRequest request) {
+        return interviewService.autoPropose(id, request == null ? null : request.interviewerUserIds());
     }
 
     /** The options currently awaiting the candidate. */
