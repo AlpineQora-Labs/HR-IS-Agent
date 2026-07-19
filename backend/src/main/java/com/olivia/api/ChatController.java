@@ -1,9 +1,9 @@
 package com.olivia.api;
 
-import com.olivia.api.ChatDtos.ChatState;
-import com.olivia.api.ChatDtos.ReplyRequest;
-import com.olivia.api.ChatDtos.StartChatRequest;
-import com.olivia.domain.conversation.ConversationService;
+import com.olivia.aria.ChatDtos.ChatState;
+import com.olivia.aria.ChatDtos.ReplyRequest;
+import com.olivia.aria.ChatDtos.StartChatRequest;
+import com.olivia.aria.ConversationService;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

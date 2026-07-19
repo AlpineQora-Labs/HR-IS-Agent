@@ -1,4 +1,4 @@
-package com.olivia.domain.conversation;
+package com.olivia.aria;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

@@ -1,4 +1,4 @@
-package com.olivia.domain.conversation;
+package com.olivia.aria;
 
 import java.util.List;
 import java.util.UUID;

@@ -1,4 +1,4 @@
-package com.olivia.domain.conversation;
+package com.olivia.aria;
 
 import com.olivia.domain.job.KnockoutQuestion;
 import java.util.List;

@@ -1,4 +1,4 @@
-package com.olivia.domain.conversation;
+package com.olivia.aria;
 
 import com.olivia.domain.interview.Interview;
 import com.olivia.domain.interview.InterviewSlot;

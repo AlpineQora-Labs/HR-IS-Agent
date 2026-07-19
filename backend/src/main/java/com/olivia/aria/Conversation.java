@@ -1,4 +1,4 @@
-package com.olivia.domain.conversation;
+package com.olivia.aria;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

@@ -1,8 +1,8 @@
-package com.olivia.domain.conversation;
+package com.olivia.aria;
 
-import com.olivia.api.ChatDtos.ChatMessage;
-import com.olivia.api.ChatDtos.ChatState;
-import com.olivia.api.ChatDtos.StartChatRequest;
+import com.olivia.aria.ChatDtos.ChatMessage;
+import com.olivia.aria.ChatDtos.ChatState;
+import com.olivia.aria.ChatDtos.StartChatRequest;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
