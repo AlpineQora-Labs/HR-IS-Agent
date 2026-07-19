@@ -374,16 +374,16 @@ button.card:hover {
 }
 
 /* ---- Edge collapse handle ----
-   A small circular chevron perched ON the nav card's right edge (the
-   Notion/Atlassian pattern) — the control lives on the boundary it moves.
-   Hidden until the rail is hovered or focused; always shown when collapsed. */
+   A small circular chevron embedded on the CONTENT card's left edge — part of
+   the big card's chrome, so it's always visible. Anchored to the rail's right
+   edge (+12px gutter) so it rides the collapse/expand animation. */
 .app__rail {
   position: relative;
 }
 .app__collapse-handle {
   position: absolute;
-  top: 30px; /* 12px gutter + 18px into the card */
-  right: -13px;
+  top: 30px; /* 12px gutter + 18px into the card, just past the corner radius */
+  right: -25px; /* centers the 26px button on the content card's left border */
   width: 26px;
   height: 26px;
   border-radius: 999px;
@@ -392,25 +392,18 @@ button.card:hover {
   justify-content: center;
   background: var(--app-panel);
   border: 1px solid var(--line);
-  color: var(--ink-2);
+  color: var(--ink-3);
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(16, 22, 38, 0.18);
+  box-shadow: 0 2px 8px rgba(16, 22, 38, 0.14);
   z-index: 40;
-  opacity: 0;
-  transform: scale(0.9);
-  transition: opacity 0.14s ease, transform 0.14s ease;
+  transition: color 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
 }
 .app__collapse-handle .ic {
   width: 14px;
   height: 14px;
 }
-.app__rail:hover .app__collapse-handle,
-.app__collapse-handle:focus-visible,
-.app--collapsed .app__collapse-handle {
-  opacity: 1;
-  transform: scale(1);
-}
 .app__collapse-handle:hover {
   color: var(--bofa-navy);
   border-color: var(--bofa-navy);
+  transform: scale(1.08);
 }
