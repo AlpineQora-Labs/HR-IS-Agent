@@ -217,26 +217,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className={collapsed ? 'app app--collapsed' : 'app'}>
-      {/* Floating rail: brand + nav as one rounded card, detached from the
-          viewport edge (matches the floating SlideOver drawers). */}
-      <div className="app__rail">
-        <div className="app__brand">
-          <Brand collapsed={collapsed} onToggle={toggle} />
-        </div>
-        <RailNav groups={groups} />
-        {/* Edge handle (Notion/Atlassian pattern): perched on the nav card's
-            right edge — appears on rail hover, always visible when collapsed. */}
-        <button
-          className="app__collapse-handle"
-          onClick={toggle}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={collapsed ? 'Expand' : 'Collapse'}
-        >
-          {collapsed ? <IconChevronRight className="ic" /> : <IconChevronLeft className="ic" />}
-        </button>
-      </div>
-
+      {/* Pattern 2 (Workday/ServiceNow): a permanent full-width branded band.
+          The full logo never collapses; the nav card below is independent. */}
       <div className="app__top">
+        <div className="app__topbrand">
+          <Brand collapsed={false} onToggle={toggle} />
+        </div>
         <div className="spacer" />
         <button
           className="input-group"
@@ -260,6 +246,19 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="avatar" title={currentUser?.name ?? 'Account'}>
           {currentUser?.initials ?? 'OA'}
         </div>
+      </div>
+
+      {/* The independent nav card with its edge collapse handle. */}
+      <div className="app__rail">
+        <RailNav groups={groups} />
+        <button
+          className="app__collapse-handle"
+          onClick={toggle}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={collapsed ? 'Expand' : 'Collapse'}
+        >
+          {collapsed ? <IconChevronRight className="ic" /> : <IconChevronLeft className="ic" />}
+        </button>
       </div>
 
       <main className="app__main">{children}</main>

@@ -298,8 +298,26 @@ button.card:hover {
    card — matching the floating SlideOver drawers.
    Track = 262px (250 card + 12 gutter); collapsed = 78px (66 + 12). */
 .app {
-  grid-template-areas: "rail top" "rail main";
+  grid-template-areas: "top top" "rail main";
   grid-template-columns: 262px 1fr;
+}
+/* Brand inside the permanent chrome band — the full logo, never collapsed.
+   Ports the corner-cell wordmark styling to its new home in the band. */
+.app__topbrand {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-right: 16px;
+}
+.app__topbrand .wordmark {
+  color: var(--ink-0);
+}
+.app__topbrand .wordmark small {
+  display: block;
+  color: var(--ink-4);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 .app--collapsed {
   grid-template-columns: 78px 1fr;
@@ -309,11 +327,6 @@ button.card:hover {
   display: flex;
   flex-direction: column;
   min-height: 0;
-}
-.app__rail .app__brand {
-  min-height: 60px;
-  display: flex;
-  align-items: center;
 }
 .app__rail .app__side {
   flex: 1;
@@ -369,7 +382,7 @@ button.card:hover {
 }
 .app__collapse-handle {
   position: absolute;
-  top: 90px; /* 60px brand + 12px gutter + 18px into the card */
+  top: 30px; /* 12px gutter + 18px into the card */
   right: -13px;
   width: 26px;
   height: 26px;
