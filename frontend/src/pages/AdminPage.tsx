@@ -1,12 +1,12 @@
-import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useStore } from '@/state/store'
 import ConfirmButton from '@/components/ConfirmButton'
 import SlideOver from '@/components/SlideOver'
 import { MODULES, PERMISSIONS, useConfig } from '@/state/config'
 import { usePersistentState } from './admin/builderStore'
 import FormBuilder from './admin/FormBuilder'
-import EmailBuilder from './admin/EmailBuilder'
+import { commsApi } from './admin/communications/commsApi'
 
 type Tab = 'users' | 'forms' | 'config'
 
@@ -275,15 +275,27 @@ function intakeFieldCount(): number {
 /** Hub landing: one tile per Admin component. Adding a component = adding a tile. */
 function AdminHub({ onOpen }: { onOpen: (t: Tab) => void }) {
   const { users, roles, isModuleOn } = useConfig()
+  const navigate = useNavigate()
   const admins = users.filter((u) => u.roleKey === 'admin').length
-  const templates = storedCount('taportal.emailTemplates')
   const activeModules = MODULES.filter((m) => isModuleOn(m.key)).length
 
-  const tiles: { key: Tab; glyph: string; title: string; blurb: string; stat: string }[] = [
+  // Email templates live in the backend now (Communications component).
+  const [templateCount, setTemplateCount] = useState<number | null>(null)
+  useEffect(() => {
+    commsApi.getEmailTemplates().then((t) => setTemplateCount(t.length)).catch(() => setTemplateCount(null))
+  }, [])
+
+  // A tile either opens a ?tab= section (key) or routes to a sub-page (path).
+  const tiles: { key: Tab; glyph: string; title: string; blurb: string; stat: string; path?: string }[] = [
     {
       key: 'users', glyph: '👥', title: 'Users & Access',
       blurb: 'Invite teammates, assign roles, and control what each role is allowed to do.',
       stat: `${users.length} members · ${roles.length} roles · ${admins} admin${admins === 1 ? '' : 's'}`,
+    },
+    {
+      key: 'users', glyph: '✉', title: 'Communication', path: '/admin/communications',
+      blurb: 'Design branded email templates with merge fields, rich formatting, and a live preview.',
+      stat: templateCount === null ? 'Email templates' : `${templateCount} template${templateCount === 1 ? '' : 's'}`,
     },
     {
       key: 'forms', glyph: '▤', title: 'Forms',
@@ -301,9 +313,9 @@ function AdminHub({ onOpen }: { onOpen: (t: Tab) => void }) {
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
       {tiles.map((t) => (
         <button
-          key={t.key}
+          key={t.title}
           className="card"
-          onClick={() => onOpen(t.key)}
+          onClick={() => (t.path ? navigate(t.path) : onOpen(t.key))}
           style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit', border: '1px solid var(--line)', padding: 0 }}
         >
           <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '20px 20px 16px', minHeight: 150 }}>
