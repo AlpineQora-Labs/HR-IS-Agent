@@ -217,12 +217,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className={collapsed ? 'app app--collapsed' : 'app'}>
-      {/* Pattern 2 (Workday/ServiceNow): a permanent full-width branded band.
-          The full logo never collapses; the nav card below is independent. */}
       <div className="app__top">
-        <div className="app__topbrand">
-          <Brand collapsed={false} onToggle={toggle} />
-        </div>
         <div className="spacer" />
         <button
           className="input-group"
@@ -248,8 +243,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      {/* The independent nav card with its edge collapse handle. */}
+      {/* The corner-cell brand slides with the column: full wordmark when
+          expanded, mark-only when collapsed. Pull-tab handle on the content
+          card's edge drives the collapse. */}
       <div className="app__rail">
+        <div className="app__brand">
+          <Brand collapsed={collapsed} onToggle={toggle} />
+        </div>
         <RailNav groups={groups} />
         <button
           className="app__collapse-handle"
