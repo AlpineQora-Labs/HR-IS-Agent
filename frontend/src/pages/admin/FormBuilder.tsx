@@ -69,6 +69,14 @@ const FIELD_PALETTE: { type: IntakeFieldType; label: string; hint: string; glyph
   { type: 'yesno', label: 'Yes / No', hint: 'Waitlist, approval…', glyph: '⇄' },
 ]
 
+/** Palette accordion groups — click a header to expand downward. */
+const FIELD_GROUPS: { name: string; types: IntakeFieldType[] }[] = [
+  { name: 'Basics', types: ['short', 'long', 'number', 'date'] },
+  { name: 'Contact', types: ['fullname', 'email', 'phone'] },
+  { name: 'Choices', types: ['dropdown', 'single', 'multi', 'yesno', 'typeahead'] },
+  { name: 'Content & uploads', types: ['header', 'image', 'file'] },
+]
+
 const LAYOUT_PALETTE: { kind: 'single' | 'double'; label: string; hint: string; glyph: string }[] = [
   { kind: 'single', label: 'Single field', hint: 'One long field per row', glyph: '▭' },
   { kind: 'double', label: 'Side by side', hint: 'Two fields in one row', glyph: '◫' },
@@ -442,6 +450,7 @@ export default function FormBuilder() {
   const [dirty, setDirty] = useState(false)
   const [preview, setPreview] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [openGroups, setOpenGroups] = useState<string[]>(['Basics'])
 
   // Load the server schema whenever the purpose (or server copy) changes.
   useEffect(() => {
@@ -585,26 +594,57 @@ export default function FormBuilder() {
 
           <div className="card" style={{ padding: 10 }}>
             <div className="eyebrow" style={{ padding: '4px 6px 8px' }}>Field types</div>
-            {FIELD_PALETTE.map((p) => (
-              <div
-                key={p.type}
-                draggable
-                onDragStart={(e) => setPayload(e, { kind: 'palette-field', type: p.type })}
-                onClick={() => {
-                  const f = newField(p.type)
-                  patchRows((rows) => [...rows, { id: uid(), slots: [f] }])
-                  setSelectedId(f.id)
-                }}
-                title="Drag into a slot or onto the canvas (or click to append)"
-                style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid var(--line)', background: 'var(--app-panel)', cursor: 'grab', borderRadius: 'var(--ra-2)', padding: '8px 10px', marginBottom: 6 }}
-              >
-                <span style={{ width: 20, textAlign: 'center', color: 'var(--bofa-navy)', fontSize: 14 }}>{p.glyph}</span>
-                <span>
-                  <div style={{ fontSize: 13, color: 'var(--ink-1)', fontWeight: 500 }}>{p.label}</div>
-                  <div style={{ fontSize: 11, color: 'var(--ink-5)' }}>{p.hint}</div>
-                </span>
-              </div>
-            ))}
+            {FIELD_GROUPS.map((g) => {
+              const open = openGroups.includes(g.name)
+              return (
+                <div key={g.name} style={{ marginBottom: 6 }}>
+                  <button
+                    onClick={() => setOpenGroups((cur) => (open ? cur.filter((n) => n !== g.name) : [...cur, g.name]))}
+                    aria-expanded={open}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                      border: '1px solid var(--line)', background: open ? 'var(--app-sunken)' : 'var(--app-panel)',
+                      borderRadius: 'var(--ra-2)', padding: '8px 10px', cursor: 'pointer',
+                      font: 'inherit', fontSize: 12.5, fontWeight: 600, color: 'var(--ink-1)', textAlign: 'left',
+                    }}
+                  >
+                    <span style={{
+                      display: 'inline-block', transition: 'transform .12s ease',
+                      transform: open ? 'rotate(90deg)' : 'none', color: 'var(--ink-4)', fontSize: 11,
+                    }}>▸</span>
+                    <span style={{ flex: 1 }}>{g.name}</span>
+                    <span className="muted" style={{ fontSize: 10.5 }}>{g.types.length}</span>
+                  </button>
+                  {open && (
+                    <div style={{ padding: '6px 0 2px 6px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {g.types.map((t) => {
+                        const p = FIELD_PALETTE.find((x) => x.type === t)!
+                        return (
+                          <div
+                            key={p.type}
+                            draggable
+                            onDragStart={(e) => setPayload(e, { kind: 'palette-field', type: p.type })}
+                            onClick={() => {
+                              const f = newField(p.type)
+                              patchRows((rows) => [...rows, { id: uid(), slots: [f] }])
+                              setSelectedId(f.id)
+                            }}
+                            title="Drag into a slot or onto the canvas (or click to append)"
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid var(--line)', background: 'var(--app-panel)', cursor: 'grab', borderRadius: 'var(--ra-2)', padding: '7px 10px' }}
+                          >
+                            <span style={{ width: 20, textAlign: 'center', color: 'var(--bofa-navy)', fontSize: 14 }}>{p.glyph}</span>
+                            <span>
+                              <div style={{ fontSize: 13, color: 'var(--ink-1)', fontWeight: 500 }}>{p.label}</div>
+                              <div style={{ fontSize: 11, color: 'var(--ink-5)' }}>{p.hint}</div>
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
 
