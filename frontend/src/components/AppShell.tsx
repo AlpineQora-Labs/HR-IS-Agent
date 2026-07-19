@@ -109,7 +109,6 @@ const GROUP_PILL_LABELS: Record<string, string> = {
 const ADMIN_SECTIONS: { tab: string | null; label: string; icon: string }[] = [
   { tab: null, label: 'Overview', icon: 'admin' },
   { tab: 'users', label: 'Users & Access', icon: 'candidates' },
-  { tab: 'survey', label: 'Survey', icon: 'surveys' },
   { tab: 'comms', label: 'Communication', icon: 'campaigns' },
   { tab: 'forms', label: 'Forms', icon: 'offers' },
   { tab: 'config', label: 'Configuration', icon: 'integrations' },

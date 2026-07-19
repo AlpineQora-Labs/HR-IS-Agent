@@ -4,16 +4,14 @@ import { useStore } from '@/state/store'
 import ConfirmButton from '@/components/ConfirmButton'
 import SlideOver from '@/components/SlideOver'
 import { MODULES, PERMISSIONS, useConfig } from '@/state/config'
-import SurveyStudio from './admin/SurveyEditor'
 import { usePersistentState } from './admin/builderStore'
 import FormBuilder from './admin/FormBuilder'
 import EmailBuilder from './admin/EmailBuilder'
 
-type Tab = 'users' | 'survey' | 'comms' | 'forms' | 'config'
+type Tab = 'users' | 'comms' | 'forms' | 'config'
 
 const TABS: { key: Tab; label: string; blurb: string }[] = [
   { key: 'users', label: 'Users & Access', blurb: 'People, roles, and what each role can do' },
-  { key: 'survey', label: 'Survey', blurb: 'Design candidate-experience surveys' },
   { key: 'comms', label: 'Communication', blurb: 'Templates for every candidate touchpoint' },
   { key: 'forms', label: 'Forms', blurb: 'Intake forms that feed event creation' },
   { key: 'config', label: 'Configuration', blurb: 'Workspace settings and module access' },
@@ -294,7 +292,6 @@ function intakeFieldCount(): number {
 function AdminHub({ onOpen }: { onOpen: (t: Tab) => void }) {
   const { users, roles, isModuleOn } = useConfig()
   const admins = users.filter((u) => u.roleKey === 'admin').length
-  const surveys = storedCount('taportal.surveysV2') || storedCount('taportal.surveys')
   const templates = storedCount('taportal.emailTemplates')
   const activeModules = MODULES.filter((m) => isModuleOn(m.key)).length
 
@@ -303,11 +300,6 @@ function AdminHub({ onOpen }: { onOpen: (t: Tab) => void }) {
       key: 'users', glyph: '👥', title: 'Users & Access',
       blurb: 'Invite teammates, assign roles, and control what each role is allowed to do.',
       stat: `${users.length} members · ${roles.length} roles · ${admins} admin${admins === 1 ? '' : 's'}`,
-    },
-    {
-      key: 'survey', glyph: '★', title: 'Survey',
-      blurb: 'Multi-page survey studio — ten question types, live preview, and a draft → publish → clone lifecycle.',
-      stat: `${surveys} survey${surveys === 1 ? '' : 's'}`,
     },
     {
       key: 'comms', glyph: '✉', title: 'Communication',
@@ -357,7 +349,7 @@ export default function AdminPage() {
   const rawTab = params.get('tab')
   // No ?tab → the hub of component tiles; a tab value → that component.
   const tab: Tab | null =
-    rawTab === 'users' || rawTab === 'survey' || rawTab === 'comms' || rawTab === 'forms' || rawTab === 'config' ? rawTab : null
+    rawTab === 'users' || rawTab === 'comms' || rawTab === 'forms' || rawTab === 'config' ? rawTab : null
   const openTab = (t: Tab) => setParams({ tab: t })
 
   const active = TABS.find((t) => t.key === tab)
@@ -381,7 +373,6 @@ export default function AdminPage() {
         <>
           {/* Section switching lives in the left rail (contextual nav), not in-page tabs. */}
           {tab === 'users' && <UsersAndAccess />}
-          {tab === 'survey' && <SurveyStudio />}
           {tab === 'comms' && <Communication />}
           {tab === 'forms' && <FormBuilder />}
           {tab === 'config' && <Configuration />}
