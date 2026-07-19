@@ -224,17 +224,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Brand collapsed={collapsed} onToggle={toggle} />
         </div>
         <RailNav groups={groups} />
-      </div>
-
-      <div className="app__top">
+        {/* Edge handle (Notion/Atlassian pattern): perched on the nav card's
+            right edge — appears on rail hover, always visible when collapsed. */}
         <button
-          className="btn btn--ghost btn--icon"
+          className="app__collapse-handle"
           onClick={toggle}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title="Toggle sidebar"
+          title={collapsed ? 'Expand' : 'Collapse'}
         >
           {collapsed ? <IconChevronRight className="ic" /> : <IconChevronLeft className="ic" />}
         </button>
+      </div>
+
+      <div className="app__top">
         <div className="spacer" />
         <button
           className="input-group"
