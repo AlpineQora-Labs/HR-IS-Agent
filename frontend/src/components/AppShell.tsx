@@ -109,7 +109,7 @@ const GROUP_PILL_LABELS: Record<string, string> = {
 const ADMIN_SECTIONS: { tab: string | null; label: string; icon: string }[] = [
   { tab: null, label: 'Overview', icon: 'admin' },
   { tab: 'users', label: 'Users & Access', icon: 'candidates' },
-  { tab: 'comms', label: 'Communication', icon: 'campaigns' },
+  { tab: 'communications', label: 'Communication', icon: 'campaigns' },
   { tab: 'forms', label: 'Forms', icon: 'offers' },
   { tab: 'config', label: 'Configuration', icon: 'integrations' },
 ]
@@ -122,11 +122,16 @@ function AdminRailNav() {
       <div className="nav-group">Admin</div>
       {ADMIN_SECTIONS.map(({ tab, label, icon }) => {
         const Icon = ICONS[icon]
-        const active = tab === null ? !cur : cur === tab
+        // Communications is a real sub-route (lifted component set); the other
+        // sections remain ?tab= views on the Admin page.
+        const isPathSection = tab === 'communications'
+        const active = isPathSection
+          ? location.pathname.startsWith('/admin/communications')
+          : location.pathname === '/admin' && (tab === null ? !cur : cur === tab)
         return (
           <Link
             key={label}
-            to={tab ? `/admin?tab=${tab}` : '/admin'}
+            to={isPathSection ? '/admin/communications' : tab ? `/admin?tab=${tab}` : '/admin'}
             className="nav-item"
             aria-current={active ? 'page' : undefined}
             title={label}

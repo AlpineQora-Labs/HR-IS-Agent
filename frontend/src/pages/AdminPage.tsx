@@ -8,11 +8,10 @@ import { usePersistentState } from './admin/builderStore'
 import FormBuilder from './admin/FormBuilder'
 import EmailBuilder from './admin/EmailBuilder'
 
-type Tab = 'users' | 'comms' | 'forms' | 'config'
+type Tab = 'users' | 'forms' | 'config'
 
 const TABS: { key: Tab; label: string; blurb: string }[] = [
   { key: 'users', label: 'Users & Access', blurb: 'People, roles, and what each role can do' },
-  { key: 'comms', label: 'Communication', blurb: 'Templates for every candidate touchpoint' },
   { key: 'forms', label: 'Forms', blurb: 'Intake forms that feed event creation' },
   { key: 'config', label: 'Configuration', blurb: 'Workspace settings and module access' },
 ]
@@ -185,21 +184,6 @@ function UsersAndAccess() {
   )
 }
 
-/** Communication: channel templates. Email today; SMS & notifications later. */
-function Communication() {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div className="tabs">
-        <button className="tab" aria-selected>Email</button>
-        <button className="tab" disabled title="Coming soon" style={{ opacity: 0.45, cursor: 'default' }}>SMS</button>
-        <button className="tab" disabled title="Coming soon" style={{ opacity: 0.45, cursor: 'default' }}>Notifications</button>
-      </div>
-      <EmailBuilder />
-    </div>
-  )
-}
-
-/** Configuration: workspace identity + which modules the console shows. */
 function Configuration() {
   const { toggleModule, isModuleOn } = useConfig()
   const [workspace, setWorkspace] = usePersistentState('taportal.workspace', {
@@ -302,11 +286,6 @@ function AdminHub({ onOpen }: { onOpen: (t: Tab) => void }) {
       stat: `${users.length} members · ${roles.length} roles · ${admins} admin${admins === 1 ? '' : 's'}`,
     },
     {
-      key: 'comms', glyph: '✉', title: 'Communication',
-      blurb: 'Block-based templates with merge tags for every candidate touchpoint — email now, SMS and notifications next.',
-      stat: `${templates} email template${templates === 1 ? '' : 's'}`,
-    },
-    {
       key: 'forms', glyph: '▤', title: 'Forms',
       blurb: 'Design the intake recruiters fill when creating events — registration rules, targeting, ops.',
       stat: `${intakeFieldCount()} intake field${intakeFieldCount() === 1 ? '' : 's'}`,
@@ -349,7 +328,7 @@ export default function AdminPage() {
   const rawTab = params.get('tab')
   // No ?tab → the hub of component tiles; a tab value → that component.
   const tab: Tab | null =
-    rawTab === 'users' || rawTab === 'comms' || rawTab === 'forms' || rawTab === 'config' ? rawTab : null
+    rawTab === 'users' || rawTab === 'forms' || rawTab === 'config' ? rawTab : null
   const openTab = (t: Tab) => setParams({ tab: t })
 
   const active = TABS.find((t) => t.key === tab)
@@ -373,7 +352,6 @@ export default function AdminPage() {
         <>
           {/* Section switching lives in the left rail (contextual nav), not in-page tabs. */}
           {tab === 'users' && <UsersAndAccess />}
-          {tab === 'comms' && <Communication />}
           {tab === 'forms' && <FormBuilder />}
           {tab === 'config' && <Configuration />}
         </>

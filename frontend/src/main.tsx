@@ -39,6 +39,8 @@ import CompliancePage from './pages/CompliancePage'
 import IntegrationsPage from './pages/IntegrationsPage'
 import AuditPage from './pages/AuditPage'
 import AdminPage from './pages/AdminPage'
+import EmailTemplateList from './pages/admin/communications/EmailTemplateList'
+import EmailTemplateEditor from './pages/admin/communications/EmailTemplateEditor'
 
 /** Redirect to Overview if the route's module has been turned off in config. */
 function RequireModule({ module, children }: { module: string; children: ReactNode }) {
@@ -77,6 +79,9 @@ function RecruiterApp() {
         <Route path="/integrations" element={m('integrations', <IntegrationsPage />)} />
         <Route path="/audit" element={m('audit', <AuditPage />)} />
         <Route path="/admin" element={m('admin', <AdminPage />)} />
+        <Route path="/admin/communications" element={m('admin', <EmailTemplateList />)} />
+        <Route path="/admin/communications/new" element={m('admin', <EmailTemplateEditor />)} />
+        <Route path="/admin/communications/:templateId/edit" element={m('admin', <EmailTemplateEditor />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>
