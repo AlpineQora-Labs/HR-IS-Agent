@@ -298,15 +298,8 @@ button.card:hover {
    card — matching the floating SlideOver drawers.
    Track = 262px (250 card + 12 gutter); collapsed = 78px (66 + 12). */
 .app {
-  grid-template-areas: "top top" "rail main";
+  grid-template-areas: "rail top" "rail main";
   grid-template-columns: 262px 1fr;
-}
-/* Brand inside the permanent chrome band — full logo, never collapses. */
-.app__topbrand {
-  display: flex;
-  align-items: center;
-  width: 226px;
-  flex-shrink: 0;
 }
 .app--collapsed {
   grid-template-columns: 78px 1fr;
@@ -316,6 +309,11 @@ button.card:hover {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+.app__rail .app__brand {
+  min-height: 60px;
+  display: flex;
+  align-items: center;
 }
 .app__rail .app__side {
   flex: 1;
@@ -340,14 +338,6 @@ button.card:hover {
   border-top: 1px solid rgba(255, 255, 255, 0.14);
   margin-top: 8px;
   padding-top: 8px;
-}
-.nav-item--button {
-  width: 100%;
-  background: none;
-  border: 0;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
 }
 
 /* Overlays (SlideOver drawers) read this to sit level with the floating

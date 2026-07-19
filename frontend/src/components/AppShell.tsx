@@ -95,15 +95,7 @@ const readCollapsed = () => {
   }
 }
 
-function RailNav({
-  groups,
-  collapsed,
-  onToggle,
-}: {
-  groups: { group: string; keys: string[] }[]
-  collapsed: boolean
-  onToggle: () => void
-}) {
+function RailNav({ groups }: { groups: { group: string; keys: string[] }[] }) {
   // Admin is pinned to the card's bottom edge, outside the scrolling list.
   const scrollGroups = groups
     .map((g) => ({ ...g, keys: g.keys.filter((k) => k !== 'admin') }))
@@ -121,21 +113,11 @@ function RailNav({
           </div>
         ))}
       </div>
-      <div className="app__side-pin">
-        {hasAdmin && (
+      {hasAdmin && (
+        <div className="app__side-pin">
           <Item to={ROUTES.admin} Icon={ICONS.admin} label={MODULES.find((m) => m.key === 'admin')!.label} />
-        )}
-        <button
-          type="button"
-          className="nav-item nav-item--button"
-          onClick={onToggle}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={collapsed ? 'Expand' : 'Collapse'}
-        >
-          {collapsed ? <IconChevronRight className="ic" /> : <IconChevronLeft className="ic" />}
-          <span className="nav-label">Collapse</span>
-        </button>
-      </div>
+        </div>
+      )}
     </nav>
   )
 }
@@ -235,12 +217,24 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className={collapsed ? 'app app--collapsed' : 'app'}>
-      {/* One permanent chrome band: the full logo lives here and never
-          collapses — only the blue nav card below reacts to the toggle. */}
-      <div className="app__top">
-        <div className="app__topbrand">
-          <Brand collapsed={false} onToggle={toggle} />
+      {/* Floating rail: brand + nav as one rounded card, detached from the
+          viewport edge (matches the floating SlideOver drawers). */}
+      <div className="app__rail">
+        <div className="app__brand">
+          <Brand collapsed={collapsed} onToggle={toggle} />
         </div>
+        <RailNav groups={groups} />
+      </div>
+
+      <div className="app__top">
+        <button
+          className="btn btn--ghost btn--icon"
+          onClick={toggle}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title="Toggle sidebar"
+        >
+          {collapsed ? <IconChevronRight className="ic" /> : <IconChevronLeft className="ic" />}
+        </button>
         <div className="spacer" />
         <button
           className="input-group"
@@ -264,10 +258,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="avatar" title={currentUser?.name ?? 'Account'}>
           {currentUser?.initials ?? 'OA'}
         </div>
-      </div>
-
-      <div className="app__rail">
-        <RailNav groups={groups} collapsed={collapsed} onToggle={toggle} />
       </div>
 
       <main className="app__main">{children}</main>
