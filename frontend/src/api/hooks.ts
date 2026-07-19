@@ -3,6 +3,8 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { api } from './client'
 import type {
   SchedulingOverview,
+  FormDefinitionDto,
+  FormResponseRow,
   School,
   EventRegistration,
   RegisterAttendeeInput,
@@ -193,6 +195,41 @@ export function useProposedSlots(interviewId: string | undefined) {
     enabled: !!interviewId,
     queryKey: ['proposed-slots', interviewId],
     queryFn: () => api.get<Slot[]>(`/interviews/${interviewId}/proposed-slots`).then((r) => r.data),
+  })
+}
+
+// ---- Forms (purpose-keyed definitions + responses) ----
+
+export function useFormDefinition(purpose: string) {
+  return useQuery({
+    queryKey: ['form', purpose],
+    queryFn: () => api.get<FormDefinitionDto>(`/forms/${purpose}`).then((r) => r.data),
+  })
+}
+
+export function useSaveFormDefinition() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ purpose, name, schema }: { purpose: string; name: string; schema: string }) =>
+      api.put(`/forms/${purpose}`, { name, schema }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['form'] }),
+  })
+}
+
+export function useSubmitFormResponse() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ purpose, subjectType, subjectId, answers }: { purpose: string; subjectType: string; subjectId: string; answers: string }) =>
+      api.post(`/forms/${purpose}/responses`, { subjectType, subjectId, answers }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['form-responses'] }),
+  })
+}
+
+export function useFormResponses(subjectType: string, subjectId: string | undefined) {
+  return useQuery({
+    enabled: !!subjectId,
+    queryKey: ['form-responses', subjectType, subjectId],
+    queryFn: () => api.get<FormResponseRow[]>('/form-responses', { params: { subjectType, subjectId } }).then((r) => r.data),
   })
 }
 

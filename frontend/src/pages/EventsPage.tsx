@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '@/state/store'
 import SlideOver from '@/components/SlideOver'
-import { useCreateEvent, useEvents, useEventRoster, useRegisterAttendee, useRegistrationTransition, useSchools } from '@/api/hooks'
+import { useCreateEvent, useEvents, useEventRoster, useRegisterAttendee, useRegistrationTransition, useSchools, useFormDefinition, useFormResponses, useSubmitFormResponse } from '@/api/hooks'
 import { date } from '@/lib/format'
 import type { EventRow, EventRegistration } from '@/api/types'
 import { DISPLAY_TYPES, INTAKE_KEY, defaultIntakeForm, flattenIntake, normalizeIntake, type IntakeField, type IntakeForm } from './admin/FormBuilder'
@@ -94,6 +94,17 @@ function Meter({ label, pct, color }: { label: string; pct: number; color: strin
 }
 
 function EventDetail({ e, onClose }: { e: EventRow; onClose: () => void }) {
+  const { data: serverResponses } = useFormResponses('EVENT', e.id)
+  const intakeDetails = useMemo(() => {
+    const fromServer = (serverResponses ?? []).flatMap((r) => {
+      try {
+        return JSON.parse(r.answers) as { label: string; value: string }[]
+      } catch {
+        return []
+      }
+    })
+    return fromServer.length > 0 ? fromServer : readResponses(e.id)
+  }, [serverResponses, e.id])
   return (
     <SlideOver label={`${e.name} details`} onClose={onClose} width={440}>
       <div style={{ padding: '18px 20px 16px', borderBottom: '1px solid var(--line)' }}>
@@ -118,10 +129,10 @@ function EventDetail({ e, onClose }: { e: EventRow; onClose: () => void }) {
           <FunnelStep label="Hires" value={e.hires} pct={rate(e.hires, e.registrations)} />
         </div>
 
-        {readResponses(e.id).length > 0 && (
+        {intakeDetails.length > 0 && (
           <div style={{ marginTop: 18 }}>
             <div className="eyebrow" style={{ marginBottom: 4 }}>Intake details</div>
-            {readResponses(e.id).map((r) => (
+            {intakeDetails.map((r) => (
               <Fact key={r.label} label={r.label}>{r.value}</Fact>
             ))}
           </div>
@@ -415,8 +426,20 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
   const [step, setStep] = useState(0)
   const [d, setD] = useState<Draft>(EMPTY_DRAFT)
   const set = (patch: Partial<Draft>) => setD((prev) => ({ ...prev, ...patch }))
-  // The admin-designed intake (Admin → Forms), snapshotted when the wizard opens.
-  const [intake] = useState<IntakeForm>(readIntakeForm)
+  // The admin-designed intake (Admin → Forms), served from the backend; the
+  // old localStorage copy is only a fallback for offline demos.
+  const { data: intakeDef } = useFormDefinition('EVENT_INTAKE')
+  const intake = useMemo<IntakeForm>(() => {
+    if (intakeDef) {
+      try {
+        return normalizeIntake(JSON.parse(intakeDef.schema))
+      } catch {
+        /* fall through */
+      }
+    }
+    return readIntakeForm()
+  }, [intakeDef])
+  const submitResponse = useSubmitFormResponse()
   const [answers, setAnswers] = useState<Record<string, Answer>>({})
 
   const basicsValid = d.name.trim().length > 0 && d.day.length > 0
@@ -430,6 +453,13 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
       { name: d.name.trim(), type: d.type, location: d.location.trim(), startsAt },
       {
         onSuccess: (ev) => {
+          const filled = flattenIntake(intake)
+            .filter((f) => !DISPLAY_TYPES.includes(f.type))
+            .map((f) => ({ label: f.label || 'Untitled', value: answerText(answers[f.id]) }))
+            .filter((r) => r.value.trim() !== '')
+          if (filled.length > 0) {
+            submitResponse.mutate({ purpose: 'EVENT_INTAKE', subjectType: 'EVENT', subjectId: ev.id, answers: JSON.stringify(filled) })
+          }
           saveResponses(ev.id, intake, answers)
           toastMsg(`Event "${d.name.trim()}" created`)
           onCreated()

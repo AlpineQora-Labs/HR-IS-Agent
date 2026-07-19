@@ -165,6 +165,22 @@ export interface SchedulingOverview {
   load: InterviewerLoad[]
 }
 
+// ---- Forms ----
+
+export interface FormDefinitionDto {
+  purpose: string
+  name: string
+  schema: string
+  updatedAt: string
+}
+
+export interface FormResponseRow {
+  id: string
+  formPurpose: string
+  answers: string
+  createdAt: string
+}
+
 // ---- Assessments ----
 
 export interface Assessment {

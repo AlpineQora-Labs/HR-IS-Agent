@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ConfirmButton from '@/components/ConfirmButton'
-import { usePersistentState, uid } from './builderStore'
+import { useFormDefinition, useSaveFormDefinition } from '@/api/hooks'
+import { uid } from './builderStore'
 
 // Event-intake form builder — drag & drop redesign.
 // LEFT: a palette of field types (dropdown, type-ahead, single/multiple
@@ -111,6 +112,33 @@ export function defaultIntakeForm(): IntakeForm {
           { id: uid(), type: 'typeahead', label: 'Budget code', help: 'Cost center for expenses & ROI reporting', required: false, options: ['CC-4100 Campus', 'CC-4200 Events', 'CC-4300 Brand', 'CC-5100 Talent Acquisition'] },
         ],
       },
+    ],
+  }
+}
+
+/** Starter student-registration form (the QR/Aria flow renders this later). */
+export function defaultRegistrationForm(): IntakeForm {
+  return {
+    title: 'Register for this event',
+    updatedAt: new Date().toISOString(),
+    rows: [
+      { id: uid(), slots: [{ id: uid(), type: 'fullname', label: 'Full name', required: true }] },
+      {
+        id: uid(),
+        slots: [
+          { id: uid(), type: 'email', label: 'School email', required: true },
+          { id: uid(), type: 'phone', label: 'Mobile', help: 'For event-day updates', required: false },
+        ],
+      },
+      {
+        id: uid(),
+        slots: [
+          { id: uid(), type: 'dropdown', label: 'School', required: true, options: ['UNC Chapel Hill', 'NC State University', 'Duke University', 'Georgia Tech', 'Howard University', 'Other'] },
+          { id: uid(), type: 'number', label: 'Graduation year', required: true },
+        ],
+      },
+      { id: uid(), slots: [{ id: uid(), type: 'short', label: 'Major', required: false }] },
+      { id: uid(), slots: [{ id: uid(), type: 'multi', label: 'Areas of interest', required: false, options: ['Software Engineering', 'Consumer Banking', 'Global Markets', 'Risk & Compliance', 'Operations', 'Wealth Management'] }] },
     ],
   }
 }
@@ -343,16 +371,47 @@ function EmptySlot({ onDropField, wide }: { onDropField: (t: IntakeFieldType) =>
 }
 
 // ── Main builder ────────────────────────────────────────────────────────────
+const PURPOSES = [
+  { key: 'EVENT_INTAKE', label: 'Event intake', hint: 'Used by Campus → New event', fallback: defaultIntakeForm },
+  { key: 'EVENT_REGISTRATION', label: 'Student registration', hint: 'What students fill in (and Aria asks) to register', fallback: defaultRegistrationForm },
+] as const
+
 export default function FormBuilder() {
-  const [raw, setForm] = usePersistentState<IntakeForm>(INTAKE_KEY, defaultIntakeForm())
-  const form = normalizeIntake(raw)
+  const [purpose, setPurpose] = useState<(typeof PURPOSES)[number]['key']>('EVENT_INTAKE')
+  const meta = PURPOSES.find((p) => p.key === purpose)!
+  const { data: serverForm, isLoading } = useFormDefinition(purpose)
+  const saveForm = useSaveFormDefinition()
+  const [draft, setForm] = useState<IntakeForm | null>(null)
+  const [dirty, setDirty] = useState(false)
   const [preview, setPreview] = useState(false)
+
+  // Load the server schema whenever the purpose (or server copy) changes.
+  useEffect(() => {
+    if (serverForm) {
+      try {
+        setForm(normalizeIntake(JSON.parse(serverForm.schema)))
+      } catch {
+        setForm(meta.fallback())
+      }
+      setDirty(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverForm?.purpose, serverForm?.updatedAt])
+
+  const form = draft ?? meta.fallback()
+
+  const save = () =>
+    saveForm.mutate(
+      { purpose, name: meta.label, schema: JSON.stringify(form) },
+      { onSuccess: () => setDirty(false) },
+    )
 
   function patchRows(fn: (rows: IntakeRow[]) => IntakeRow[]) {
     setForm((prev) => {
-      const f = normalizeIntake(prev)
+      const f = normalizeIntake(prev ?? meta.fallback())
       return { ...f, rows: fn(f.rows), updatedAt: new Date().toISOString() }
     })
+    setDirty(true)
   }
 
   function makeRow(p: DragPayload): IntakeRow | null {
@@ -389,15 +448,33 @@ export default function FormBuilder() {
       {/* Toolbar */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', flexWrap: 'wrap' }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--ink-0)' }}>Event intake form</div>
-          <span className="eyebrow">Used by Events → New event</span>
+          <select
+            className="select"
+            style={{ width: 220 }}
+            value={purpose}
+            onChange={(e) => setPurpose(e.target.value as typeof purpose)}
+          >
+            {PURPOSES.map((p) => (
+              <option key={p.key} value={p.key}>{p.label}</option>
+            ))}
+          </select>
+          <span className="eyebrow">{meta.hint}</span>
           <div style={{ flex: 1 }} />
           <span className="eyebrow">{fieldCount} fields · {form.rows.length} rows</span>
-          <span className="badge badge--ok" title="Saved automatically">Saved</span>
+          {isLoading ? (
+            <span className="badge">Loading…</span>
+          ) : dirty ? (
+            <span className="badge badge--warn">Unsaved changes</span>
+          ) : (
+            <span className="badge badge--ok">Saved</span>
+          )}
+          <button className="btn btn--primary btn--sm" disabled={!dirty || saveForm.isPending} onClick={save}>
+            {saveForm.isPending ? 'Saving…' : 'Save'}
+          </button>
           <button className="btn btn--outline btn--sm" aria-pressed={preview} onClick={() => setPreview((v) => !v)}>
             {preview ? 'Edit' : 'Preview'}
           </button>
-          <ConfirmButton label="Reset to defaults" confirmLabel="Replace all fields?" onConfirm={() => setForm(defaultIntakeForm())} />
+          <ConfirmButton label="Reset to defaults" confirmLabel="Replace all fields?" onConfirm={() => { setForm(meta.fallback()); setDirty(true) }} />
         </div>
       </div>
 
