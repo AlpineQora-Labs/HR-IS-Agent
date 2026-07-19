@@ -5,6 +5,8 @@ import { useStore } from '@/state/store'
 import { MODULES, useConfig } from '@/state/config'
 import {
   IconAdmin,
+  IconChevronLeft,
+  IconChevronRight,
   IconAnalytics,
   IconArrowRight,
   IconAssessments,
@@ -82,6 +84,15 @@ const ROUTES: Record<string, string> = {
   integrations: '/integrations',
   audit: '/audit',
   admin: '/admin',
+}
+
+const STORAGE_KEY = 'taportal.sidebarCollapsed'
+const readCollapsed = () => {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
 }
 
 /* Short display names for the top-band group pills. */
@@ -166,8 +177,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { toast } = useStore()
   const { isModuleOn, currentUser } = useConfig()
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(readCollapsed)
   const location = useLocation()
   const navigate = useNavigate()
+
+  const toggle = () =>
+    setCollapsed((c) => {
+      const next = !c
+      try {
+        localStorage.setItem(STORAGE_KEY, next ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
 
   // Cmd/Ctrl+K opens the command palette from anywhere.
   useEffect(() => {
@@ -200,7 +223,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const activeGroup = groups.find((g) => g.group === activeGroupName) ?? pillGroups[0]
 
   return (
-    <div className="app">
+    <div className={collapsed ? 'app app--collapsed' : 'app'}>
       {/* Quixotic-style band: logo · group pills (primary nav) · actions. */}
       <div className="app__top">
         <div className="app__topbrand">
@@ -239,6 +262,14 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Contextual rail: just the active group's modules. */}
       <div className="app__rail">
         <RailNav group={activeGroup.group} keys={activeGroup.keys} />
+        <button
+          className="app__collapse-handle"
+          onClick={toggle}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={collapsed ? 'Expand' : 'Collapse'}
+        >
+          {collapsed ? <IconChevronRight className="ic" /> : <IconChevronLeft className="ic" />}
+        </button>
       </div>
 
       <main className="app__main">{children}</main>

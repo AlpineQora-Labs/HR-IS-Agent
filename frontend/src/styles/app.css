@@ -162,7 +162,7 @@ a {
   font-size: 0;
   overflow: hidden;
 }
-.app--collapsed .app__side-scroll > div:first-child .nav-group {
+.app--collapsed .app__side > .nav-group {
   display: none;
 }
 
@@ -407,7 +407,7 @@ button.card:hover {
 }
 .app__collapse-handle {
   position: absolute;
-  top: 100px; /* 60px brand cell + 12px gutter + 28px into the card */
+  top: 40px; /* 12px gutter + 28px into the card (rail starts below the band) */
   right: -13px; /* right edge overlaps the card's 1px border and merges */
   width: 14px;
   height: 44px;
