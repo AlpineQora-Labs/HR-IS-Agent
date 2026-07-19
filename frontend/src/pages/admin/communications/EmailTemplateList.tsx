@@ -33,7 +33,7 @@ const categoryFilters: Record<string, string> = {
 
 const paginationPageSizeSelector = [5, 10, 20]
 
-/* ===== Actions cell renderer (same pattern as SurveyList) ===== */
+/* ===== Actions cell renderer ===== */
 function ActionsCellRenderer({ data, onEdit, onClone, onDelete }: {
   data: EmailTemplate
   onEdit: (id: string) => void
@@ -227,21 +227,21 @@ export default function EmailTemplateList() {
   }, [templates, activeTab])
 
   return (
-    <div className="survey-library">
+    <div className="comms-library">
       <Breadcrumb items={[
         { label: 'Administration', path: '/admin' },
         { label: 'Email Templates' },
       ]} />
 
-      <h1 className="survey-library__title">Email Templates</h1>
+      <h1 className="comms-library__title">Email Templates</h1>
 
-      <div className="survey-library__table-card">
-        <div className="survey-library__toolbar">
-          <div className="survey-library__tabs">
+      <div className="comms-library__table-card">
+        <div className="comms-library__toolbar">
+          <div className="comms-library__tabs">
             {Object.entries(categoryFilters).map(([key, label]) => (
               <button
                 key={key}
-                className={`survey-library__tab-btn${activeTab === key ? ' survey-library__tab-btn--active' : ''}`}
+                className={`comms-library__tab-btn${activeTab === key ? ' comms-library__tab-btn--active' : ''}`}
                 onClick={() => handleTabClick(key)}
               >
                 {label}
@@ -249,16 +249,16 @@ export default function EmailTemplateList() {
             ))}
           </div>
 
-          <div className="survey-library__toolbar-right">
-            <div className="survey-library__search-wrap">
-              <svg className="survey-library__search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <div className="comms-library__toolbar-right">
+            <div className="comms-library__search-wrap">
+              <svg className="comms-library__search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path fillRule="evenodd" clipRule="evenodd" d="M11.5 7a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Zm-.82 4.74a6 6 0 1 1 1.06-1.06l2.79 2.79a.75.75 0 1 1-1.06 1.06l-2.79-2.79Z" fill="currentColor"/>
               </svg>
               <input
                 type="text"
                 placeholder="Search templates..."
                 onInput={onFilterTextBoxChanged}
-                className="survey-library__search-input"
+                className="comms-library__search-input"
               />
             </div>
 
@@ -271,7 +271,7 @@ export default function EmailTemplateList() {
         {loading ? (
           <p style={{ textAlign: 'center', padding: 60, color: '#86868b' }}>Loading templates...</p>
         ) : (
-          <div className="ag-theme-quartz survey-library__grid">
+          <div className="ag-theme-quartz comms-library__grid">
             <AgGridReact
               ref={gridRef}
               rowData={filteredTemplates}

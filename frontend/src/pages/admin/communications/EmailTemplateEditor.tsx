@@ -12,10 +12,9 @@ import TabBar from './TabBar'
 import FormField from './FormField'
 import ToggleSwitch from './ToggleSwitch'
 import { commsApi as api } from './commsApi'
-import type { EmailTemplate, EmailCategory, EmailTemplateAssignment } from './emailTemplate'
+import type { EmailTemplate, EmailCategory } from './emailTemplate'
 import '@/styles/tv-comms.css'
-import { EMAIL_CATEGORIES, TRIGGER_TYPES } from './emailTemplate'
-import type { Survey } from './commsApi'
+import { EMAIL_CATEGORIES } from './emailTemplate'
 
 // ─── Custom TipTap Extensions ────────────────────────────────────────────────
 
@@ -71,13 +70,12 @@ const CtaButtonExtension = Node.create({
 
 // ─── Static data ─────────────────────────────────────────────────────────────
 
-type EditorTab = 'details' | 'builder' | 'preview' | 'settings'
+type EditorTab = 'details' | 'builder' | 'preview'
 
 const TABS: { key: EditorTab; label: string }[] = [
   { key: 'details',  label: 'Details' },
   { key: 'builder',  label: 'Template Builder' },
   { key: 'preview',  label: 'Preview' },
-  { key: 'settings', label: 'Settings' },
 ]
 
 const MERGE_FIELDS: Record<string, { field: string; label: string }[]> = {
@@ -89,10 +87,11 @@ const MERGE_FIELDS: Record<string, { field: string; label: string }[]> = {
     { field: '{{manager_name}}',     label: 'Manager' },
     { field: '{{cohort}}',           label: 'Cohort' },
   ],
-  Survey: [
-    { field: '{{survey_title}}',    label: 'Survey Title' },
-    { field: '{{survey_link}}',     label: 'Survey Link' },
-    { field: '{{survey_due_date}}', label: 'Due Date' },
+  Event: [
+    { field: '{{event_name}}',     label: 'Event Name' },
+    { field: '{{event_date}}',     label: 'Event Date' },
+    { field: '{{event_location}}', label: 'Location' },
+    { field: '{{register_link}}',  label: 'Registration Link' },
   ],
   Program: [
     { field: '{{program_name}}',  label: 'Program Name' },
@@ -112,10 +111,10 @@ const SAMPLE_DATA: Record<string, string> = {
   '{{manager_name}}':     'Robert Johnson',
   '{{cohort}}':           'Spring 2026',
   '{{participant_type}}': 'NEW_HIRE',
-  '{{survey_title}}':     'Employee Voice Survey 2026',
-  '{{survey_link}}':      'https://surveys.example.com/respond/abc123',
-  '{{survey_due_date}}':  'April 15, 2026',
-  '{{survey_description}}': 'Annual engagement and sentiment survey',
+  '{{event_name}}':       'UNC Tech Career Fair',
+  '{{event_date}}':       'September 22, 2026',
+  '{{event_location}}':   'Chapel Hill, NC',
+  '{{register_link}}':    'https://careers.bofa.com/register/abc123',
   '{{program_name}}':     'Teammate Voices',
   '{{program_description}}': 'Employee feedback program',
   '{{company_name}}':     'Acme Corporation',
@@ -163,12 +162,6 @@ export default function EmailTemplateEditor() {
   const [ctaText, setCtaText] = useState('')
   const [ctaUrl, setCtaUrl] = useState('')
 
-  // Assignment state (Settings tab)
-  const [assignments, setAssignments] = useState<EmailTemplateAssignment[]>([])
-  const [surveys, setSurveys] = useState<Survey[]>([])
-  const [newTrigger, setNewTrigger] = useState('')
-  const [newSurveyId, setNewSurveyId] = useState<string>('')
-  const [newDelayDays, setNewDelayDays] = useState(0)
 
   // Pending content to sync into editor after it initialises
   const pendingContent = useRef<string | null>(null)
@@ -203,15 +196,6 @@ export default function EmailTemplateEditor() {
   // ─── Data loading ───────────────────────────────────────────────────────────
 
   useEffect(() => {
-    api.getSurveys().then(setSurveys).catch(() => {})
-  }, [])
-
-  useEffect(() => {
-    if (!templateId) return
-    api.getTemplateAssignments(templateId).then(setAssignments).catch(() => {})
-  }, [templateId])
-
-  useEffect(() => {
     if (!templateId) return
     api.getEmailTemplate(templateId)
       .then(t => {
@@ -232,38 +216,6 @@ export default function EmailTemplateEditor() {
       .catch(() => navigate('/admin/communications'))
       .finally(() => setLoading(false))
   }, [templateId, navigate]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ─── Assignments ────────────────────────────────────────────────────────────
-
-  const handleAddAssignment = async () => {
-    if (!templateId || !newTrigger || !newSurveyId) {
-      alert('Please select both a trigger type and a survey.')
-      return
-    }
-    try {
-      const saved = await api.saveTemplateAssignment(templateId!, {
-        triggerType: newTrigger,
-        surveyId: newSurveyId,
-        sendDelayDays: newDelayDays,
-        isActive: true,
-      })
-      setAssignments(prev => [...prev.filter(a => a.assignmentId !== saved.assignmentId), saved])
-      setNewTrigger('')
-      setNewSurveyId('')
-      setNewDelayDays(0)
-    } catch {
-      alert('Failed to save assignment.')
-    }
-  }
-
-  const handleDeleteAssignment = async (assignmentId: string) => {
-    try {
-      await api.deleteTemplateAssignment(assignmentId)
-      setAssignments(prev => prev.filter(a => a.assignmentId !== assignmentId))
-    } catch {
-      alert('Failed to delete assignment.')
-    }
-  }
 
   // ─── Save ───────────────────────────────────────────────────────────────────
 
@@ -368,7 +320,7 @@ export default function EmailTemplateEditor() {
           <div className="email-editor__form">
             <div className="email-editor__form-row">
               <FormField label="Template Name" required>
-                <input className="email-editor__input" placeholder="e.g., Survey Invitation" value={name} onChange={e => setName(e.target.value)} />
+                <input className="email-editor__input" placeholder="e.g., Interview Confirmation" value={name} onChange={e => setName(e.target.value)} />
               </FormField>
               <FormField label="Category" required>
                 <select className="email-editor__select" value={category} onChange={e => setCategory(e.target.value as EmailCategory)}>
@@ -381,7 +333,7 @@ export default function EmailTemplateEditor() {
             </FormField>
             <div className="email-editor__form-row">
               <FormField label="Subject Line" required>
-                <input className="email-editor__input" placeholder="e.g., You are invited to complete: {{survey_title}}" value={subject} onChange={e => setSubject(e.target.value)} />
+                <input className="email-editor__input" placeholder="e.g., You are invited: {{event_name}}" value={subject} onChange={e => setSubject(e.target.value)} />
               </FormField>
               <FormField label="From Name">
                 <input className="email-editor__input" placeholder="Teammate Voices" value={fromName} onChange={e => setFromName(e.target.value)} />
@@ -531,80 +483,6 @@ export default function EmailTemplateEditor() {
           </div>
         )}
 
-        {/* ===== SETTINGS TAB ===== */}
-        {activeTab === 'settings' && (
-          <div className="email-editor__form">
-            <p style={{ color: '#86868b', fontSize: 14, marginBottom: 24 }}>
-              Assign this template to surveys. Configure the trigger event and send delay.
-            </p>
-
-            {assignments.length > 0 && (
-              <div style={{ marginBottom: 32 }}>
-                <h3 style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f', marginBottom: 12 }}>Current Assignments</h3>
-                <table className="assignment-table">
-                  <thead>
-                    <tr>
-                      <th>Survey</th><th>Trigger</th><th>Delay (days)</th><th>Status</th><th style={{ width: 80 }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {assignments.map(a => {
-                      const survey = surveys.find(s => s.surveyId === a.surveyId)
-                      const trigger = TRIGGER_TYPES.find(t => t.value === a.triggerType)
-                      return (
-                        <tr key={a.assignmentId}>
-                          <td>{survey?.title || `Survey #${a.surveyId}`}</td>
-                          <td><span className="assignment-trigger-pill">{trigger?.label || a.triggerType}</span></td>
-                          <td>{a.sendDelayDays || 0}</td>
-                          <td>
-                            <span className={`assignment-status ${a.isActive ? 'assignment-status--active' : 'assignment-status--inactive'}`}>
-                              {a.isActive ? 'Active' : 'Inactive'}
-                            </span>
-                          </td>
-                          <td>
-                            <button className="assignment-delete-btn" onClick={() => handleDeleteAssignment(a.assignmentId)}>Remove</button>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {isEditMode && (
-              <div style={{ border: '1px solid #d2d2d7', borderRadius: 12, padding: 24 }}>
-                <h3 style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f', marginBottom: 16 }}>Add Assignment</h3>
-                <div className="email-editor__form-row" style={{ gap: 16 }}>
-                  <FormField label="Survey">
-                    <select className="email-editor__select" value={newSurveyId} onChange={e => setNewSurveyId(e.target.value)}>
-                      <option value="">Select survey...</option>
-                      {surveys.map(s => <option key={s.surveyId} value={s.surveyId}>{s.title}</option>)}
-                    </select>
-                  </FormField>
-                  <FormField label="Trigger Event">
-                    <select className="email-editor__select" value={newTrigger} onChange={e => setNewTrigger(e.target.value)}>
-                      <option value="">Select trigger...</option>
-                      {TRIGGER_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                    </select>
-                  </FormField>
-                  <FormField label="Delay (days)">
-                    <input className="email-editor__input" type="number" min={0} max={365} value={newDelayDays} onChange={e => setNewDelayDays(Number(e.target.value))} style={{ width: 100 }} />
-                  </FormField>
-                </div>
-                <div style={{ marginTop: 16 }}>
-                  <Button variant="primary" size="sm" onClick={handleAddAssignment}>+ Add Assignment</Button>
-                </div>
-              </div>
-            )}
-
-            {!isEditMode && (
-              <div style={{ padding: 40, textAlign: 'center', color: '#86868b', border: '1px dashed #d2d2d7', borderRadius: 12 }}>
-                <p style={{ fontSize: 14 }}>Save the template first, then you can add survey assignments.</p>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   )

@@ -43,26 +43,3 @@ export interface MergeFieldGroup {
   [category: string]: MergeField[]
 }
 
-export interface EmailTemplateAssignment {
-  assignmentId: number
-  templateId: string
-  templateName?: string
-  programId?: string
-  surveyId?: string
-  triggerType: string
-  sendDelayDays: number
-  isActive: boolean
-  createdAt: string
-}
-
-export const TRIGGER_TYPES: { value: string; label: string; description: string }[] = [
-  { value: 'INITIAL_INVITE', label: 'Initial Invitation', description: 'Sent when the survey is first dispatched' },
-  { value: 'REMINDER_1', label: 'Reminder 1', description: 'First reminder to non-respondents' },
-  { value: 'REMINDER_2', label: 'Reminder 2', description: 'Second reminder to non-respondents' },
-  { value: 'REMINDER_3', label: 'Reminder 3', description: 'Final reminder before close' },
-  { value: 'THANK_YOU', label: 'Thank You', description: 'Sent after survey completion' },
-  { value: 'SURVEY_CLOSED', label: 'Survey Closed', description: 'Sent when survey is closed' },
-  { value: 'PROGRAM_WELCOME', label: 'Program Welcome', description: 'Sent when participant joins program' },
-  { value: 'PROGRAM_COMPLETE', label: 'Program Complete', description: 'Sent when program ends' },
-  { value: 'AD_HOC', label: 'Ad Hoc', description: 'Manually triggered' },
-]

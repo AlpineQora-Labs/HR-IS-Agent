@@ -134,11 +134,11 @@
   margin-top: 2px;
 }
 
-.survey-library {
+.comms-library {
   max-width: 100%;
 }
 
-.survey-library__title {
+.comms-library__title {
   font-size: 28px;
   font-weight: 700;
   color: #1d1d1f;
@@ -146,14 +146,14 @@
   letter-spacing: -0.02em;
 }
 
-.survey-library__table-card {
+.comms-library__table-card {
   background: #fff;
   border: 1px solid #d2d2d7;
   border-radius: 12px;
   overflow: hidden;
 }
 
-.survey-library__toolbar {
+.comms-library__toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -163,12 +163,12 @@
   flex-wrap: wrap;
 }
 
-.survey-library__tabs {
+.comms-library__tabs {
   display: flex;
   gap: 4px;
 }
 
-.survey-library__tab-btn {
+.comms-library__tab-btn {
   background: none;
   border: none;
   padding: 4px 10px;
@@ -180,41 +180,41 @@
   transition: all 0.15s ease;
 }
 
-.survey-library__tab-btn:hover {
+.comms-library__tab-btn:hover {
   background: #f2f2f7;
   color: #1d1d1f;
 }
 
-.survey-library__tab-btn--active {
+.comms-library__tab-btn--active {
   background: #012169;
   color: #fff;
 }
 
-.survey-library__tab-btn--active:hover {
+.comms-library__tab-btn--active:hover {
   background: #001a52;
   color: #fff;
 }
 
-.survey-library__toolbar-right {
+.comms-library__toolbar-right {
   display: flex;
   gap: 8px;
   align-items: center;
 }
 
-.survey-library__search-wrap {
+.comms-library__search-wrap {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-.survey-library__search-icon {
+.comms-library__search-icon {
   position: absolute;
   left: 10px;
   color: #86868b;
   pointer-events: none;
 }
 
-.survey-library__search-input {
+.comms-library__search-input {
   padding: 7px 12px 7px 32px;
   border: 1px solid #d2d2d7;
   border-radius: 8px;
@@ -226,31 +226,31 @@
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.survey-library__search-input::placeholder {
+.comms-library__search-input::placeholder {
   color: #aeaeb2;
 }
 
-.survey-library__search-input:focus {
+.comms-library__search-input:focus {
   border-color: #007aff;
   box-shadow: 0 0 0 3px rgba(0,122,255,0.12);
   background: #fff;
 }
 
-.survey-library__grid {
+.comms-library__grid {
   width: 100%;
 }
 
-.survey-library__grid .ag-root-wrapper {
+.comms-library__grid .ag-root-wrapper {
   border: none;
   border-radius: 0;
 }
 
-.survey-library__grid .ag-header {
+.comms-library__grid .ag-header {
   background: #fafafa;
   border-bottom: 1px solid #e5e5ea;
 }
 
-.survey-library__grid .ag-header-cell {
+.comms-library__grid .ag-header-cell {
   font-size: 12px;
   font-weight: 600;
   color: #6e6e73;
@@ -258,7 +258,7 @@
   letter-spacing: 0.04em;
 }
 
-.survey-library__grid .ag-header-cell-resize {
+.comms-library__grid .ag-header-cell-resize {
   width: 8px;
   cursor: col-resize;
   position: absolute;
@@ -268,26 +268,26 @@
   z-index: 1;
 }
 
-.survey-library__grid .ag-row {
+.comms-library__grid .ag-row {
   border-bottom: 1px solid #f2f2f7;
   font-size: 14px;
   color: #1d1d1f;
 }
 
-.survey-library__grid .ag-row:hover {
+.comms-library__grid .ag-row:hover {
   background-color: #f5f5f7 !important;
 }
 
-.survey-library__grid .ag-cell {
+.comms-library__grid .ag-cell {
   display: flex;
   align-items: center;
 }
 
-.survey-library__grid .ag-cell[col-id="actions"] {
+.comms-library__grid .ag-cell[col-id="actions"] {
   overflow: visible;
 }
 
-.survey-library__grid .ag-paging-panel {
+.comms-library__grid .ag-paging-panel {
   border-top: 1px solid #e5e5ea;
   padding: 10px 20px;
   font-size: 13px;
@@ -841,7 +841,6 @@
 
 .dashboard__tab--active { color: var(--bofa-text); font-weight: 700; border-bottom-color: var(--bofa-navy); }
 
-.survey-editor__card,
 .m360-cycles-card,
 .m360-activities,
 .m360-report-card,
@@ -849,7 +848,7 @@
 .m360-profile-card,
 .program-detail__info-card,
 .program-create__form,
-.survey-library__table-card,
+.comms-library__table-card,
 .dashboard__chart-card {
   background: var(--bofa-card);
   border: 1px solid var(--bofa-border);
@@ -858,7 +857,7 @@
 
 .program-create__input,
 .program-create__select,
-.survey-library__search {
+.comms-library__search {
   border-radius: 6px;
   border-color: #8c8a85;
   background: #fff;

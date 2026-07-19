@@ -1,8 +1,6 @@
 package com.taportal.api;
 
 import com.taportal.domain.comms.EmailTemplate;
-import com.taportal.domain.comms.EmailTemplateAssignment;
-import com.taportal.domain.comms.EmailTemplateAssignmentRepository;
 import com.taportal.domain.comms.EmailTemplateRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.time.OffsetDateTime;
@@ -19,9 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Email-template CRUD backing the Communications component (lifted 1:1 from
- * teammate-voices). The API surface mirrors that app's client — list, get,
- * create, update, delete, duplicate — plus survey-trigger assignments so a
- * template can fire on survey events (initial invite, reminders, thank-you).
+ * teammate-voices). List, get, create, update, delete, duplicate.
  */
 @RestController
 public class EmailTemplateController {
@@ -43,24 +39,10 @@ public class EmailTemplateController {
             String fromName, String bodyHtml, String status) {
     }
 
-    public record AssignmentDto(
-            UUID assignmentId, UUID templateId, UUID surveyId, String triggerType,
-            int sendDelayDays, boolean isActive, OffsetDateTime createdAt) {
-
-        static AssignmentDto of(EmailTemplateAssignment a) {
-            return new AssignmentDto(a.getId(), a.getTemplateId(), a.getSurveyId(),
-                    a.getTriggerType(), a.getSendDelayDays(), a.isActive(), a.getCreatedAt());
-        }
-    }
-
-    public record AssignmentSave(UUID surveyId, String triggerType, Integer sendDelayDays, Boolean isActive) {}
-
     private final EmailTemplateRepository templates;
-    private final EmailTemplateAssignmentRepository assignments;
 
-    public EmailTemplateController(EmailTemplateRepository templates, EmailTemplateAssignmentRepository assignments) {
+    public EmailTemplateController(EmailTemplateRepository templates) {
         this.templates = templates;
-        this.assignments = assignments;
     }
 
     @GetMapping("/v1/email-templates")
@@ -109,30 +91,6 @@ public class EmailTemplateController {
         copy.setBodyHtml(src.getBodyHtml());
         copy.setStatus("DRAFT");
         return TemplateDto.of(templates.save(copy));
-    }
-
-    @GetMapping("/v1/email-templates/{id}/assignments")
-    public List<AssignmentDto> listAssignments(@PathVariable UUID id) {
-        return assignments.findByTemplateIdOrderByCreatedAt(id).stream().map(AssignmentDto::of).toList();
-    }
-
-    @PostMapping("/v1/email-templates/{id}/assignments")
-    @Transactional
-    public AssignmentDto addAssignment(@PathVariable UUID id, @RequestBody AssignmentSave req) {
-        load(id); // 404 fast if the template is gone
-        EmailTemplateAssignment a = new EmailTemplateAssignment();
-        a.setTemplateId(id);
-        a.setSurveyId(req.surveyId());
-        a.setTriggerType(req.triggerType());
-        a.setSendDelayDays(req.sendDelayDays() == null ? 0 : req.sendDelayDays());
-        a.setActive(!Boolean.FALSE.equals(req.isActive()));
-        return AssignmentDto.of(assignments.save(a));
-    }
-
-    @DeleteMapping("/v1/email-templates/assignments/{assignmentId}")
-    @Transactional
-    public void deleteAssignment(@PathVariable UUID assignmentId) {
-        assignments.deleteById(assignmentId);
     }
 
     private void apply(EmailTemplate t, TemplateSave req) {
