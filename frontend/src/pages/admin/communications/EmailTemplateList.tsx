@@ -169,12 +169,6 @@ export default function EmailTemplateList() {
       minWidth: 200,
     },
     {
-      field: 'status',
-      headerName: 'Status',
-      width: 120,
-      cellRenderer: StatusCellRenderer,
-    },
-    {
       field: 'updatedAt',
       headerName: 'Last Updated',
       width: 140,
@@ -185,6 +179,12 @@ export default function EmailTemplateList() {
       headerName: 'Date Created',
       width: 140,
       valueFormatter: (params) => formatDate(params.value),
+    },
+    {
+      field: 'status',
+      headerName: 'Status',
+      width: 120,
+      cellRenderer: StatusCellRenderer,
     },
     {
       headerName: 'Actions',
