@@ -361,17 +361,11 @@
   margin: 0 0 6px;
 }
 
-.email-editor__status {
-  font-size: 12px;
-  font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 999px;
-  display: inline-block;
-}
+.email-editor__status { display: inline-block; font-size: 13px; color: var(--ink-3, #5c5c63); }
 
-.email-editor__status--draft { background: #f0f0f2; color: #5c5c63; }
+.email-editor__status--draft { }
 
-.email-editor__status--active { background: #f0f0f2; color: #5c5c63; }
+.email-editor__status--active { }
 
 .email-editor__header-actions {
   display: flex;

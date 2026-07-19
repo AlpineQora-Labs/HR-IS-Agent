@@ -83,33 +83,18 @@ function ActionsCellRenderer({ data, onEdit, onClone, onDelete }: {
 }
 
 /* ===== Status pill renderer ===== */
-// Neutral, colorless pills for now — labels carry the meaning, no color coding.
-const NEUTRAL_PILL = { bg: '#f0f0f2', color: '#5c5c63' }
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: 'Active', DRAFT: 'Draft', ARCHIVED: 'Archived',
 }
 
 function StatusCellRenderer({ value }: { value: string }) {
-  const label = STATUS_LABELS[value] || 'Draft'
-  return (
-    <span style={{
-      display: 'inline-block', padding: '3px 10px', borderRadius: 999,
-      fontSize: 12, fontWeight: 600, backgroundColor: NEUTRAL_PILL.bg, color: NEUTRAL_PILL.color, lineHeight: '18px',
-    }}>{label}</span>
-  )
+  return <span>{STATUS_LABELS[value] || 'Draft'}</span>
 }
 
 /* ===== Category pill renderer ===== */
 function CategoryCellRenderer({ value }: { value: string }) {
   const cat = CATEGORY_MAP[value]
-  if (!cat) return <span>{value}</span>
-  return (
-    <span style={{
-      display: 'inline-block', padding: '3px 10px', borderRadius: 4,
-      fontSize: 11, fontWeight: 700, letterSpacing: '0.3px', textTransform: 'uppercase',
-      backgroundColor: NEUTRAL_PILL.bg, color: NEUTRAL_PILL.color,
-    }}>{cat.label}</span>
-  )
+  return <span>{cat ? cat.label : value}</span>
 }
 
 /* ===== Main component ===== */
