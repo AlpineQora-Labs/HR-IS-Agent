@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import ConfirmButton from '@/components/ConfirmButton'
 import { useFormDefinition, useSaveFormDefinition } from '@/api/hooks'
 import { uid } from './builderStore'
+import { IntakeInput, answerText, type Answer } from './IntakeInput'
 
 // Event-intake form builder — drag & drop redesign.
 // LEFT: a palette of field types (dropdown, type-ahead, single/multiple
@@ -36,9 +37,20 @@ export interface IntakeRow {
   slots: (IntakeField | null)[] // length 1 or 2
 }
 
+/** Conditional logic: show/hide a question based on another question's answer. */
+export interface FormRule {
+  id: string
+  action: 'show' | 'hide'
+  targetId: string
+  sourceId: string
+  op: 'equals' | 'not_equals' | 'contains'
+  value: string
+}
+
 export interface IntakeForm {
   title: string
   rows: IntakeRow[]
+  rules?: FormRule[]
   updatedAt: string
 }
 
@@ -154,7 +166,7 @@ export function defaultRegistrationForm(): IntakeForm {
 /** Old flat-fields shape → row shape (one field per row). */
 export function normalizeIntake(raw: Partial<IntakeForm> & { fields?: IntakeField[] }): IntakeForm {
   if (Array.isArray(raw.rows)) {
-    return { title: raw.title ?? 'Event intake', rows: raw.rows, updatedAt: raw.updatedAt ?? new Date().toISOString() }
+    return { title: raw.title ?? 'Event intake', rows: raw.rows, rules: raw.rules ?? [], updatedAt: raw.updatedAt ?? new Date().toISOString() }
   }
   if (Array.isArray(raw.fields)) {
     return {
@@ -168,6 +180,29 @@ export function normalizeIntake(raw: Partial<IntakeForm> & { fields?: IntakeFiel
 
 export const flattenIntake = (form: IntakeForm): IntakeField[] =>
   form.rows.flatMap((r) => r.slots.filter((s): s is IntakeField => s !== null))
+
+/**
+ * Evaluate the form's if/then rules for one field. `val` returns the current
+ * answer text of a field id. Semantics: a field with show-rules starts hidden
+ * until one matches; any matching hide-rule hides it.
+ */
+export function fieldVisible(form: IntakeForm, fieldId: string, val: (id: string) => string): boolean {
+  const rules = form.rules ?? []
+  const mine = rules.filter((r) => r.targetId === fieldId && r.sourceId && r.value !== '')
+  if (mine.length === 0) return true
+  const matches = (r: FormRule) => {
+    const v = (val(r.sourceId) ?? '').trim().toLowerCase()
+    const want = r.value.trim().toLowerCase()
+    if (r.op === 'equals') return v === want || v.split(', ').includes(want)
+    if (r.op === 'not_equals') return v !== want && !v.split(', ').includes(want)
+    return v.includes(want)
+  }
+  const showRules = mine.filter((r) => r.action === 'show')
+  const hideRules = mine.filter((r) => r.action === 'hide')
+  if (showRules.length > 0 && !showRules.some(matches)) return false
+  if (hideRules.some(matches)) return false
+  return true
+}
 
 // ── Drag payload helpers (native HTML5 DnD) ─────────────────────────────────
 type DragPayload =
@@ -435,6 +470,113 @@ function EmptySlot({ onDropField, wide }: { onDropField: (t: IntakeFieldType) =>
   )
 }
 
+// ── Configuration: if/then rules per question ───────────────────────────────
+function RulesEditor({ form, onRules }: { form: IntakeForm; onRules: (rules: FormRule[]) => void }) {
+  const fields = flattenIntake(form)
+  const answerable = fields.filter((f) => !DISPLAY_TYPES.includes(f.type))
+  const rules = form.rules ?? []
+  const label = (f: IntakeField) => f.label || TYPE_LABEL[f.type]
+
+  const addRule = () =>
+    onRules([
+      ...rules,
+      { id: uid(), action: 'show', targetId: fields[0]?.id ?? '', sourceId: answerable[0]?.id ?? '', op: 'equals', value: '' },
+    ])
+  const patch = (id: string, p: Partial<FormRule>) => onRules(rules.map((r) => (r.id === id ? { ...r, ...p } : r)))
+  const remove = (id: string) => onRules(rules.filter((r) => r.id !== id))
+
+  const sel = { fontSize: 12.5, width: 'auto', minWidth: 130 } as const
+
+  return (
+    <div className="card" style={{ padding: '16px 18px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+        <span className="eyebrow">If / then rules</span>
+        <span style={{ flex: 1 }} />
+        <button className="btn btn--outline btn--sm" onClick={addRule} disabled={answerable.length === 0}>+ Add rule</button>
+      </div>
+      <p className="muted" style={{ fontSize: 12.5, margin: '0 0 14px' }}>
+        Show or hide a question based on another answer — the form adapts as people fill it. Tip: for
+        regional or school-specific questions, condition on the School (or region) question.
+      </p>
+
+      {rules.length === 0 && (
+        <div style={{ border: '2px dashed var(--line)', borderRadius: 'var(--ra-2)', padding: '26px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--ink-4)' }}>
+          No rules yet — every question always shows. Add a rule to make the form dynamic.
+        </div>
+      )}
+
+      {rules.map((r) => {
+        const source = fields.find((f) => f.id === r.sourceId)
+        const sourceOptions = source?.options ?? (source?.type === 'yesno' ? ['Yes', 'No'] : null)
+        return (
+          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 'var(--ra-2)', marginBottom: 8, background: 'var(--app-panel)' }}>
+            <select className="select" style={sel} value={r.action} onChange={(e) => patch(r.id, { action: e.target.value as FormRule['action'] })}>
+              <option value="show">Show</option>
+              <option value="hide">Hide</option>
+            </select>
+            <select className="select" style={{ ...sel, minWidth: 170 }} value={r.targetId} onChange={(e) => patch(r.id, { targetId: e.target.value })}>
+              {fields.map((f) => <option key={f.id} value={f.id}>{label(f)}</option>)}
+            </select>
+            <span style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>when</span>
+            <select className="select" style={{ ...sel, minWidth: 170 }} value={r.sourceId} onChange={(e) => patch(r.id, { sourceId: e.target.value, value: '' })}>
+              {answerable.map((f) => <option key={f.id} value={f.id}>{label(f)}</option>)}
+            </select>
+            <select className="select" style={sel} value={r.op} onChange={(e) => patch(r.id, { op: e.target.value as FormRule['op'] })}>
+              <option value="equals">is</option>
+              <option value="not_equals">is not</option>
+              <option value="contains">contains</option>
+            </select>
+            {sourceOptions ? (
+              <select className="select" style={{ ...sel, minWidth: 150 }} value={r.value} onChange={(e) => patch(r.id, { value: e.target.value })}>
+                <option value="">Choose value…</option>
+                {sourceOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            ) : (
+              <input className="input" style={{ fontSize: 12.5, width: 150 }} placeholder="Value" value={r.value}
+                onChange={(e) => patch(r.id, { value: e.target.value })} />
+            )}
+            <span style={{ flex: 1 }} />
+            <button className="btn btn--ghost btn--sm" aria-label="Delete rule" onClick={() => remove(r.id)}>×</button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Live preview: interactive, rules evaluated as you answer ────────────────
+function LivePreview({ form }: { form: IntakeForm }) {
+  const [answers, setAnswers] = useState<Record<string, Answer>>({})
+  const val = (id: string) => answerText(answers[id])
+  const ruleCount = (form.rules ?? []).length
+  return (
+    <div className="card" style={{ maxWidth: 680 }}>
+      <div style={{ background: 'var(--bofa-navy)', color: '#fff', padding: '14px 18px' }}>
+        <div style={{ fontSize: 11, opacity: 0.8, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+          Live preview{ruleCount > 0 ? ` · ${ruleCount} rule${ruleCount === 1 ? '' : 's'} active` : ''}
+        </div>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginTop: 2 }}>
+          Answer it like a real user — questions appear and disappear per your rules
+        </div>
+      </div>
+      <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {form.rows.map((r) => {
+          const shown = r.slots.filter((sl): sl is IntakeField => sl !== null && fieldVisible(form, sl.id, val))
+          if (r.slots.some((sl) => sl !== null) && shown.length === 0) return null
+          return (
+            <div key={r.id} style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(shown.length, 1)}, minmax(0, 1fr))`, gap: 14 }}>
+              {shown.map((sl) => (
+                <IntakeInput key={sl.id} f={sl} value={answers[sl.id]} onChange={(v) => setAnswers((prev) => ({ ...prev, [sl.id]: v }))} />
+              ))}
+            </div>
+          )
+        })}
+        {form.rows.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--ink-5)', textAlign: 'center', padding: '18px 0' }}>No fields yet.</div>}
+      </div>
+    </div>
+  )
+}
+
 // ── Main builder ────────────────────────────────────────────────────────────
 const PURPOSES = [
   { key: 'EVENT_INTAKE', label: 'Event intake', hint: 'Used by Campus → New event', fallback: defaultIntakeForm },
@@ -448,7 +590,7 @@ export default function FormBuilder() {
   const saveForm = useSaveFormDefinition()
   const [draft, setForm] = useState<IntakeForm | null>(null)
   const [dirty, setDirty] = useState(false)
-  const [preview, setPreview] = useState(false)
+  const [mode, setMode] = useState<'builder' | 'preview' | 'config'>('builder')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [openGroups, setOpenGroups] = useState<string[]>(['Basics'])
 
@@ -562,13 +704,28 @@ export default function FormBuilder() {
           <button className="btn btn--primary btn--sm" disabled={!dirty || saveForm.isPending} onClick={save}>
             {saveForm.isPending ? 'Saving…' : 'Save'}
           </button>
-          <button className="btn btn--outline btn--sm" aria-pressed={preview} onClick={() => setPreview((v) => !v)}>
-            {preview ? 'Edit' : 'Preview'}
-          </button>
           <ConfirmButton label="Reset to defaults" confirmLabel="Replace all fields?" onConfirm={() => { setForm(meta.fallback()); setDirty(true) }} />
         </div>
       </div>
 
+      <div className="tabs" style={{ marginBottom: 2 }}>
+        <button className="tab" aria-selected={mode === 'builder'} onClick={() => setMode('builder')}>Builder</button>
+        <button className="tab" aria-selected={mode === 'preview'} onClick={() => setMode('preview')}>Preview</button>
+        <button className="tab" aria-selected={mode === 'config'} onClick={() => setMode('config')}>Configuration</button>
+      </div>
+
+      {mode === 'preview' && <LivePreview form={form} />}
+      {mode === 'config' && (
+        <RulesEditor
+          form={form}
+          onRules={(rules) => {
+            setForm((prev) => ({ ...normalizeIntake(prev ?? meta.fallback()), rules, updatedAt: new Date().toISOString() }))
+            setDirty(true)
+          }}
+        />
+      )}
+
+      {mode === 'builder' && (
       <div style={{ display: 'grid', gridTemplateColumns: '210px minmax(0, 1fr) 280px', gap: 16, alignItems: 'start' }}>
         {/* LEFT: palette */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 12 }}>
@@ -668,25 +825,7 @@ export default function FormBuilder() {
             </div>
           </div>
 
-          {preview ? (
-            /* Rendered preview in the exact row layout */
-            <div className="card">
-              <div style={{ background: 'var(--bofa-navy)', color: '#fff', padding: '14px 18px' }}>
-                <div style={{ fontSize: 11, opacity: 0.8, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Preview · New event</div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginTop: 2 }}>What recruiters will fill</div>
-              </div>
-              <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {form.rows.map((r) => (
-                  <div key={r.id} style={{ display: 'grid', gridTemplateColumns: `repeat(${r.slots.length}, minmax(0, 1fr))`, gap: 14 }}>
-                    {r.slots.map((slot, i) => (
-                      <div key={i}>{slot ? <IntakePreviewField f={slot} /> : <div style={{ fontSize: 12, color: 'var(--ink-5)' }}>Empty slot</div>}</div>
-                    ))}
-                  </div>
-                ))}
-                {form.rows.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--ink-5)', textAlign: 'center', padding: '18px 0' }}>No fields yet.</div>}
-              </div>
-            </div>
-          ) : (
+          {(
             /* Editable canvas */
             <div
               onDragOver={(e) => e.preventDefault()}
@@ -756,23 +895,16 @@ export default function FormBuilder() {
 
         {/* RIGHT: properties for the selected field */}
         <div style={{ position: 'sticky', top: 12 }}>
-          {preview ? (
-            <div className="card" style={{ padding: '18px 16px' }}>
-              <div className="eyebrow" style={{ marginBottom: 8 }}>Preview mode</div>
-              <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
-                This is exactly what the form filler sees. Switch back to Edit to change fields.
-              </p>
-            </div>
-          ) : (
             <PropertiesPanel
               field={selectedField}
               onPatch={(patch) => selectedField && patchField(selectedField.id, patch)}
               onDuplicate={() => selectedField && duplicateField(selectedField.id)}
               onDelete={() => selectedField && removeField(selectedField.id)}
             />
-          )}
+
         </div>
       </div>
+      )}
     </div>
   )
 }
