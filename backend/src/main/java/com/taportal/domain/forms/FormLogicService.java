@@ -89,7 +89,7 @@ public class FormLogicService {
         }
 
         List<Field> fields = readFields(schema);
-        List<Rule> rules = readRules(schema);
+        List<Rule> rules = validRules(readRules(schema), fields);
 
         // Answers keyed by field id. Entries without an id can't participate in
         // rule evaluation — collected separately and passed through untouched.
@@ -137,6 +137,20 @@ public class FormLogicService {
         return out.toString();
     }
 
+    /**
+     * Rules whose target or source question no longer exists are ignored.
+     * Without this guard, a stale show-rule (its source deleted in the builder)
+     * would hide its target forever — the answer that could reveal it can never
+     * be given. The client's fieldVisible() applies the same guard.
+     */
+    private List<Rule> validRules(List<Rule> rules, List<Field> fields) {
+        Set<String> known = new java.util.HashSet<>();
+        fields.forEach(f -> known.add(f.id()));
+        return rules.stream()
+                .filter(r -> known.contains(r.targetId()) && known.contains(r.sourceId()))
+                .toList();
+    }
+
     /** Mirror of the client's fieldVisible(): show-rules gate, hide-rules override. */
     private boolean isVisible(String fieldId, List<Rule> rules, Map<String, String> valueById) {
         List<Rule> mine = rules.stream()
@@ -173,8 +187,9 @@ public class FormLogicService {
     /** Answerable fields currently visible given the in-progress answers, in form order. */
     public List<Field> visibleAnswerableFields(String schemaJson, Map<String, String> answers) {
         JsonNode schema = parse(schemaJson, "form schema");
-        List<Rule> rules = readRules(schema);
-        return readFields(schema).stream()
+        List<Field> all = readFields(schema);
+        List<Rule> rules = validRules(readRules(schema), all);
+        return all.stream()
                 .filter(f -> !DISPLAY_TYPES.contains(f.type()))
                 .filter(f -> isVisible(f.id(), rules, answers))
                 .toList();

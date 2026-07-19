@@ -187,7 +187,10 @@ export const flattenIntake = (form: IntakeForm): IntakeField[] =>
  * until one matches; any matching hide-rule hides it.
  */
 export function fieldVisible(form: IntakeForm, fieldId: string, val: (id: string) => string): boolean {
-  const rules = form.rules ?? []
+  // Rules referencing deleted questions are ignored (same guard as the server's
+  // FormLogicService) — a stale show-rule must not hide its target forever.
+  const known = new Set(flattenIntake(form).map((f) => f.id))
+  const rules = (form.rules ?? []).filter((r) => known.has(r.targetId) && known.has(r.sourceId))
   const mine = rules.filter((r) => r.targetId === fieldId && r.sourceId && r.value !== '')
   if (mine.length === 0) return true
   const matches = (r: FormRule) => {
@@ -227,18 +230,26 @@ function getPayload(e: React.DragEvent): DragPayload | null {
 }
 
 // ── Canvas field (WYSIWYG, click to select) ─────────────────────────────────
-function CanvasField({ f, selected, onSelect }: {
+function CanvasField({ f, selected, onSelect, onDuplicate, onRemove }: {
   f: IntakeField
   selected: boolean
   onSelect: () => void
+  onDuplicate: () => void
+  onRemove: () => void
 }) {
+  const missingOptions = optionTypes.includes(f.type) && (f.options ?? []).length === 0
+  const act = {
+    border: '1px solid var(--line)', background: 'var(--app-panel)', borderRadius: 6,
+    width: 24, height: 24, cursor: 'pointer', fontSize: 12, color: 'var(--ink-3)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  } as const
   return (
     <div
       onClick={(e) => { e.stopPropagation(); onSelect() }}
       style={{
         position: 'relative',
         cursor: 'pointer',
-        border: selected ? '1.5px solid var(--bofa-navy)' : '1px solid var(--line)',
+        border: selected ? '1.5px solid var(--bofa-navy)' : missingOptions ? '1.5px solid var(--bofa-red, #c41230)' : '1px solid var(--line)',
         boxShadow: selected ? '0 0 0 3px rgba(1, 33, 105, 0.14)' : 'none',
         borderRadius: 'var(--ra-2)',
         background: 'var(--app-panel)',
@@ -252,6 +263,19 @@ function CanvasField({ f, selected, onSelect }: {
       {selected && (
         <span className="badge badge--info" style={{ position: 'absolute', top: -10, left: 10, fontSize: 9.5 }}>
           {TYPE_LABEL[f.type]}
+        </span>
+      )}
+      {missingOptions && (
+        <span className="badge badge--danger" style={{ position: 'absolute', top: -10, right: selected ? 66 : 10, fontSize: 9.5 }}>
+          No options
+        </span>
+      )}
+      {selected && (
+        <span style={{ position: 'absolute', top: -12, right: 8, display: 'flex', gap: 4 }}>
+          <button title="Duplicate" aria-label="Duplicate field" style={act}
+            onClick={(e) => { e.stopPropagation(); onDuplicate() }}>⧉</button>
+          <button title="Delete (Del)" aria-label="Delete field" style={{ ...act, color: 'var(--bofa-red, #c41230)' }}
+            onClick={(e) => { e.stopPropagation(); onRemove() }}>×</button>
         </span>
       )}
     </div>
@@ -507,9 +531,16 @@ function RulesEditor({ form, onRules }: { form: IntakeForm; onRules: (rules: For
 
       {rules.map((r) => {
         const source = fields.find((f) => f.id === r.sourceId)
+        const target = fields.find((f) => f.id === r.targetId)
+        const broken = !source || !target
         const sourceOptions = source?.options ?? (source?.type === 'yesno' ? ['Yes', 'No'] : null)
         return (
-          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 'var(--ra-2)', marginBottom: 8, background: 'var(--app-panel)' }}>
+          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '10px 12px', border: broken ? '1.5px solid var(--bofa-red, #c41230)' : '1px solid var(--line)', borderRadius: 'var(--ra-2)', marginBottom: 8, background: 'var(--app-panel)' }}>
+            {broken && (
+              <span className="badge badge--danger" style={{ fontSize: 10 }}>
+                References a deleted question — this rule is ignored
+              </span>
+            )}
             <select className="select" style={sel} value={r.action} onChange={(e) => patch(r.id, { action: e.target.value as FormRule['action'] })}>
               <option value="show">Show</option>
               <option value="hide">Hide</option>
@@ -608,7 +639,37 @@ export default function FormBuilder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverForm?.purpose, serverForm?.updatedAt])
 
+  // Warn before the tab closes with unsaved edits.
+  useEffect(() => {
+    if (!dirty) return
+    const guard = (e: BeforeUnloadEvent) => { e.preventDefault() }
+    window.addEventListener('beforeunload', guard)
+    return () => window.removeEventListener('beforeunload', guard)
+  }, [dirty])
+
   const form = draft ?? meta.fallback()
+
+  // Keyboard: Delete/Backspace removes the selected field (unless typing),
+  // Escape deselects, Cmd/Ctrl+S saves.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        if (dirty) save()
+        return
+      }
+      if (typing) return
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        e.preventDefault()
+        removeField(selectedId)
+      }
+      if (e.key === 'Escape') setSelectedId(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, selectedId, draft, purpose])
 
   const save = () =>
     saveForm.mutate(
@@ -641,7 +702,18 @@ export default function FormBuilder() {
   }
 
   function removeField(id: string) {
-    patchRows((rows) => rows.map((r) => ({ ...r, slots: r.slots.map((sl) => (sl && sl.id === id ? null : sl)) })))
+    // Deleting a question also deletes the rules that reference it — leaving
+    // them would silently break the logic (see fieldVisible's stale-rule guard).
+    setForm((prev) => {
+      const f = normalizeIntake(prev ?? meta.fallback())
+      return {
+        ...f,
+        rows: f.rows.map((r) => ({ ...r, slots: r.slots.map((sl) => (sl && sl.id === id ? null : sl)) })),
+        rules: (f.rules ?? []).filter((r) => r.targetId !== id && r.sourceId !== id),
+        updatedAt: new Date().toISOString(),
+      }
+    })
+    setDirty(true)
     if (selectedId === id) setSelectedId(null)
   }
 
@@ -685,7 +757,10 @@ export default function FormBuilder() {
             className="select"
             style={{ width: 220 }}
             value={purpose}
-            onChange={(e) => setPurpose(e.target.value as typeof purpose)}
+            onChange={(e) => {
+              if (dirty && !window.confirm('Discard unsaved changes to this form?')) return
+              setPurpose(e.target.value as typeof purpose)
+            }}
           >
             {PURPOSES.map((p) => (
               <option key={p.key} value={p.key}>{p.label}</option>
@@ -807,7 +882,9 @@ export default function FormBuilder() {
 
         {/* RIGHT: canvas */}
         <div>
-          {/* System fields — locked */}
+          {/* System fields — locked; they describe the EVENT record itself, so
+              they only apply to the intake form. */}
+          {purpose === 'EVENT_INTAKE' && (
           <div className="card" style={{ marginBottom: 12, background: 'var(--app-sunken)' }}>
             <div className="card__body" style={{ padding: '14px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -824,6 +901,7 @@ export default function FormBuilder() {
               </div>
             </div>
           </div>
+          )}
 
           {(
             /* Editable canvas */
@@ -861,6 +939,8 @@ export default function FormBuilder() {
                             f={slot}
                             selected={slot.id === selectedId}
                             onSelect={() => setSelectedId(slot.id)}
+                            onDuplicate={() => duplicateField(slot.id)}
+                            onRemove={() => removeField(slot.id)}
                           />
                         ) : (
                           <EmptySlot key={`empty-${si}`} wide={row.slots.length === 1}
