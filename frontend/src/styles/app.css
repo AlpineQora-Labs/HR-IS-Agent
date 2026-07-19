@@ -374,36 +374,37 @@ button.card:hover {
 }
 
 /* ---- Edge collapse handle ----
-   A small circular chevron embedded on the CONTENT card's left edge — part of
-   the big card's chrome, so it's always visible. Anchored to the rail's right
-   edge (+12px gutter) so it rides the collapse/expand animation. */
+   A pull-tab WELDED to the content card's left edge: same fill as the card,
+   the card's hairline border continues around its bulge, and the right side
+   is open so tab and card merge into one shape (the card's outline simply
+   bulges out). Anchored to the rail so it rides the collapse animation. */
 .app__rail {
   position: relative;
 }
 .app__collapse-handle {
   position: absolute;
-  top: 30px; /* 12px gutter + 18px into the card, just past the corner radius */
-  right: -25px; /* centers the 26px button on the content card's left border */
-  width: 26px;
-  height: 26px;
-  border-radius: 999px;
+  top: 40px; /* just past the card's 18px corner radius */
+  right: -13px; /* right edge overlaps the card's 1px border and merges */
+  width: 14px;
+  height: 44px;
+  border-radius: 999px 0 0 999px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--app-panel);
+  padding: 0;
+  background: var(--app-bg); /* the content card's own fill */
   border: 1px solid var(--line);
-  color: var(--ink-3);
+  border-right: 0;
+  color: var(--ink-4);
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(16, 22, 38, 0.14);
   z-index: 40;
-  transition: color 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
+  transition: color 0.14s ease, width 0.14s ease;
 }
 .app__collapse-handle .ic {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 .app__collapse-handle:hover {
   color: var(--bofa-navy);
-  border-color: var(--bofa-navy);
-  transform: scale(1.08);
+  width: 18px;
 }
