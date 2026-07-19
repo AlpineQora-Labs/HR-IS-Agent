@@ -183,57 +183,114 @@ function getPayload(e: React.DragEvent): DragPayload | null {
   }
 }
 
-// ── Field editor card (inside a slot) ───────────────────────────────────────
-function FieldCard({ f, locked, onChange, onRemove }: {
+// ── Canvas field (WYSIWYG, click to select) ─────────────────────────────────
+function CanvasField({ f, selected, onSelect }: {
   f: IntakeField
-  locked?: boolean
-  onChange: (f: IntakeField) => void
-  onRemove: () => void
+  selected: boolean
+  onSelect: () => void
 }) {
-  const hasOpts = optionTypes.includes(f.type)
-  const isDisplay = DISPLAY_TYPES.includes(f.type)
   return (
-    <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--ra-2)', background: 'var(--app-panel)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderBottom: '1px solid var(--line)' }}>
-        <span className="badge badge--info">{TYPE_LABEL[f.type]}</span>
-        <div style={{ flex: 1 }} />
-        {!isDisplay && (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--ink-3)' }}>
-            <input type="checkbox" checked={f.required} disabled={locked} onChange={(e) => onChange({ ...f, required: e.target.checked })} />
-            Required
-          </label>
-        )}
-        <button className="btn btn--ghost btn--sm" disabled={locked} onClick={onRemove} aria-label="Remove field">×</button>
+    <div
+      onClick={(e) => { e.stopPropagation(); onSelect() }}
+      style={{
+        position: 'relative',
+        cursor: 'pointer',
+        border: selected ? '1.5px solid var(--bofa-navy)' : '1px solid var(--line)',
+        boxShadow: selected ? '0 0 0 3px rgba(1, 33, 105, 0.14)' : 'none',
+        borderRadius: 'var(--ra-2)',
+        background: 'var(--app-panel)',
+        padding: '12px 14px 8px',
+      }}
+    >
+      {/* Render exactly what the filler will see; clicks select, not focus. */}
+      <div style={{ pointerEvents: 'none' }}>
+        <IntakePreviewField f={f} />
       </div>
-      <div style={{ padding: '10px 10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <input className="input" value={f.label} disabled={locked} placeholder={f.type === 'header' ? 'Heading text' : f.type === 'image' ? 'Caption (optional)' : 'Field label'} style={{ fontSize: 13, fontWeight: 500 }}
-          onChange={(e) => onChange({ ...f, label: e.target.value })} />
-        {f.type === 'image' && (
-          <>
-            <input className="input" value={f.src ?? ''} disabled={locked} placeholder="Image URL (https://…)" style={{ fontSize: 12 }}
-              onChange={(e) => onChange({ ...f, src: e.target.value || undefined })} />
-            {f.src ? <img src={f.src} alt={f.label || 'Form image'} style={{ maxWidth: '100%', maxHeight: 120, borderRadius: 'var(--ra-2)', border: '1px solid var(--line)', objectFit: 'cover' }} /> : null}
-          </>
-        )}
-        <input className="input" value={f.help ?? ''} disabled={locked} placeholder={f.type === 'header' ? 'Subheading (optional)' : 'Help text (optional)'} style={{ fontSize: 12 }}
-          onChange={(e) => onChange({ ...f, help: e.target.value || undefined })} />
-        {hasOpts && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div className="eyebrow">{f.type === 'typeahead' ? 'Suggestions' : 'Options'}</div>
-            {(f.options ?? []).map((o, i) => (
-              <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input className="input" value={o} disabled={locked} style={{ flex: 1, fontSize: 12.5 }}
-                  onChange={(e) => onChange({ ...f, options: (f.options ?? []).map((x, j) => (j === i ? e.target.value : x)) })} />
-                <button className="btn btn--ghost btn--sm" disabled={locked || (f.options ?? []).length <= 1} aria-label="Remove option"
-                  onClick={() => onChange({ ...f, options: (f.options ?? []).filter((_, j) => j !== i) })}>×</button>
-              </div>
-            ))}
-            <button className="btn btn--outline btn--sm" style={{ alignSelf: 'flex-start' }} disabled={locked}
-              onClick={() => onChange({ ...f, options: [...(f.options ?? []), `Option ${(f.options ?? []).length + 1}`] })}>
-              + Add option
-            </button>
-          </div>
-        )}
+      {selected && (
+        <span className="badge badge--info" style={{ position: 'absolute', top: -10, left: 10, fontSize: 9.5 }}>
+          {TYPE_LABEL[f.type]}
+        </span>
+      )}
+    </div>
+  )
+}
+
+// ── Properties panel (right column, edits the selected field) ───────────────
+function PropertiesPanel({ field, onPatch, onDuplicate, onDelete }: {
+  field: IntakeField | null
+  onPatch: (patch: Partial<IntakeField>) => void
+  onDuplicate: () => void
+  onDelete: () => void
+}) {
+  if (!field) {
+    return (
+      <div className="card" style={{ padding: '18px 16px' }}>
+        <div className="eyebrow" style={{ marginBottom: 8 }}>Field properties</div>
+        <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
+          Select a field on the canvas to edit its label, help text, options and rules.
+        </p>
+      </div>
+    )
+  }
+  const hasOpts = optionTypes.includes(field.type)
+  const isDisplay = DISPLAY_TYPES.includes(field.type)
+  return (
+    <div className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="eyebrow">Field properties</span>
+        <span className="badge badge--info">{TYPE_LABEL[field.type]}</span>
+      </div>
+
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5, color: 'var(--ink-4)' }}>
+        {field.type === 'header' ? 'Heading' : field.type === 'image' ? 'Caption' : 'Label'}
+        <input className="input" value={field.label} style={{ fontSize: 13 }}
+          placeholder={field.type === 'header' ? 'Section title' : 'Field label'}
+          onChange={(e) => onPatch({ label: e.target.value })} />
+      </label>
+
+      {field.type === 'image' && (
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5, color: 'var(--ink-4)' }}>
+          Image URL
+          <input className="input" value={field.src ?? ''} style={{ fontSize: 12.5 }} placeholder="https://…"
+            onChange={(e) => onPatch({ src: e.target.value || undefined })} />
+        </label>
+      )}
+
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5, color: 'var(--ink-4)' }}>
+        {field.type === 'header' ? 'Subheading' : 'Help text'}
+        <input className="input" value={field.help ?? ''} style={{ fontSize: 12.5 }} placeholder="Optional"
+          onChange={(e) => onPatch({ help: e.target.value || undefined })} />
+      </label>
+
+      {!isDisplay && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--ink-2)' }}>
+          <input type="checkbox" checked={field.required} onChange={(e) => onPatch({ required: e.target.checked })} />
+          Required
+        </label>
+      )}
+
+      {hasOpts && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="eyebrow">{field.type === 'typeahead' ? 'Suggestions' : 'Options'}</div>
+          {(field.options ?? []).map((o, i) => (
+            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input className="input" value={o} style={{ flex: 1, fontSize: 12.5 }}
+                onChange={(e) => onPatch({ options: (field.options ?? []).map((x, j) => (j === i ? e.target.value : x)) })} />
+              <button className="btn btn--ghost btn--sm" disabled={(field.options ?? []).length <= 1} aria-label="Remove option"
+                onClick={() => onPatch({ options: (field.options ?? []).filter((_, j) => j !== i) })}>×</button>
+            </div>
+          ))}
+          <button className="btn btn--outline btn--sm" style={{ alignSelf: 'flex-start' }}
+            onClick={() => onPatch({ options: [...(field.options ?? []), `Option ${(field.options ?? []).length + 1}`] })}>
+            + Add option
+          </button>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+        <button className="btn btn--outline btn--sm" onClick={onDuplicate}>Duplicate</button>
+        <span style={{ flex: 1 }} />
+        <button className="btn btn--outline btn--sm" style={{ color: 'var(--bofa-red, #c41230)' }} onClick={onDelete}>Delete</button>
       </div>
     </div>
   )
@@ -384,6 +441,7 @@ export default function FormBuilder() {
   const [draft, setForm] = useState<IntakeForm | null>(null)
   const [dirty, setDirty] = useState(false)
   const [preview, setPreview] = useState(false)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   // Load the server schema whenever the purpose (or server copy) changes.
   useEffect(() => {
@@ -394,6 +452,7 @@ export default function FormBuilder() {
         setForm(meta.fallback())
       }
       setDirty(false)
+      setSelectedId(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverForm?.purpose, serverForm?.updatedAt])
@@ -415,9 +474,32 @@ export default function FormBuilder() {
   }
 
   function makeRow(p: DragPayload): IntakeRow | null {
-    if (p.kind === 'palette-field') return { id: uid(), slots: [newField(p.type)] }
+    if (p.kind === 'palette-field') {
+      const f = newField(p.type)
+      setSelectedId(f.id)
+      return { id: uid(), slots: [f] }
+    }
     if (p.kind === 'palette-layout') return { id: uid(), slots: p.layout === 'double' ? [null, null] : [null] }
     return null
+  }
+
+  const selectedField = flattenIntake(form).find((f) => f.id === selectedId) ?? null
+
+  function patchField(id: string, patch: Partial<IntakeField>) {
+    patchRows((rows) => rows.map((r) => ({ ...r, slots: r.slots.map((sl) => (sl && sl.id === id ? { ...sl, ...patch } : sl)) })))
+  }
+
+  function removeField(id: string) {
+    patchRows((rows) => rows.map((r) => ({ ...r, slots: r.slots.map((sl) => (sl && sl.id === id ? null : sl)) })))
+    if (selectedId === id) setSelectedId(null)
+  }
+
+  function duplicateField(id: string) {
+    const src = flattenIntake(form).find((f) => f.id === id)
+    if (!src) return
+    const copy: IntakeField = { ...src, id: uid() }
+    patchRows((rows) => [...rows, { id: uid(), slots: [copy] }])
+    setSelectedId(copy.id)
   }
 
   /** Insert (palette drops) or move (row drags) at index. */
@@ -478,7 +560,7 @@ export default function FormBuilder() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '210px minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '210px minmax(0, 1fr) 280px', gap: 16, alignItems: 'start' }}>
         {/* LEFT: palette */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 12 }}>
           <div className="card" style={{ padding: 10 }}>
@@ -508,7 +590,11 @@ export default function FormBuilder() {
                 key={p.type}
                 draggable
                 onDragStart={(e) => setPayload(e, { kind: 'palette-field', type: p.type })}
-                onClick={() => patchRows((rows) => [...rows, { id: uid(), slots: [newField(p.type)] }])}
+                onClick={() => {
+                  const f = newField(p.type)
+                  patchRows((rows) => [...rows, { id: uid(), slots: [f] }])
+                  setSelectedId(f.id)
+                }}
                 title="Drag into a slot or onto the canvas (or click to append)"
                 style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid var(--line)', background: 'var(--app-panel)', cursor: 'grab', borderRadius: 'var(--ra-2)', padding: '8px 10px', marginBottom: 6 }}
               >
@@ -570,6 +656,7 @@ export default function FormBuilder() {
                 const p = getPayload(e)
                 if (p) dropAt(form.rows.length, p)
               }}
+              onClick={() => setSelectedId(null)}
               style={{ minHeight: 220 }}
             >
               <InsertZone onDropPayload={(p) => dropAt(0, p)} hint="Drop to insert row" />
@@ -590,14 +677,19 @@ export default function FormBuilder() {
                     <div style={{ flex: 1, display: 'grid', gridTemplateColumns: `repeat(${row.slots.length}, minmax(0, 1fr))`, gap: 10 }}>
                       {row.slots.map((slot, si) =>
                         slot ? (
-                          <FieldCard
+                          <CanvasField
                             key={slot.id}
                             f={slot}
-                            onChange={(nf) => setSlot(row.id, si, nf)}
-                            onRemove={() => setSlot(row.id, si, null)}
+                            selected={slot.id === selectedId}
+                            onSelect={() => setSelectedId(slot.id)}
                           />
                         ) : (
-                          <EmptySlot key={`empty-${si}`} wide={row.slots.length === 1} onDropField={(t) => setSlot(row.id, si, newField(t))} />
+                          <EmptySlot key={`empty-${si}`} wide={row.slots.length === 1}
+                            onDropField={(t) => {
+                              const f = newField(t)
+                              setSlot(row.id, si, f)
+                              setSelectedId(f.id)
+                            }} />
                         ),
                       )}
                     </div>
@@ -619,6 +711,25 @@ export default function FormBuilder() {
                 </div>
               )}
             </div>
+          )}
+        </div>
+
+        {/* RIGHT: properties for the selected field */}
+        <div style={{ position: 'sticky', top: 12 }}>
+          {preview ? (
+            <div className="card" style={{ padding: '18px 16px' }}>
+              <div className="eyebrow" style={{ marginBottom: 8 }}>Preview mode</div>
+              <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
+                This is exactly what the form filler sees. Switch back to Edit to change fields.
+              </p>
+            </div>
+          ) : (
+            <PropertiesPanel
+              field={selectedField}
+              onPatch={(patch) => selectedField && patchField(selectedField.id, patch)}
+              onDuplicate={() => selectedField && duplicateField(selectedField.id)}
+              onDelete={() => selectedField && removeField(selectedField.id)}
+            />
           )}
         </div>
       </div>
