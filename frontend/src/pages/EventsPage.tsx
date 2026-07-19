@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '@/state/store'
 import SlideOver from '@/components/SlideOver'
-import { useCreateEvent, useEvents } from '@/api/hooks'
+import { useCreateEvent, useEvents, useEventRoster, useRegisterAttendee, useRegistrationTransition, useSchools } from '@/api/hooks'
 import { date } from '@/lib/format'
-import type { EventRow } from '@/api/types'
+import type { EventRow, EventRegistration } from '@/api/types'
 import { DISPLAY_TYPES, INTAKE_KEY, defaultIntakeForm, flattenIntake, normalizeIntake, type IntakeField, type IntakeForm } from './admin/FormBuilder'
 
 // Campus & hiring events, modeled on how Handshake / Yello / RippleMatch run them:
@@ -126,11 +126,118 @@ function EventDetail({ e, onClose }: { e: EventRow; onClose: () => void }) {
             ))}
           </div>
         )}
-      </div>
-      <div style={{ padding: '14px 20px', borderTop: '1px solid var(--line)', fontSize: 12, color: 'var(--ink-4)' }}>
-        Sessions, registrants, and linked jobs appear here once the event runs.
+
+        <Roster eventId={e.id} />
       </div>
     </SlideOver>
+  )
+}
+
+/* The live roster: every student as a real row (and a real candidate) —
+   register/walk-in at the booth, check in, mark no-shows. The funnel above is
+   computed from these rows. */
+function Roster({ eventId }: { eventId: string }) {
+  const { data: roster, isLoading } = useEventRoster(eventId)
+  const { data: schools } = useSchools()
+  const transition = useRegistrationTransition()
+  const register = useRegisterAttendee()
+  const [adding, setAdding] = useState(false)
+  const [form, setForm] = useState({ name: '', email: '', schoolId: '', major: '', gradYear: '' })
+  const btn = { fontSize: 11.5, padding: '2px 8px' } as const
+
+  const statusBadge = (s: string) =>
+    s === 'CHECKED_IN' ? 'badge--ok' : s === 'NO_SHOW' ? 'badge--danger' : 'badge--info'
+
+  const submit = () =>
+    register.mutate(
+      {
+        eventId,
+        input: {
+          name: form.name,
+          email: form.email,
+          schoolId: form.schoolId || undefined,
+          major: form.major || undefined,
+          gradYear: form.gradYear ? Number(form.gradYear) : undefined,
+          walkIn: true,
+        },
+      },
+      { onSuccess: () => { setAdding(false); setForm({ name: '', email: '', schoolId: '', major: '', gradYear: '' }) } },
+    )
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span className="eyebrow">Roster{roster ? ` · ${roster.length}` : ''}</span>
+        <button className="btn btn--outline btn--sm" style={btn} onClick={() => setAdding((v) => !v)}>
+          {adding ? 'Cancel' : 'Add walk-in'}
+        </button>
+      </div>
+
+      {adding && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 'var(--ra-2)', marginBottom: 10 }}>
+          <input className="input" placeholder="Full name" value={form.name}
+            onChange={(ev) => setForm({ ...form, name: ev.target.value })} />
+          <input className="input" placeholder="Email" value={form.email}
+            onChange={(ev) => setForm({ ...form, email: ev.target.value })} />
+          <select className="select" value={form.schoolId}
+            onChange={(ev) => setForm({ ...form, schoolId: ev.target.value })}>
+            <option value="">School…</option>
+            {(schools ?? []).map((sc) => (
+              <option key={sc.id} value={sc.id}>{sc.name}</option>
+            ))}
+          </select>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="input" placeholder="Major" value={form.major}
+              onChange={(ev) => setForm({ ...form, major: ev.target.value })} />
+            <input className="input" placeholder="Grad year" style={{ width: 110 }} value={form.gradYear}
+              onChange={(ev) => setForm({ ...form, gradYear: ev.target.value })} />
+          </div>
+          <button className="btn btn--primary btn--sm" disabled={register.isPending || !form.name || !form.email} onClick={submit}>
+            {register.isPending ? 'Adding…' : 'Add & check in'}
+          </button>
+          {register.isError && (
+            <span style={{ fontSize: 12, color: 'var(--c-red, #c41230)' }}>
+              {(register.error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not add — already registered?'}
+            </span>
+          )}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="muted" style={{ fontSize: 12.5 }}>Loading roster…</div>
+      ) : !roster || roster.length === 0 ? (
+        <div className="muted" style={{ fontSize: 12.5 }}>
+          No registrations yet — they'll appear here as students sign up (or add walk-ins at the booth).
+        </div>
+      ) : (
+        roster.map((r: EventRegistration) => (
+          <div key={r.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+              <span className="t-strong" style={{ fontSize: 13 }}>{r.name}</span>
+              <span className={`badge ${statusBadge(r.status)}`} style={{ flexShrink: 0 }}>
+                {r.status === 'CHECKED_IN' ? 'Checked in' : r.status === 'NO_SHOW' ? 'No-show' : 'Registered'}
+              </span>
+            </div>
+            <div className="muted" style={{ fontSize: 11.5, margin: '2px 0 6px' }}>
+              {[r.schoolName, r.major, r.gradYear ? `'${String(r.gradYear).slice(-2)}` : null].filter(Boolean).join(' · ') || r.email}
+              {r.source === 'WALK_IN' && <span> · walk-in</span>}
+            </div>
+            {r.status === 'REGISTERED' && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn btn--outline btn--sm" style={btn} disabled={transition.isPending}
+                  onClick={() => transition.mutate({ registrationId: r.id, status: 'CHECKED_IN' })}>
+                  Check in
+                </button>
+                <button className="btn btn--outline btn--sm" style={btn} disabled={transition.isPending}
+                  onClick={() => transition.mutate({ registrationId: r.id, status: 'NO_SHOW' })}>
+                  No-show
+                </button>
+              </div>
+            )}
+          </div>
+        ))
+      )}
+    </div>
   )
 }
 
@@ -487,11 +594,11 @@ export default function EventsPage() {
       <div className="page-head">
         <div className="crumb">
           <span className="dot" />
-          Engagement · Events &amp; Campus
+          Engagement · Campus
         </div>
         <div className="page-head__row">
           <div>
-            <h1>Events &amp; Campus</h1>
+            <h1>Campus</h1>
             <p className="sub">
               Run campus drives and hiring events end to end — registration through attendance to offers, with the conversion
               funnel in one view.

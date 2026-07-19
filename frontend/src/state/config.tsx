@@ -34,7 +34,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'crm', label: 'Talent CRM', group: 'Engagement' },
   { key: 'campaigns', label: 'Nurture', group: 'Engagement' },
   { key: 'referrals', label: 'Referrals', group: 'Engagement' },
-  { key: 'events', label: 'Events & Campus', group: 'Engagement' },
+  { key: 'events', label: 'Campus', group: 'Engagement' },
   { key: 'surveys', label: 'Surveys', group: 'Engagement' },
   { key: 'copilot', label: 'AI Copilot', group: 'Engagement' },
   // Platform

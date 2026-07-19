@@ -3,6 +3,9 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { api } from './client'
 import type {
   SchedulingOverview,
+  School,
+  EventRegistration,
+  RegisterAttendeeInput,
   AnalyticsSummary,
   ApplicationRow,
   Assessment,
@@ -191,6 +194,47 @@ export function useProposedSlots(interviewId: string | undefined) {
     queryKey: ['proposed-slots', interviewId],
     queryFn: () => api.get<Slot[]>(`/interviews/${interviewId}/proposed-slots`).then((r) => r.data),
   })
+}
+
+// ---- Campus: schools + event rosters ----
+
+export function useSchools() {
+  return useQuery({
+    queryKey: ['schools'],
+    queryFn: () => api.get<School[]>('/schools').then((r) => r.data),
+  })
+}
+
+export function useEventRoster(eventId: string | undefined) {
+  return useQuery({
+    enabled: !!eventId,
+    queryKey: ['event-roster', eventId],
+    queryFn: () => api.get<EventRegistration[]>(`/events/${eventId}/registrations`).then((r) => r.data),
+  })
+}
+
+function useRosterMutation<TArg>(fn: (arg: TArg) => Promise<unknown>) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['event-roster'] })
+      qc.invalidateQueries({ queryKey: ['events'] })
+      qc.invalidateQueries({ queryKey: ['candidates'] })
+    },
+  })
+}
+
+/** Pre-registration or booth walk-in — also materializes the candidate. */
+export function useRegisterAttendee() {
+  return useRosterMutation(({ eventId, input }: { eventId: string; input: RegisterAttendeeInput }) =>
+    api.post(`/events/${eventId}/registrations`, input))
+}
+
+/** CHECKED_IN | NO_SHOW | REGISTERED */
+export function useRegistrationTransition() {
+  return useRosterMutation(({ registrationId, status }: { registrationId: string; status: string }) =>
+    api.post(`/event-registrations/${registrationId}/transition`, { status }))
 }
 
 // Pipelines for many jobs at once (jobs×stages matrix). /pipeline is per-job,

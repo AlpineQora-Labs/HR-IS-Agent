@@ -282,6 +282,39 @@ export interface EventRow {
   hires: number
 }
 
+// ---- Campus: schools + event rosters ----
+
+export interface School {
+  id: string
+  name: string
+  location: string | null
+  tier: string
+}
+
+export interface EventRegistration {
+  id: string
+  eventId: string
+  candidateId: string | null
+  name: string
+  email: string
+  schoolId: string | null
+  schoolName: string | null
+  major: string | null
+  gradYear: number | null
+  source: string
+  status: string
+  checkedInAt: string | null
+}
+
+export interface RegisterAttendeeInput {
+  name: string
+  email: string
+  schoolId?: string
+  major?: string
+  gradYear?: number
+  walkIn?: boolean
+}
+
 export interface EventCreate {
   name: string
   type: string

@@ -16,16 +16,19 @@ public class EngagementService {
     private final NurtureCampaignRepository campaignRepository;
     private final ReferralRepository referralRepository;
     private final RecruitingEventRepository eventRepository;
+    private final EventRegistrationRepository eventRegistrations;
     private final SurveyRepository surveyRepository;
 
     public EngagementService(
             NurtureCampaignRepository campaignRepository,
             ReferralRepository referralRepository,
             RecruitingEventRepository eventRepository,
-            SurveyRepository surveyRepository) {
+            SurveyRepository surveyRepository,
+            EventRegistrationRepository eventRegistrations) {
         this.campaignRepository = campaignRepository;
         this.referralRepository = referralRepository;
         this.eventRepository = eventRepository;
+        this.eventRegistrations = eventRegistrations;
         this.surveyRepository = surveyRepository;
     }
 
@@ -66,18 +69,20 @@ public class EngagementService {
 
     public List<EventRow> events() {
         return eventRepository.findByOrderByStartsAtDesc().stream()
-                .map(
-                        e ->
-                                new EventRow(
-                                        e.getId(),
-                                        e.getName(),
-                                        e.getType(),
-                                        e.getLocation(),
-                                        e.getStartsAt(),
-                                        e.getRegistrations(),
-                                        e.getAttended(),
-                                        e.getHires()))
+                .map(this::toEventRow)
                 .toList();
+    }
+
+    /** Events with roster rows compute their funnel live; legacy rows keep their counters. */
+    private EventRow toEventRow(RecruitingEvent e) {
+        long rosterSize = eventRegistrations.countByEventId(e.getId());
+        int registered = rosterSize > 0 ? (int) rosterSize : e.getRegistrations();
+        int attended = rosterSize > 0
+                ? (int) eventRegistrations.countByEventIdAndStatus(e.getId(), "CHECKED_IN")
+                : e.getAttended();
+        return new EventRow(
+                e.getId(), e.getName(), e.getType(), e.getLocation(), e.getStartsAt(),
+                registered, attended, e.getHires());
     }
 
     @Transactional
