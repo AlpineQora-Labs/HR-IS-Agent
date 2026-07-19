@@ -2,6 +2,7 @@ package com.taportal.api;
 
 import com.taportal.domain.forms.FormDefinition;
 import com.taportal.domain.forms.FormDefinitionRepository;
+import com.taportal.domain.forms.FormLogicService;
 import com.taportal.domain.forms.FormResponse;
 import com.taportal.domain.forms.FormResponseRepository;
 import jakarta.validation.constraints.NotBlank;
@@ -37,10 +38,15 @@ public class FormController {
 
     private final FormDefinitionRepository definitions;
     private final FormResponseRepository responses;
+    private final FormLogicService formLogic;
 
-    public FormController(FormDefinitionRepository definitions, FormResponseRepository responses) {
+    public FormController(
+            FormDefinitionRepository definitions,
+            FormResponseRepository responses,
+            FormLogicService formLogic) {
         this.definitions = definitions;
         this.responses = responses;
+        this.formLogic = formLogic;
     }
 
     @GetMapping("/v1/forms/{purpose}")
@@ -67,11 +73,19 @@ public class FormController {
     @PostMapping("/v1/forms/{purpose}/responses")
     @Transactional
     public FormResponseDto submit(@PathVariable String purpose, @RequestBody SubmitResponseRequest request) {
+        // The middleware is the authority on form logic: re-evaluate the form's
+        // if/then rules against the submitted answers — hidden answers are
+        // stripped, visible required questions are enforced (422). The client's
+        // evaluation is a UX mirror only; this verdict is the one that counts.
+        String answers = definitions.findByPurpose(purpose)
+                .map(def -> formLogic.validateAndFilter(def.getSchema(), request.answers()))
+                .orElse(request.answers());
+
         FormResponse r = new FormResponse();
         r.setFormPurpose(purpose);
         r.setSubjectType(request.subjectType());
         r.setSubjectId(request.subjectId());
-        r.setAnswers(request.answers());
+        r.setAnswers(answers);
         r = responses.save(r);
         return new FormResponseDto(r.getId(), r.getFormPurpose(), r.getAnswers(), r.getCreatedAt());
     }

@@ -373,7 +373,7 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
         onSuccess: (ev) => {
           const filled = intakeFields
             .filter((f) => !DISPLAY_TYPES.includes(f.type))
-            .map((f) => ({ label: f.label || 'Untitled', value: answerText(answers[f.id]) }))
+            .map((f) => ({ fieldId: f.id, label: f.label || 'Untitled', value: answerText(answers[f.id]) }))
             .filter((r) => r.value.trim() !== '')
           if (filled.length > 0) {
             submitResponse.mutate({ purpose: 'EVENT_INTAKE', subjectType: 'EVENT', subjectId: ev.id, answers: JSON.stringify(filled) })
