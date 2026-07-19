@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { defaultJobId } from '@/lib/jobs'
-import SlideOver from '@/components/SlideOver'
+import SlideOver, { useSlideOverClose } from '@/components/SlideOver'
 import { SchedulingRadar } from '@/components/SchedulingRadar'
 import { useApplications, useJobInterviews, useJobs, useProposeTimes, useRescheduleInterview, useSlots, useTransitionInterview } from '@/api/hooks'
 import { date } from '@/lib/format'
@@ -329,7 +329,7 @@ function EventDetail({ ev, onClose }: { ev: CalEvent; onClose: () => void }) {
             {iv ? iv.type : ev.kind === 'open' ? 'Open availability' : 'Booked slot'}
           </div>
         </div>
-        <button type="button" onClick={onClose} aria-label="Close" style={{ border: 0, background: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1, color: 'var(--ink-4)' }}>×</button>
+        <DetailClose fallback={onClose} />
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
         <FactRow label="Date">{date(ev.start.toISOString())}</FactRow>
@@ -361,6 +361,16 @@ function EventDetail({ ev, onClose }: { ev: CalEvent; onClose: () => void }) {
         ) : null}
       </div>
     </SlideOver>
+  )
+}
+
+function DetailClose({ fallback }: { fallback: () => void }) {
+  const animated = useSlideOverClose()
+  return (
+    <button type="button" onClick={animated ?? fallback} aria-label="Close"
+      style={{ border: 0, background: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1, color: 'var(--ink-4)' }}>
+      ×
+    </button>
   )
 }
 

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import SlideOver from '@/components/SlideOver'
+import SlideOver, { useSlideOverClose } from '@/components/SlideOver'
 import { useProposeTimes, useSchedulingOverview, useTransitionInterview } from '@/api/hooks'
 import type { AttentionItem, InterviewerLoad } from '@/api/types'
 import { date } from '@/lib/format'
@@ -105,13 +105,15 @@ export function SchedulingRadar() {
 }
 
 function PanelHeader({ title, sub, onClose }: { title: string; sub?: string; onClose: () => void }) {
+  const animated = useSlideOverClose()
+  const close = animated ?? onClose
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '18px 20px 14px', borderBottom: '1px solid var(--line)' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--ink-0)' }}>{title}</div>
         {sub && <div className="sub" style={{ marginTop: 4, fontSize: 12.5, lineHeight: 1.5 }}>{sub}</div>}
       </div>
-      <button type="button" onClick={onClose} aria-label="Close"
+      <button type="button" onClick={close} aria-label="Close"
         style={{ border: 0, background: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1, color: 'var(--ink-4)' }}>
         ×
       </button>
@@ -231,6 +233,7 @@ function LoadPanel({ load, onClose }: { load: InterviewerLoad[]; onClose: () => 
    load first, then re-propose times that fit every panelist's calendar. */
 function PanelPicker({ item, load, onClose }: { item: AttentionItem; load: InterviewerLoad[]; onClose: () => void }) {
   const propose = useProposeTimes()
+  const animated = useSlideOverClose()
   const byLoad = useMemo(() => [...load].sort((a, b) => a.next7Days - b.next7Days), [load])
   const [selected, setSelected] = useState<string[]>(() =>
     load.filter((l) => item.interviewers.includes(l.name)).map((l) => l.userId))
@@ -275,14 +278,14 @@ function PanelPicker({ item, load, onClose }: { item: AttentionItem; load: Inter
         </p>
       </div>
       <div style={{ padding: '14px 20px', borderTop: '1px solid var(--line)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-        <button className="btn btn--outline" onClick={onClose}>Cancel</button>
+        <button className="btn btn--outline" onClick={() => (animated ?? onClose)()}>Cancel</button>
         <button
           className="btn"
           disabled={propose.isPending}
           onClick={() =>
             propose.mutate(
               { interviewId: item.interviewId, interviewerUserIds: selected.length ? selected : undefined },
-              { onSuccess: onClose },
+              { onSuccess: () => (animated ?? onClose)() },
             )
           }
         >
