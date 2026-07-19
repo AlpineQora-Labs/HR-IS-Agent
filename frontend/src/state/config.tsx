@@ -133,7 +133,7 @@ const defaultConfig: ConfigShape = {
   currentUserId: 'u1',
 }
 
-const STORAGE_KEY = 'olivia.config.v1'
+const STORAGE_KEY = 'taportal.config.v1'
 
 function load(): ConfigShape {
   try {

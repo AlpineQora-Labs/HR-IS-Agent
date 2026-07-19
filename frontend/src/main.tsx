@@ -82,6 +82,19 @@ function RecruiterApp() {
   )
 }
 
+// One-time migration: storage keys were renamed olivia.* -> taportal.* (the old
+// internal code name is retired). Copy any legacy values so saved surveys,
+// templates and settings survive; safe to delete once every browser has run it.
+for (const key of Object.keys(localStorage)) {
+  if (key.startsWith('olivia.')) {
+    const renamed = `taportal.${key.slice('olivia.'.length)}`
+    if (localStorage.getItem(renamed) === null) {
+      localStorage.setItem(renamed, localStorage.getItem(key)!)
+    }
+    localStorage.removeItem(key)
+  }
+}
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 })

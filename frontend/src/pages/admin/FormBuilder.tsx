@@ -41,7 +41,7 @@ export interface IntakeForm {
   updatedAt: string
 }
 
-export const INTAKE_KEY = 'olivia.eventIntakeForm'
+export const INTAKE_KEY = 'taportal.eventIntakeForm'
 
 export const SYSTEM_FIELDS: { label: string; hint: string }[] = [
   { label: 'Event name', hint: 'Short text' },
@@ -139,7 +139,7 @@ type DragPayload =
   | { kind: 'palette-layout'; layout: 'single' | 'double' }
   | { kind: 'row'; rowId: string }
 
-const DND_MIME = 'application/x-olivia-intake'
+const DND_MIME = 'application/x-taportal-intake'
 
 function setPayload(e: React.DragEvent, p: DragPayload) {
   e.dataTransfer.setData(DND_MIME, JSON.stringify(p))

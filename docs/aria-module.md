@@ -5,8 +5,8 @@
 ## Decision
 
 Aria — the candidate-facing conversational assistant — lives in its own module,
-`com.olivia.aria`, separated from the recruiting domain and from the API layer.
-It was extracted from `com.olivia.domain.conversation` (and `api/ChatDtos`) with
+`com.taportal.aria`, separated from the recruiting domain and from the API layer.
+It was extracted from `com.taportal.domain.conversation` (and `api/ChatDtos`) with
 no behavior change.
 
 The long-term intent is that Aria can be lifted out of this codebase entirely and
@@ -21,11 +21,11 @@ it will then embed Aria the same way any other surface does.
    business logic lives in `aria`.
 2. **Dependencies point one way: `aria → domain`.** Aria may read/write domain
    objects (jobs, candidates, applications, interviews) to do its job. The
-   `domain` packages must NEVER import `com.olivia.aria`. If a domain event
+   `domain` packages must NEVER import `com.taportal.aria`. If a domain event
    should produce a chat message, a controller/webhook in `api` composes the
    two — the domain does not call Aria.
 3. **`api` depends on `aria`, never the reverse.** `ChatController` is the only
-   API entry point; the chat DTOs (`com.olivia.aria.ChatDtos`) belong to Aria,
+   API entry point; the chat DTOs (`com.taportal.aria.ChatDtos`) belong to Aria,
    not to the API layer.
 4. **The brain sits behind a seam.** `AssistantBrain` / `AnswerInterpreter`
    interfaces with scripted implementations (offline, deterministic, no key
@@ -39,10 +39,10 @@ it will then embed Aria the same way any other surface does.
 
 ```sh
 # Nothing outside aria/ may import aria except the api layer:
-grep -rl "com\.olivia\.aria" --include='*.java' src/main/java/com/olivia/domain && echo VIOLATION
+grep -rl "com\.taportal\.aria" --include='*.java' src/main/java/com/taportal/domain && echo VIOLATION
 
 # aria must not import the api layer:
-grep -rn "import com\.olivia\.api" src/main/java/com/olivia/aria && echo VIOLATION
+grep -rn "import com\.taportal\.api" src/main/java/com/taportal/aria && echo VIOLATION
 ```
 
 ## Map

@@ -1,4 +1,4 @@
-// Mirrors the backend DTOs (com.olivia.api.*). See docs/CONTRACT.md.
+// Mirrors the backend DTOs (com.taportal.api.*). See docs/CONTRACT.md.
 // IDs serialize as strings, money as number, dates as ISO strings.
 
 // ---- Jobs / requisitions ----
@@ -371,7 +371,7 @@ export interface AnalyticsSummary {
   funnel: FunnelStage[]
 }
 
-// ---- Olivia conversation engine ----
+// ---- Aria conversation engine ----
 
 export interface ChatMessage {
   id: string

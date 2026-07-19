@@ -86,7 +86,7 @@ const ROUTES: Record<string, string> = {
   admin: '/admin',
 }
 
-const STORAGE_KEY = 'olivia.sidebarCollapsed'
+const STORAGE_KEY = 'taportal.sidebarCollapsed'
 const readCollapsed = () => {
   try {
     return localStorage.getItem(STORAGE_KEY) === '1'
@@ -106,7 +106,7 @@ function Item({ to, Icon, label }: { to: string; Icon: IconC; label: string }) {
 
 /**
  * Brand cell. Renders a client logo image when present, falling back to the
- * "Olivia" wordmark + placeholder "O" mark. Drop files into /public:
+ * Wordmark + placeholder logo mark. Drop files into /public:
  *   - public/brand-logo.svg → full logo, shown when expanded
  *   - public/brand-mark.svg → symbol only, shown on the collapsed rail
  */

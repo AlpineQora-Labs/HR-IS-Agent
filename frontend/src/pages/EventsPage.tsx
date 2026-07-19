@@ -181,7 +181,7 @@ const EMPTY_DRAFT: Draft = {
 
 const STEPS = ['Basics', 'Details', 'Review']
 
-const RESPONSES_KEY = 'olivia.eventIntakeResponses'
+const RESPONSES_KEY = 'taportal.eventIntakeResponses'
 
 function readIntakeForm(): IntakeForm {
   try {

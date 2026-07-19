@@ -204,7 +204,7 @@ function Communication() {
 /** Configuration: workspace identity + which modules the console shows. */
 function Configuration() {
   const { toggleModule, isModuleOn } = useConfig()
-  const [workspace, setWorkspace] = usePersistentState('olivia.workspace', {
+  const [workspace, setWorkspace] = usePersistentState('taportal.workspace', {
     name: 'Bank of America Careers',
     careerSiteUrl: 'http://localhost:5173',
   })
@@ -280,7 +280,7 @@ function storedCount(key: string): number {
 // The intake form persists as { rows: [{ slots: [...] }] } (older: { fields }).
 function intakeFieldCount(): number {
   try {
-    const raw = localStorage.getItem('olivia.eventIntakeForm')
+    const raw = localStorage.getItem('taportal.eventIntakeForm')
     if (!raw) return 6 // default form ships with 6 fields
     const v = JSON.parse(raw)
     if (Array.isArray(v?.rows)) return v.rows.reduce((n: number, r: { slots?: unknown[] }) => n + (r.slots ?? []).filter(Boolean).length, 0)
@@ -294,8 +294,8 @@ function intakeFieldCount(): number {
 function AdminHub({ onOpen }: { onOpen: (t: Tab) => void }) {
   const { users, roles, isModuleOn } = useConfig()
   const admins = users.filter((u) => u.roleKey === 'admin').length
-  const surveys = storedCount('olivia.surveysV2') || storedCount('olivia.surveys')
-  const templates = storedCount('olivia.emailTemplates')
+  const surveys = storedCount('taportal.surveysV2') || storedCount('taportal.surveys')
+  const templates = storedCount('taportal.emailTemplates')
   const activeModules = MODULES.filter((m) => isModuleOn(m.key)).length
 
   const tiles: { key: Tab; glyph: string; title: string; blurb: string; stat: string }[] = [
