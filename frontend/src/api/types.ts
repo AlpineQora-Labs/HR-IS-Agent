@@ -168,9 +168,22 @@ export interface SchedulingOverview {
 // ---- Forms ----
 
 export interface FormDefinitionDto {
+  id: string
   purpose: string
   name: string
   schema: string
+  template: boolean
+  defaultForKind: boolean
+  updatedAt: string
+}
+
+/** Library listing row (schema omitted). */
+export interface FormMeta {
+  id: string
+  purpose: string
+  name: string
+  template: boolean
+  defaultForKind: boolean
   updatedAt: string
 }
 
@@ -336,6 +349,7 @@ export interface EventCreate {
   type: string
   location: string
   startsAt: string
+  intakeFormId?: string
 }
 
 // ---- Write payloads (recruiter actions) ----

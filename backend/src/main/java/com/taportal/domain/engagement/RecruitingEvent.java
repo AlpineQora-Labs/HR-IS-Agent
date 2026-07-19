@@ -53,4 +53,9 @@ public class RecruitingEvent {
     @Setter
     @Column(nullable = false)
     private int hires;
+
+    /** The intake form this event was created with (null = kind default). */
+    @Setter
+    @Column(name = "intake_form_id")
+    private UUID intakeFormId;
 }

@@ -39,6 +39,16 @@ public class FormDefinition {
     @Column(nullable = false, columnDefinition = "text")
     private String schema;
 
+    /** Reusable starting point ("Save as template") — never rendered directly. */
+    @Setter
+    @Column(name = "is_template", nullable = false)
+    private boolean template;
+
+    /** The one form per kind used where no explicit choice was made. */
+    @Setter
+    @Column(name = "is_default", nullable = false)
+    private boolean defaultForKind;
+
     @UpdateTimestamp
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;

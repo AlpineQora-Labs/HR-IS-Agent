@@ -140,7 +140,7 @@ public class CampusService {
      */
     @Transactional
     public RegistrationRow registerFromForm(UUID eventId, String answersJson) {
-        var definition = formDefinitions.findByPurpose("EVENT_REGISTRATION")
+        var definition = formDefinitions.findFirstByPurposeAndDefaultForKindTrueAndTemplateFalse("EVENT_REGISTRATION")
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "No registration form is configured"));
         String sanitized = formLogic.validateAndFilter(definition.getSchema(), answersJson);
 

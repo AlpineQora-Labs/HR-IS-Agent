@@ -92,6 +92,7 @@ public class EngagementService {
         e.setType(req.type() != null ? req.type() : "HIRING_EVENT");
         e.setLocation(req.location());
         e.setStartsAt(req.startsAt());
+        e.setIntakeFormId(req.intakeFormId());
         e.setRegistrations(0);
         e.setAttended(0);
         e.setHires(0);

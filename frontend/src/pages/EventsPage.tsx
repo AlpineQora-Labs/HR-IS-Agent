@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '@/state/store'
 import SlideOver from '@/components/SlideOver'
-import { useCreateEvent, useEvents, useEventRoster, useRegisterAttendee, useRegistrationTransition, useSchools, useFormDefinition, useFormResponses, useSubmitFormResponse } from '@/api/hooks'
+import { useCreateEvent, useEvents, useEventRoster, useRegisterAttendee, useRegistrationTransition, useSchools, useFormResponses, useSubmitFormResponse, useFormDefById, useFormsList } from '@/api/hooks'
 import { date } from '@/lib/format'
 import type { EventRow, EventRegistration } from '@/api/types'
 import { DISPLAY_TYPES, fieldVisible, INTAKE_KEY, defaultIntakeForm, flattenIntake, normalizeIntake, type IntakeField, type IntakeForm } from './admin/FormBuilder'
@@ -371,9 +371,21 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
   const [step, setStep] = useState(0)
   const [d, setD] = useState<Draft>(EMPTY_DRAFT)
   const set = (patch: Partial<Draft>) => setD((prev) => ({ ...prev, ...patch }))
-  // The admin-designed intake (Admin → Forms), served from the backend; the
-  // old localStorage copy is only a fallback for offline demos.
-  const { data: intakeDef } = useFormDefinition('EVENT_INTAKE')
+  // The recruiter picks WHICH intake form this event uses (form library);
+  // the kind's default form is preselected. localStorage remains only an
+  // offline-demo fallback.
+  const { data: formLibrary } = useFormsList()
+  const intakeForms = useMemo(
+    () => (formLibrary ?? []).filter((f) => f.purpose === 'EVENT_INTAKE' && !f.template),
+    [formLibrary],
+  )
+  const [intakeFormId, setIntakeFormId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!intakeFormId && intakeForms.length > 0) {
+      setIntakeFormId((intakeForms.find((f) => f.defaultForKind) ?? intakeForms[0]).id)
+    }
+  }, [intakeForms, intakeFormId])
+  const { data: intakeDef } = useFormDefById(intakeFormId ?? undefined)
   const intake = useMemo<IntakeForm>(() => {
     if (intakeDef) {
       try {
@@ -398,7 +410,7 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
   function submit() {
     const startsAt = new Date(`${d.day}T${d.time || '09:00'}:00`).toISOString()
     create.mutate(
-      { name: d.name.trim(), type: d.type, location: d.location.trim(), startsAt },
+      { name: d.name.trim(), type: d.type, location: d.location.trim(), startsAt, intakeFormId: intakeFormId ?? undefined },
       {
         onSuccess: (ev) => {
           const filled = intakeFields
@@ -406,7 +418,7 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
             .map((f) => ({ fieldId: f.id, label: f.label || 'Untitled', value: answerText(answers[f.id]) }))
             .filter((r) => r.value.trim() !== '')
           if (filled.length > 0) {
-            submitResponse.mutate({ purpose: 'EVENT_INTAKE', subjectType: 'EVENT', subjectId: ev.id, answers: JSON.stringify(filled) })
+            submitResponse.mutate({ purpose: 'EVENT_INTAKE', formId: intakeFormId ?? undefined, subjectType: 'EVENT', subjectId: ev.id, answers: JSON.stringify(filled) })
           }
           saveResponses(ev.id, intake, answers)
           toastMsg(`Event "${d.name.trim()}" created`)
@@ -473,7 +485,19 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
                 No custom intake fields are configured. Admins can design this step under Admin → Forms.
               </p>
             ) : (
-              intake.rows.map((row) => {
+              <>
+              {intakeForms.length > 1 && (
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5, color: 'var(--ink-4)', marginBottom: 4 }}>
+                  Intake form
+                  <select className="select" value={intakeFormId ?? ''}
+                    onChange={(ev2) => { setIntakeFormId(ev2.target.value); setAnswers({}) }}>
+                    {intakeForms.map((f) => (
+                      <option key={f.id} value={f.id}>{f.name}{f.defaultForKind ? ' ★' : ''}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {intake.rows.map((row) => {
                 const shown = row.slots.filter((f): f is IntakeField => f !== null && isVisible(f))
                 if (row.slots.some((f) => f !== null) && shown.length === 0) return null
                 return (
@@ -483,7 +507,8 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
                     ))}
                   </div>
                 )
-              })
+              })}
+              </>
             )}
           </div>
         )}

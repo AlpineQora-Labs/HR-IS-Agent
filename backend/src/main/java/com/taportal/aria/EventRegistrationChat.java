@@ -178,7 +178,7 @@ public class EventRegistrationChat {
 
     /** The first visible, answerable, still-unanswered question — rules decide. */
     private FormLogicService.Field nextUnanswered(State state) {
-        String schema = formDefinitions.findByPurpose("EVENT_REGISTRATION")
+        String schema = formDefinitions.findFirstByPurposeAndDefaultForKindTrueAndTemplateFalse("EVENT_REGISTRATION")
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "No registration form is configured"))
                 .getSchema();
         return formLogic.visibleAnswerableFields(schema, state.answers).stream()
@@ -255,7 +255,7 @@ public class EventRegistrationChat {
     }
 
     private String answersJson(State state) {
-        String schema = formDefinitions.findByPurpose("EVENT_REGISTRATION").orElseThrow().getSchema();
+        String schema = formDefinitions.findFirstByPurposeAndDefaultForKindTrueAndTemplateFalse("EVENT_REGISTRATION").orElseThrow().getSchema();
         var arr = objectMapper.createArrayNode();
         for (FormLogicService.Field f : formLogic.fields(schema)) {
             String v = state.answers.get(f.id());

@@ -30,6 +30,11 @@ public class FormResponse {
     @Column(name = "form_purpose", nullable = false)
     private String formPurpose;
 
+    /** The exact form (version) that produced these answers, when known. */
+    @Setter
+    @Column(name = "form_id")
+    private UUID formId;
+
     /** EVENT | REGISTRATION */
     @Setter
     @Column(name = "subject_type", nullable = false)

@@ -45,7 +45,8 @@ public final class EngagementDtos {
             String name,
             String type,
             String location,
-            OffsetDateTime startsAt) {}
+            OffsetDateTime startsAt,
+            UUID intakeFormId) {}
 
     public record SurveyRow(
             UUID id,

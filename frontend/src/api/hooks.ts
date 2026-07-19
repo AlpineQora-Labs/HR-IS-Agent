@@ -4,6 +4,7 @@ import { api } from './client'
 import type {
   SchedulingOverview,
   FormDefinitionDto,
+  FormMeta,
   FormResponseRow,
   School,
   EventRegistration,
@@ -219,10 +220,62 @@ export function useSaveFormDefinition() {
 export function useSubmitFormResponse() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ purpose, subjectType, subjectId, answers }: { purpose: string; subjectType: string; subjectId: string; answers: string }) =>
-      api.post(`/forms/${purpose}/responses`, { subjectType, subjectId, answers }),
+    mutationFn: ({ purpose, subjectType, subjectId, answers, formId }: { purpose: string; subjectType: string; subjectId: string; answers: string; formId?: string }) =>
+      api.post(`/forms/${purpose}/responses`, { subjectType, subjectId, answers, formId }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['form-responses'] }),
   })
+}
+
+// ---- Form library (many named forms per kind + templates) ----
+
+export function useFormsList() {
+  return useQuery({
+    queryKey: ['form-defs'],
+    queryFn: () => api.get<FormMeta[]>('/form-defs').then((r) => r.data),
+  })
+}
+
+export function useFormDefById(id: string | undefined) {
+  return useQuery({
+    enabled: !!id,
+    queryKey: ['form-def', id],
+    queryFn: () => api.get<FormDefinitionDto>(`/form-defs/${id}`).then((r) => r.data),
+  })
+}
+
+function useLibraryMutation<TArg>(fn: (arg: TArg) => Promise<unknown>) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['form-defs'] })
+      qc.invalidateQueries({ queryKey: ['form-def'] })
+      qc.invalidateQueries({ queryKey: ['form'] })
+    },
+  })
+}
+
+export function useCreateForm() {
+  return useLibraryMutation((input: { purpose: string; name: string; fromFormId?: string; template?: boolean }) =>
+    api.post<FormDefinitionDto>('/form-defs', input).then((r) => r.data))
+}
+
+export function useUpdateFormDef() {
+  return useLibraryMutation(({ id, name, schema }: { id: string; name: string; schema: string }) =>
+    api.put(`/form-defs/${id}`, { name, schema }))
+}
+
+export function useSaveAsTemplate() {
+  return useLibraryMutation(({ id, name }: { id: string; name: string }) =>
+    api.post(`/form-defs/${id}/save-as-template`, { name }))
+}
+
+export function useMakeDefaultForm() {
+  return useLibraryMutation((id: string) => api.post(`/form-defs/${id}/make-default`))
+}
+
+export function useDeleteForm() {
+  return useLibraryMutation((id: string) => api.delete(`/form-defs/${id}`))
 }
 
 export function useFormResponses(subjectType: string, subjectId: string | undefined) {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import ConfirmButton from '@/components/ConfirmButton'
-import { useFormDefinition, useSaveFormDefinition } from '@/api/hooks'
+import { useCreateForm, useDeleteForm, useFormDefById, useFormsList, useMakeDefaultForm, useSaveAsTemplate, useUpdateFormDef } from '@/api/hooks'
+import type { FormMeta } from '@/api/types'
 import { uid } from './builderStore'
 import { IntakeInput, answerText, type Answer } from './IntakeInput'
 
@@ -609,16 +610,32 @@ function LivePreview({ form }: { form: IntakeForm }) {
 }
 
 // ── Main builder ────────────────────────────────────────────────────────────
-const PURPOSES = [
+const KINDS = [
   { key: 'EVENT_INTAKE', label: 'Event intake', hint: 'Used by Campus → New event', fallback: defaultIntakeForm },
   { key: 'EVENT_REGISTRATION', label: 'Student registration', hint: 'What students fill in (and Aria asks) to register', fallback: defaultRegistrationForm },
 ] as const
 
 export default function FormBuilder() {
-  const [purpose, setPurpose] = useState<(typeof PURPOSES)[number]['key']>('EVENT_INTAKE')
-  const meta = PURPOSES.find((p) => p.key === purpose)!
-  const { data: serverForm, isLoading } = useFormDefinition(purpose)
-  const saveForm = useSaveFormDefinition()
+  // The form LIBRARY: many named forms per kind + reusable templates. The
+  // active form is id-addressed; kind determines fallbacks and hints.
+  const { data: library } = useFormsList()
+  const [activeFormId, setActiveFormId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!activeFormId && library && library.length > 0) {
+      const preferred =
+        library.find((f) => f.purpose === 'EVENT_INTAKE' && f.defaultForKind && !f.template) ??
+        library.find((f) => !f.template) ?? library[0]
+      setActiveFormId(preferred.id)
+    }
+  }, [library, activeFormId])
+
+  const { data: serverForm, isLoading } = useFormDefById(activeFormId ?? undefined)
+  const updateForm = useUpdateFormDef()
+  const createForm = useCreateForm()
+  const saveTemplate = useSaveAsTemplate()
+  const makeDefault = useMakeDefaultForm()
+  const deleteForm = useDeleteForm()
+  const meta = KINDS.find((k) => k.key === serverForm?.purpose) ?? KINDS[0]
   const [draft, setForm] = useState<IntakeForm | null>(null)
   const [dirty, setDirty] = useState(false)
   const [mode, setMode] = useState<'builder' | 'preview' | 'config'>('builder')
@@ -637,7 +654,7 @@ export default function FormBuilder() {
       setSelectedId(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverForm?.purpose, serverForm?.updatedAt])
+  }, [serverForm?.id, serverForm?.updatedAt])
 
   // Warn before the tab closes with unsaved edits.
   useEffect(() => {
@@ -669,13 +686,27 @@ export default function FormBuilder() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dirty, selectedId, draft, purpose])
+  }, [dirty, selectedId, draft, activeFormId])
 
-  const save = () =>
-    saveForm.mutate(
-      { purpose, name: meta.label, schema: JSON.stringify(form) },
+  const save = () => {
+    if (!activeFormId || !serverForm) return
+    updateForm.mutate(
+      { id: activeFormId, name: serverForm.name, schema: JSON.stringify(form) },
       { onSuccess: () => setDirty(false) },
     )
+  }
+
+  const switchForm = (id: string) => {
+    if (id === activeFormId) return
+    if (dirty && !window.confirm('Discard unsaved changes to this form?')) return
+    setActiveFormId(id)
+  }
+
+  // Action panel: create a new form, or snapshot the current one as a template.
+  const [panel, setPanel] = useState<null | 'new' | 'template'>(null)
+  const [panelName, setPanelName] = useState('')
+  const [panelKind, setPanelKind] = useState<(typeof KINDS)[number]['key']>('EVENT_INTAKE')
+  const [panelSource, setPanelSource] = useState<string>('blank')
 
   function patchRows(fn: (rows: IntakeRow[]) => IntakeRow[]) {
     setForm((prev) => {
@@ -755,18 +786,29 @@ export default function FormBuilder() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', flexWrap: 'wrap' }}>
           <select
             className="select"
-            style={{ width: 220 }}
-            value={purpose}
-            onChange={(e) => {
-              if (dirty && !window.confirm('Discard unsaved changes to this form?')) return
-              setPurpose(e.target.value as typeof purpose)
-            }}
+            style={{ width: 250 }}
+            value={activeFormId ?? ''}
+            onChange={(e) => switchForm(e.target.value)}
           >
-            {PURPOSES.map((p) => (
-              <option key={p.key} value={p.key}>{p.label}</option>
-            ))}
+            {KINDS.map((k) => {
+              const forms = (library ?? []).filter((f) => f.purpose === k.key && !f.template)
+              return forms.length === 0 ? null : (
+                <optgroup key={k.key} label={k.label}>
+                  {forms.map((f: FormMeta) => (
+                    <option key={f.id} value={f.id}>{f.name}{f.defaultForKind ? ' ★' : ''}</option>
+                  ))}
+                </optgroup>
+              )
+            })}
+            {(library ?? []).some((f) => f.template) && (
+              <optgroup label="Templates">
+                {(library ?? []).filter((f) => f.template).map((f: FormMeta) => (
+                  <option key={f.id} value={f.id}>🏷 {f.name}</option>
+                ))}
+              </optgroup>
+            )}
           </select>
-          <span className="eyebrow">{meta.hint}</span>
+          <span className="eyebrow">{serverForm?.template ? `Template · ${meta.label}` : meta.hint}</span>
           <div style={{ flex: 1 }} />
           <span className="eyebrow">{fieldCount} fields · {form.rows.length} rows</span>
           {isLoading ? (
@@ -776,11 +818,88 @@ export default function FormBuilder() {
           ) : (
             <span className="badge badge--ok">Saved</span>
           )}
-          <button className="btn btn--primary btn--sm" disabled={!dirty || saveForm.isPending} onClick={save}>
-            {saveForm.isPending ? 'Saving…' : 'Save'}
+          <button className="btn btn--primary btn--sm" disabled={!dirty || updateForm.isPending} onClick={save}>
+            {updateForm.isPending ? 'Saving…' : 'Save'}
           </button>
           <ConfirmButton label="Reset to defaults" confirmLabel="Replace all fields?" onConfirm={() => { setForm(meta.fallback()); setDirty(true) }} />
         </div>
+
+        {/* Library actions: create forms, snapshot templates, manage defaults. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px 12px', flexWrap: 'wrap' }}>
+          <button className="btn btn--outline btn--sm" onClick={() => { setPanel('new'); setPanelName(''); setPanelKind(meta.key); setPanelSource(activeFormId ?? 'blank') }}>
+            + New form
+          </button>
+          <button className="btn btn--outline btn--sm" disabled={!serverForm}
+            onClick={() => { setPanel('template'); setPanelName(`${serverForm?.name ?? 'Form'} template`) }}>
+            Save as template
+          </button>
+          {serverForm && !serverForm.template && !serverForm.defaultForKind && (
+            <button className="btn btn--outline btn--sm" disabled={makeDefault.isPending}
+              onClick={() => activeFormId && makeDefault.mutate(activeFormId)}>
+              Make default
+            </button>
+          )}
+          {serverForm?.defaultForKind && <span className="badge badge--ok">★ Default for {meta.label}</span>}
+          <span style={{ flex: 1 }} />
+          {serverForm && !serverForm.defaultForKind && (
+            <button className="btn btn--outline btn--sm" style={{ color: 'var(--bofa-red, #c41230)' }} disabled={deleteForm.isPending}
+              onClick={() => {
+                if (!activeFormId) return
+                if (!window.confirm(`Delete "${serverForm.name}"? This cannot be undone.`)) return
+                deleteForm.mutate(activeFormId, { onSuccess: () => setActiveFormId(null) })
+              }}>
+              Delete
+            </button>
+          )}
+        </div>
+
+        {panel && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '0 14px 12px', padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 'var(--ra-2)', background: 'var(--app-sunken)' }}>
+            {panel === 'new' ? (
+              <>
+                <span className="eyebrow">New form</span>
+                <input className="input" style={{ width: 200, fontSize: 13 }} placeholder="Form name" value={panelName}
+                  onChange={(e) => setPanelName(e.target.value)} />
+                <select className="select" style={{ width: 180, fontSize: 13 }} value={panelKind}
+                  onChange={(e) => { setPanelKind(e.target.value as typeof panelKind); setPanelSource('blank') }}>
+                  {KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+                </select>
+                <select className="select" style={{ width: 220, fontSize: 13 }} value={panelSource}
+                  onChange={(e) => setPanelSource(e.target.value)}>
+                  <option value="blank">Start blank</option>
+                  {(library ?? []).filter((f) => f.purpose === panelKind).map((f) => (
+                    <option key={f.id} value={f.id}>Copy of: {f.template ? '🏷 ' : ''}{f.name}</option>
+                  ))}
+                </select>
+                <button className="btn btn--primary btn--sm" disabled={!panelName.trim() || createForm.isPending}
+                  onClick={() =>
+                    createForm.mutate(
+                      { purpose: panelKind, name: panelName.trim(), fromFormId: panelSource === 'blank' ? undefined : panelSource },
+                      { onSuccess: (d) => { setActiveFormId((d as { id: string }).id); setPanel(null) } },
+                    )
+                  }>
+                  {createForm.isPending ? 'Creating…' : 'Create'}
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="eyebrow">Save as template</span>
+                <input className="input" style={{ width: 260, fontSize: 13 }} placeholder="Template name" value={panelName}
+                  onChange={(e) => setPanelName(e.target.value)} />
+                <button className="btn btn--primary btn--sm" disabled={!panelName.trim() || saveTemplate.isPending}
+                  onClick={() =>
+                    activeFormId && saveTemplate.mutate(
+                      { id: activeFormId, name: panelName.trim() },
+                      { onSuccess: () => setPanel(null) },
+                    )
+                  }>
+                  {saveTemplate.isPending ? 'Saving…' : 'Save template'}
+                </button>
+              </>
+            )}
+            <button className="btn btn--ghost btn--sm" onClick={() => setPanel(null)}>Cancel</button>
+          </div>
+        )}
       </div>
 
       <div className="tabs" style={{ marginBottom: 2 }}>
@@ -884,7 +1003,7 @@ export default function FormBuilder() {
         <div>
           {/* System fields — locked; they describe the EVENT record itself, so
               they only apply to the intake form. */}
-          {purpose === 'EVENT_INTAKE' && (
+          {meta.key === 'EVENT_INTAKE' && (
           <div className="card" style={{ marginBottom: 12, background: 'var(--app-sunken)' }}>
             <div className="card__body" style={{ padding: '14px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
