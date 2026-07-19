@@ -10,6 +10,7 @@ import com.taportal.domain.candidate.Candidate;
 import com.taportal.domain.candidate.CandidateRepository;
 import com.taportal.domain.interview.Interview;
 import com.taportal.domain.interview.InterviewRepository;
+import com.taportal.domain.interview.InterviewService;
 import com.taportal.domain.interview.InterviewSlot;
 import com.taportal.domain.interview.InterviewSlotRepository;
 import com.taportal.domain.job.Job;
@@ -20,6 +21,8 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -55,6 +58,7 @@ public class ConversationEngine {
     private final JobRepository jobs;
     private final KnockoutQuestionRepository knockoutQuestions;
     private final InterviewSlotRepository slots;
+    private final InterviewService interviewService;
     private final InterviewRepository interviews;
 
     public ConversationEngine(
@@ -69,6 +73,7 @@ public class ConversationEngine {
             JobRepository jobs,
             KnockoutQuestionRepository knockoutQuestions,
             InterviewSlotRepository slots,
+            InterviewService interviewService,
             InterviewRepository interviews) {
         this.brain = brain;
         this.interpreter = interpreter;
@@ -81,6 +86,7 @@ public class ConversationEngine {
         this.jobs = jobs;
         this.knockoutQuestions = knockoutQuestions;
         this.slots = slots;
+        this.interviewService = interviewService;
         this.interviews = interviews;
     }
 
@@ -91,7 +97,11 @@ public class ConversationEngine {
         public String email;
         public String phone;
         public int knockoutIndex; // index into the ordered knockout questions
+        public UUID interviewId;  // set when calendar-driven self-scheduling is in play
     }
+
+    private static final Pattern RESCHEDULE_INTENT = Pattern.compile(
+            "(?i)(reschedul|can'?t make|cannot make|change (the )?time|move (the )?interview|different time|new time)");
 
     /** Result of advancing the engine: the latest Aria messages + quick-reply options. */
     public record Turn(List<Message> messages, List<String> options) {}
@@ -122,6 +132,18 @@ public class ConversationEngine {
         // Record the candidate's message first.
         recordCandidate(conversation, state.step, text);
 
+        // If the interview went back to awaiting-candidate (recruiter reschedule,
+        // no-show recovery), reopen the scheduling step no matter where we ended.
+        if (STEP_DONE.equals(state.step) && state.interviewId != null) {
+            interviews.findById(state.interviewId)
+                    .filter(i -> "SLOTS_PROPOSED".equals(i.getStatus()))
+                    .ifPresent(i -> {
+                        state.step = STEP_OFFER_SCHEDULE;
+                        conversation.setStatus("OPEN");
+                        conversations.save(conversation);
+                    });
+        }
+
         List<Message> emitted = new ArrayList<>();
         switch (state.step) {
             case STEP_COLLECT_NAME -> {
@@ -148,8 +170,14 @@ public class ConversationEngine {
             }
             case STEP_KNOCKOUT -> handleKnockoutAnswer(conversation, state, job, text, emitted);
             case STEP_OFFER_SCHEDULE -> handleScheduleChoice(conversation, state, job, text, emitted);
-            default -> emitted.add(record(conversation, state.step,
-                    "This conversation has already wrapped up. Thanks again!"));
+            default -> {
+                if (state.interviewId != null && RESCHEDULE_INTENT.matcher(text).find()) {
+                    startReschedule(conversation, state, emitted);
+                } else {
+                    emitted.add(record(conversation, state.step,
+                            "This conversation has already wrapped up. Thanks again!"));
+                }
+            }
         }
 
         persist(conversation, state);
@@ -213,7 +241,19 @@ public class ConversationEngine {
     }
 
     private void offerSchedule(Conversation conversation, State state, Job job, List<Message> emitted) {
-        List<InterviewSlot> open = openSlots(job);
+        // Calendar-driven first: propose times computed from the hiring team's
+        // real calendars. Falls back to the legacy per-job slot pool.
+        List<InterviewSlot> open = List.of();
+        if (conversation.getApplicationId() != null) {
+            var interview = interviewService.beginSelfSchedule(
+                    conversation.getApplicationId(), "AI_PHONE_SCREEN", 30);
+            state.interviewId = interview.getId();
+            open = proposedFor(interview.getId());
+        }
+        if (open.isEmpty()) {
+            state.interviewId = null;
+            open = openSlots(job);
+        }
         state.step = STEP_OFFER_SCHEDULE;
         emitted.add(record(conversation, STEP_OFFER_SCHEDULE, brain.schedulePrompt(open)));
         if (open.isEmpty()) {
@@ -224,9 +264,20 @@ public class ConversationEngine {
         }
     }
 
+    /** Candidate asked to move a booked interview: free it and re-offer times. */
+    private void startReschedule(Conversation conversation, State state, List<Message> emitted) {
+        interviewService.reschedule(state.interviewId);
+        List<InterviewSlot> fresh = proposedFor(state.interviewId);
+        state.step = STEP_OFFER_SCHEDULE;
+        conversation.setStatus("OPEN");
+        conversations.save(conversation);
+        emitted.add(record(conversation, STEP_OFFER_SCHEDULE,
+                "No problem — let's find a new time. " + brain.schedulePrompt(fresh)));
+    }
+
     private void handleScheduleChoice(
             Conversation conversation, State state, Job job, String text, List<Message> emitted) {
-        List<InterviewSlot> open = openSlots(job);
+        List<InterviewSlot> open = state.interviewId != null ? proposedFor(state.interviewId) : openSlots(job);
         List<String> labels = new ArrayList<>();
         for (InterviewSlot slot : open) {
             labels.add(ScriptedBrain.formatSlot(slot));
@@ -240,7 +291,12 @@ public class ConversationEngine {
             return;
         }
 
-        // Book the slot, create the interview, advance the application.
+        if (state.interviewId != null) {
+            bookProposedSlot(conversation, state, job, chosen, emitted);
+            return;
+        }
+
+        // Legacy pool path: book the slot, create the interview, advance the application.
         chosen.setBooked(true);
         slots.save(chosen);
 
@@ -261,6 +317,36 @@ public class ConversationEngine {
         state.step = STEP_DONE;
         conversation.setStatus("COMPLETED");
         conversations.save(conversation);
+    }
+
+    /** Calendar-driven booking: conflict-guarded, writes invites, sets the Teams link. */
+    private void bookProposedSlot(
+            Conversation conversation, State state, Job job, InterviewSlot chosen, List<Message> emitted) {
+        try {
+            Interview interview = interviewService.selectProposedSlot(chosen.getId());
+            StringBuilder confirm = new StringBuilder(brain.confirmation(job, interview));
+            if (interview.getInterviewers() != null && !interview.getInterviewers().isBlank()) {
+                confirm.append("\n\nYou'll be meeting: ").append(interview.getInterviewers()).append(".");
+            }
+            if (interview.getMeetingLink() != null) {
+                confirm.append("\nJoin on Teams: ").append(interview.getMeetingLink());
+            }
+            confirm.append("\nNeed to change it later? Just tell me \"reschedule\".");
+            emitted.add(record(conversation, STEP_DONE, confirm.toString()));
+            state.step = STEP_DONE;
+            conversation.setStatus("COMPLETED");
+            conversations.save(conversation);
+        } catch (ResponseStatusException ex) {
+            // That time was taken while the candidate decided — re-offer fresh options.
+            interviewService.autoPropose(state.interviewId);
+            List<InterviewSlot> fresh = proposedFor(state.interviewId);
+            emitted.add(record(conversation, STEP_OFFER_SCHEDULE,
+                    "Ah — that time was just taken. " + brain.schedulePrompt(fresh)));
+        }
+    }
+
+    private List<InterviewSlot> proposedFor(UUID interviewId) {
+        return slots.findByInterviewIdAndStatusOrderByStartsAt(interviewId, "PROPOSED");
     }
 
     private void decline(Conversation conversation, State state, Job job, List<Message> emitted) {
@@ -398,8 +484,9 @@ public class ConversationEngine {
             }
         }
         if (STEP_OFFER_SCHEDULE.equals(state.step)) {
+            List<InterviewSlot> open = state.interviewId != null ? proposedFor(state.interviewId) : openSlots(job);
             List<String> opts = new ArrayList<>();
-            for (InterviewSlot slot : openSlots(job)) {
+            for (InterviewSlot slot : open) {
                 opts.add(ScriptedBrain.formatSlot(slot));
             }
             return opts;

@@ -142,6 +142,44 @@ export function useSlots(jobId: string | undefined) {
   })
 }
 
+// Calendar-driven scheduling actions (ported from the VMS engine). All of them
+// change interview + slot state, so invalidate both families broadly.
+function useSchedulingMutation<TArg>(fn: (arg: TArg) => Promise<unknown>) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['interviews'] })
+      qc.invalidateQueries({ queryKey: ['slots'] })
+    },
+  })
+}
+
+/** Recruiter one-click: offer times computed from the hiring team's calendars. */
+export function useProposeTimes() {
+  return useSchedulingMutation((interviewId: string) => api.post(`/interviews/${interviewId}/propose`))
+}
+
+/** Free the booked time and immediately re-offer fresh options. */
+export function useRescheduleInterview() {
+  return useSchedulingMutation((interviewId: string) => api.post(`/interviews/${interviewId}/reschedule`))
+}
+
+/** COMPLETED | CANCELED | NO_SHOW. */
+export function useTransitionInterview() {
+  return useSchedulingMutation(({ interviewId, status }: { interviewId: string; status: string }) =>
+    api.post(`/interviews/${interviewId}/transition`, { status }))
+}
+
+/** The options currently awaiting the candidate for an interview. */
+export function useProposedSlots(interviewId: string | undefined) {
+  return useQuery({
+    enabled: !!interviewId,
+    queryKey: ['proposed-slots', interviewId],
+    queryFn: () => api.get<Slot[]>(`/interviews/${interviewId}/proposed-slots`).then((r) => r.data),
+  })
+}
+
 // Pipelines for many jobs at once (jobs×stages matrix). /pipeline is per-job,
 // so fan out one query per job and key the result by jobId.
 export function useAllPipelines(jobIds: string[]) {

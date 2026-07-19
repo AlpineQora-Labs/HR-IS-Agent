@@ -47,10 +47,15 @@ public class Interview {
     @Column(name = "duration_min", nullable = false)
     private int durationMin;
 
-    /** SCHEDULED | COMPLETED | NO_SHOW | CANCELED */
+    /** REQUESTED | SLOTS_PROPOSED (awaiting candidate) | SCHEDULED | COMPLETED | NO_SHOW | CANCELED */
     @Setter
     @Column(nullable = false)
     private String status;
+
+    /** Teams/video link, set when the interview is booked. */
+    @Setter
+    @Column(name = "meeting_link")
+    private String meetingLink;
 
     /** Comma list of interviewer names. */
     @Setter

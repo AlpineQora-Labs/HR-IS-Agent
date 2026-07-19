@@ -44,4 +44,36 @@ public class InterviewController {
     public List<SlotResponse> slots(@RequestParam UUID jobId) {
         return interviewService.openSlots(jobId);
     }
+
+    // ---- Calendar-driven self-scheduling (ported from the VMS engine) ----
+
+    /** Recruiter one-click: compute options from the hiring team's calendars and offer them. */
+    @PostMapping("/v1/interviews/{id}/propose")
+    public List<SlotResponse> propose(@PathVariable UUID id) {
+        return interviewService.autoPropose(id);
+    }
+
+    /** The options currently awaiting the candidate. */
+    @GetMapping("/v1/interviews/{id}/proposed-slots")
+    public List<SlotResponse> proposedSlots(@PathVariable UUID id) {
+        return interviewService.proposedSlots(id);
+    }
+
+    /** Candidate (or Aria on their behalf) books a proposed time. 409 if just taken. */
+    @PostMapping("/v1/interview-slots/{id}/select")
+    public InterviewResponse select(@PathVariable UUID id) {
+        return InterviewService.toResponse(interviewService.selectProposedSlot(id));
+    }
+
+    /** Free the time and immediately re-offer fresh calendar options. */
+    @PostMapping("/v1/interviews/{id}/reschedule")
+    public List<SlotResponse> reschedule(@PathVariable UUID id) {
+        return interviewService.reschedule(id);
+    }
+
+    /** COMPLETED | CANCELED | NO_SHOW (cancel/no-show free the calendars). */
+    @PostMapping("/v1/interviews/{id}/transition")
+    public InterviewResponse transition(@PathVariable UUID id, @Valid @RequestBody InterviewDtos.TransitionRequest request) {
+        return interviewService.transition(id, request.status());
+    }
 }

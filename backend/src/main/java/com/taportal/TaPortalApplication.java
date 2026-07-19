@@ -2,6 +2,7 @@ package com.taportal;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * TA Portal — a conversational, best-in-class talent-acquisition platform (POC).
@@ -12,6 +13,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * &amp; assessments (HireVue), and engagement / copilot / voice (Sense).
  */
 @SpringBootApplication
+@EnableScheduling
 public class TaPortalApplication {
 
     public static void main(String[] args) {

@@ -13,25 +13,34 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-/** A self-scheduling interview slot offered for a job (Paradox scheduling). */
+/**
+ * A busy block on a recruiter/interviewer's calendar. Internal stand-in for
+ * Microsoft Graph free/busy — swap for real calendar sync at delivery. Interview
+ * bookings write one INTERVIEW event per participant, so invites double as
+ * availability blockers for every other candidate being scheduled.
+ */
 @Entity
-@Table(name = "interview_slot")
+@Table(name = "calendar_event")
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
-public class InterviewSlot {
+public class CalendarEvent {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Setter
-    @Column(name = "job_id")
-    private UUID jobId;
+    @Column(name = "user_id", nullable = false)
+    private UUID userId;
 
     @Setter
-    @Column(name = "interviewer_id")
-    private UUID interviewerId;
+    @Column(name = "interview_id")
+    private UUID interviewId;
+
+    @Setter
+    @Column
+    private String title;
 
     @Setter
     @Column(name = "starts_at", nullable = false)
@@ -41,17 +50,8 @@ public class InterviewSlot {
     @Column(name = "ends_at", nullable = false)
     private OffsetDateTime endsAt;
 
+    /** BUSY | INTERVIEW */
     @Setter
     @Column(nullable = false)
-    private boolean booked;
-
-    /** Set when this slot was proposed for a specific interview (calendar-driven flow). */
-    @Setter
-    @Column(name = "interview_id")
-    private UUID interviewId;
-
-    /** OPEN (legacy per-job pool) | PROPOSED | SELECTED | EXPIRED */
-    @Setter
-    @Column(nullable = false)
-    private String status = "OPEN";
+    private String kind = "BUSY";
 }

@@ -21,7 +21,8 @@ public final class InterviewDtos {
             List<String> interviewers,
             Integer score,
             String recommendation,
-            String summary) {
+            String summary,
+            String meetingLink) {
     }
 
     /**
@@ -35,7 +36,9 @@ public final class InterviewDtos {
             String interviewerName,
             OffsetDateTime startsAt,
             OffsetDateTime endsAt,
-            boolean booked) {
+            boolean booked,
+            UUID interviewId,
+            String status) {
     }
 
     /** Create an interview for an application. */
@@ -45,6 +48,9 @@ public final class InterviewDtos {
             Integer durationMin,
             String interviewers) {
     }
+
+    /** Move an interview to a terminal state. */
+    public record TransitionRequest(@NotNull String status) {}
 
     /** Schedule an interview onto a slot. */
     public record ScheduleInterviewRequest(

@@ -4,6 +4,7 @@ import com.taportal.domain.interview.Interview;
 import com.taportal.domain.interview.InterviewSlot;
 import com.taportal.domain.job.Job;
 import com.taportal.domain.job.KnockoutQuestion;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
@@ -15,6 +16,8 @@ import java.util.Locale;
  */
 public class ScriptedBrain implements AssistantBrain {
 
+    /** All candidate-facing times are rendered in ET, whatever offset the DB returns. */
+    private static final ZoneId ZONE = ZoneId.of("America/New_York");
     private static final DateTimeFormatter SLOT_FMT =
             DateTimeFormatter.ofPattern("EEE, MMM d 'at' h:mm a", Locale.ENGLISH);
 
@@ -87,7 +90,7 @@ public class ScriptedBrain implements AssistantBrain {
     @Override
     public String confirmation(Job job, Interview interview) {
         String when = interview != null && interview.getScheduledAt() != null
-                ? interview.getScheduledAt().format(SLOT_FMT)
+                ? interview.getScheduledAt().atZoneSameInstant(ZONE).format(SLOT_FMT) + " ET"
                 : "your selected time";
         return "You're all set! ✅ I've booked your phone screen for " + when + ". "
                 + "You'll get a confirmation with the details shortly. "
@@ -96,7 +99,7 @@ public class ScriptedBrain implements AssistantBrain {
 
     /** Shared so the engine can render slot quick-reply options identically. */
     static String formatSlot(InterviewSlot slot) {
-        return slot.getStartsAt().format(SLOT_FMT);
+        return slot.getStartsAt().atZoneSameInstant(ZONE).format(SLOT_FMT) + " ET";
     }
 
     private static String firstName(String text) {

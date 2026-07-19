@@ -9,4 +9,8 @@ public interface InterviewSlotRepository extends JpaRepository<InterviewSlot, UU
     List<InterviewSlot> findByJobIdAndBookedFalse(UUID jobId);
 
     List<InterviewSlot> findByJobId(UUID jobId);
+
+    List<InterviewSlot> findByInterviewIdAndStatusOrderByStartsAt(UUID interviewId, String status);
+
+    List<InterviewSlot> findByInterviewId(UUID interviewId);
 }

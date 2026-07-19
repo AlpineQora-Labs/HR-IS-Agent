@@ -120,6 +120,7 @@ export interface Interview {
   score: number
   recommendation: string
   summary: string
+  meetingLink: string | null
 }
 
 export interface Slot {
@@ -130,6 +131,8 @@ export interface Slot {
   startsAt: string
   endsAt: string
   booked: boolean
+  interviewId: string | null
+  status: string
 }
 
 // ---- Assessments ----
