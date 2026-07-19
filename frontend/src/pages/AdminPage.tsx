@@ -359,7 +359,6 @@ export default function AdminPage() {
   const tab: Tab | null =
     rawTab === 'users' || rawTab === 'survey' || rawTab === 'comms' || rawTab === 'forms' || rawTab === 'config' ? rawTab : null
   const openTab = (t: Tab) => setParams({ tab: t })
-  const goHub = () => setParams({})
 
   const active = TABS.find((t) => t.key === tab)
 
@@ -380,17 +379,7 @@ export default function AdminPage() {
         <AdminHub onOpen={openTab} />
       ) : (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-            <button className="btn btn--ghost btn--sm" onClick={goHub}>← All Admin</button>
-            <div className="tabs" style={{ marginBottom: 0 }}>
-              {TABS.map((t) => (
-                <button key={t.key} className="tab" aria-selected={tab === t.key} onClick={() => openTab(t.key)} title={t.blurb}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
+          {/* Section switching lives in the left rail (contextual nav), not in-page tabs. */}
           {tab === 'users' && <UsersAndAccess />}
           {tab === 'survey' && <SurveyStudio />}
           {tab === 'comms' && <Communication />}

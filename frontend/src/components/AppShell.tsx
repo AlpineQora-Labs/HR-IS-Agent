@@ -1,5 +1,5 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import CommandPalette from '@/components/CommandPalette'
 import { useStore } from '@/state/store'
 import { MODULES, useConfig } from '@/state/config'
@@ -103,6 +103,42 @@ const GROUP_PILL_LABELS: Record<string, string> = {
   'Talent Intelligence': 'Talent',
   'Engagement': 'Engagement',
   'Platform': 'Platform',
+}
+
+/* Admin's rail shows its sections (the page has no in-page tabs). */
+const ADMIN_SECTIONS: { tab: string | null; label: string; icon: string }[] = [
+  { tab: null, label: 'Overview', icon: 'admin' },
+  { tab: 'users', label: 'Users & Access', icon: 'candidates' },
+  { tab: 'survey', label: 'Survey', icon: 'surveys' },
+  { tab: 'comms', label: 'Communication', icon: 'campaigns' },
+  { tab: 'forms', label: 'Forms', icon: 'offers' },
+  { tab: 'config', label: 'Configuration', icon: 'integrations' },
+]
+
+function AdminRailNav() {
+  const location = useLocation()
+  const cur = new URLSearchParams(location.search).get('tab')
+  return (
+    <nav className="app__side">
+      <div className="nav-group">Admin</div>
+      {ADMIN_SECTIONS.map(({ tab, label, icon }) => {
+        const Icon = ICONS[icon]
+        const active = tab === null ? !cur : cur === tab
+        return (
+          <Link
+            key={label}
+            to={tab ? `/admin?tab=${tab}` : '/admin'}
+            className="nav-item"
+            aria-current={active ? 'page' : undefined}
+            title={label}
+          >
+            <Icon className="ic" />
+            <span className="nav-label">{label}</span>
+          </Link>
+        )
+      })}
+    </nav>
+  )
 }
 
 /* The contextual rail: only the ACTIVE group's modules, labeled. Short by
@@ -261,7 +297,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Contextual rail: just the active group's modules. */}
       <div className="app__rail">
-        <RailNav group={activeGroup.group} keys={activeGroup.keys} />
+        {activeGroup.group === 'Admin' ? (
+          <AdminRailNav />
+        ) : (
+          <RailNav group={activeGroup.group} keys={activeGroup.keys} />
+        )}
         <button
           className="app__collapse-handle"
           onClick={toggle}
