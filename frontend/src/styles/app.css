@@ -298,13 +298,50 @@ button.card:hover {
    card — matching the floating SlideOver drawers.
    Track = 262px (250 card + 12 gutter); collapsed = 78px (66 + 12). */
 .app {
-  grid-template-areas: "rail top" "rail main";
-  grid-template-columns: 262px 1fr;
+  grid-template-areas: "top top" "rail main";
+  grid-template-columns: 232px 1fr;
 }
-.app__rail .app__brand {
-  min-height: 60px;
+.app__topbrand {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
+  margin-right: 20px;
+}
+.app__topbrand .wordmark {
+  color: var(--ink-0);
+}
+.app__topbrand .wordmark small {
+  display: block;
+  color: var(--ink-4);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+/* Group pills — the primary navigation (Quixotic pattern). */
+.topnav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.topnav__pill {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+  padding: 7px 14px;
+  border-radius: 999px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.topnav__pill:hover {
+  background: var(--app-sunken);
+  color: var(--ink-1);
+}
+.topnav__pill--active {
+  background: var(--bofa-navy);
+  color: #fff;
 }
 .app--collapsed {
   grid-template-columns: 78px 1fr;

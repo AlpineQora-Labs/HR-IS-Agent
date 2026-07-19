@@ -1,5 +1,5 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import CommandPalette from '@/components/CommandPalette'
 import { useStore } from '@/state/store'
 import { MODULES, useConfig } from '@/state/config'
@@ -13,8 +13,6 @@ import {
   IconCampaigns,
   IconCandidates,
   IconCheck,
-  IconChevronLeft,
-  IconChevronRight,
   IconCompliance,
   IconCopilot,
   IconCrm,
@@ -86,38 +84,25 @@ const ROUTES: Record<string, string> = {
   admin: '/admin',
 }
 
-const STORAGE_KEY = 'taportal.sidebarCollapsed'
-const readCollapsed = () => {
-  try {
-    return localStorage.getItem(STORAGE_KEY) === '1'
-  } catch {
-    return false
-  }
+/* Short display names for the top-band group pills. */
+const GROUP_PILL_LABELS: Record<string, string> = {
+  'Recruiting': 'Recruiting',
+  'Interview': 'Interviews',
+  'Offer & Hire': 'Hire',
+  'Talent Intelligence': 'Talent',
+  'Engagement': 'Engagement',
+  'Platform': 'Platform',
 }
 
-function RailNav({ groups }: { groups: { group: string; keys: string[] }[] }) {
-  // Admin is pinned to the card's bottom edge, outside the scrolling list.
-  const scrollGroups = groups
-    .map((g) => ({ ...g, keys: g.keys.filter((k) => k !== 'admin') }))
-    .filter((g) => g.keys.length > 0)
-  const hasAdmin = groups.some((g) => g.keys.includes('admin'))
+/* The contextual rail: only the ACTIVE group's modules, labeled. Short by
+   design — no scrolling, no collapse. */
+function RailNav({ group, keys }: { group: string; keys: string[] }) {
   return (
     <nav className="app__side">
-      <div className="app__side-scroll">
-        {scrollGroups.map((g) => (
-          <div key={g.group}>
-            <div className="nav-group">{g.group}</div>
-            {g.keys.map((k) => (
-              <Item key={k} to={ROUTES[k]} Icon={ICONS[k]} label={MODULES.find((m) => m.key === k)!.label} />
-            ))}
-          </div>
-        ))}
-      </div>
-      {hasAdmin && (
-        <div className="app__side-pin">
-          <Item to={ROUTES.admin} Icon={ICONS.admin} label={MODULES.find((m) => m.key === 'admin')!.label} />
-        </div>
-      )}
+      <div className="nav-group">{group}</div>
+      {keys.map((k) => (
+        <Item key={k} to={ROUTES[k]} Icon={ICONS[k]} label={MODULES.find((m) => m.key === k)!.label} />
+      ))}
     </nav>
   )
 }
@@ -180,8 +165,9 @@ function Brand({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => vo
 export function AppShell({ children }: { children: ReactNode }) {
   const { toast } = useStore()
   const { isModuleOn, currentUser } = useConfig()
-  const [collapsed, setCollapsed] = useState(readCollapsed)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const location = useLocation()
+  const navigate = useNavigate()
 
   // Cmd/Ctrl+K opens the command palette from anywhere.
   useEffect(() => {
@@ -195,17 +181,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const toggle = () =>
-    setCollapsed((c) => {
-      const next = !c
-      try {
-        localStorage.setItem(STORAGE_KEY, next ? '1' : '0')
-      } catch {
-        /* ignore */
-      }
-      return next
-    })
-
   // group enabled modules, preserving MODULES order and dropping empty groups
   const groups: { group: string; keys: string[] }[] = []
   for (const m of MODULES) {
@@ -215,21 +190,36 @@ export function AppShell({ children }: { children: ReactNode }) {
     else groups.push({ group: m.group, keys: [m.key] })
   }
 
+  // Which module (and so which group) is the current route in?
+  const activeKey =
+    Object.entries(ROUTES)
+      .filter(([, r]) => (r === '/' ? location.pathname === '/' : location.pathname.startsWith(r)))
+      .sort((a, b) => b[1].length - a[1].length)[0]?.[0] ?? 'overview'
+  const activeGroupName = MODULES.find((m) => m.key === activeKey)?.group ?? 'Recruiting'
+  const pillGroups = groups.filter((g) => g.group !== 'Admin')
+  const activeGroup = groups.find((g) => g.group === activeGroupName) ?? pillGroups[0]
+
   return (
-    <div className={collapsed ? 'app app--collapsed' : 'app'}>
+    <div className="app">
+      {/* Quixotic-style band: logo · group pills (primary nav) · actions. */}
       <div className="app__top">
+        <div className="app__topbrand">
+          <Brand collapsed={false} onToggle={() => navigate('/')} />
+        </div>
+        <nav className="topnav" aria-label="Sections">
+          {pillGroups.map((g) => (
+            <button
+              key={g.group}
+              className={g.group === activeGroup.group ? 'topnav__pill topnav__pill--active' : 'topnav__pill'}
+              onClick={() => navigate(ROUTES[g.keys[0]])}
+            >
+              {GROUP_PILL_LABELS[g.group] ?? g.group}
+            </button>
+          ))}
+        </nav>
         <div className="spacer" />
-        <button
-          className="input-group"
-          onClick={() => setPaletteOpen(true)}
-          aria-label="Search (⌘K)"
-          style={{ width: 320, maxWidth: '32vw', border: 0, background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
-        >
-          <IconSearch className="ic-lead" />
-          <span className="input" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--ink-5)', cursor: 'pointer' }}>
-            Search jobs, candidates, pages…
-            <span className="badge" style={{ fontSize: 10.5 }}>⌘K</span>
-          </span>
+        <button className="btn btn--ghost btn--icon" onClick={() => setPaletteOpen(true)} aria-label="Search (⌘K)" title="Search (⌘K)">
+          <IconSearch className="ic" />
         </button>
         <a href="http://localhost:5173" target="_blank" rel="noreferrer" className="btn btn--ghost" title="Open the candidate-facing career site">
           Career site
@@ -238,27 +228,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         <button className="btn btn--ghost btn--icon" aria-label="Notifications">
           <IconBell className="ic" />
         </button>
+        <NavLink to="/admin" className="btn btn--ghost btn--icon" aria-label="Admin" title="Admin">
+          <IconAdmin className="ic" />
+        </NavLink>
         <div className="avatar" title={currentUser?.name ?? 'Account'}>
           {currentUser?.initials ?? 'OA'}
         </div>
       </div>
 
-      {/* The corner-cell brand slides with the column: full wordmark when
-          expanded, mark-only when collapsed. Pull-tab handle on the content
-          card's edge drives the collapse. */}
+      {/* Contextual rail: just the active group's modules. */}
       <div className="app__rail">
-        <div className="app__brand">
-          <Brand collapsed={collapsed} onToggle={toggle} />
-        </div>
-        <RailNav groups={groups} />
-        <button
-          className="app__collapse-handle"
-          onClick={toggle}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={collapsed ? 'Expand' : 'Collapse'}
-        >
-          {collapsed ? <IconChevronRight className="ic" /> : <IconChevronLeft className="ic" />}
-        </button>
+        <RailNav group={activeGroup.group} keys={activeGroup.keys} />
       </div>
 
       <main className="app__main">{children}</main>
