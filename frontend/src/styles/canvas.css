@@ -529,3 +529,14 @@
   border-color: var(--wfc-navy);
   box-shadow: 0 0 0 3px rgba(1, 33, 105, 0.18), 0 10px 24px rgba(15, 23, 42, 0.12);
 }
+
+/* ---- condition branch lines: YES green, NO red (matching their ports).
+   Sim lighting and snap preview take precedence while active. ---- */
+.wfc .react-flow__edge.wfc-edge--yes:not(.wfc-edge--lit):not(.wfc-edge--snap) .react-flow__edge-path {
+  stroke: var(--wfc-green);
+  stroke-width: 2;
+}
+.wfc .react-flow__edge.wfc-edge--no:not(.wfc-edge--lit):not(.wfc-edge--snap) .react-flow__edge-path {
+  stroke: var(--wfc-red);
+  stroke-width: 2;
+}

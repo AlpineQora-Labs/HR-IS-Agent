@@ -275,13 +275,20 @@ const DIMS: Record<string, { width: number; height: number }> = {
 }
 const sized = (n: Node): Node => ({ ...n, ...DIMS[n.type as string] })
 
-/** Consistent edge look: rounded step path, arrowhead, YES/NO labels off condition branches. */
-const decorateEdge = (e: Edge): Edge => ({
-  ...e,
-  type: 'smoothstep',
-  markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: '#93a1b8' },
-  label: e.sourceHandle === 'yes' ? 'YES' : e.sourceHandle === 'no' ? 'NO' : undefined,
-})
+/** Consistent edge look: rounded step path, arrowhead, YES/NO labels off condition
+ *  branches — the YES line renders green, the NO line red (matching their ports). */
+const decorateEdge = (e: Edge): Edge => {
+  const branch = e.sourceHandle === 'yes' ? 'yes' : e.sourceHandle === 'no' ? 'no' : null
+  const color = branch === 'no' ? '#e31837' : branch === 'yes' ? '#1a9d55' : '#93a1b8'
+  return {
+    ...e,
+    type: 'smoothstep',
+    className: branch ? `wfc-edge--${branch}` : undefined,
+    markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color },
+    label: branch === 'yes' ? 'YES' : branch === 'no' ? 'NO' : undefined,
+    labelStyle: branch ? { fill: branch === 'no' ? '#c31432' : '#147a44', fontWeight: 700 } : undefined,
+  }
+}
 
 /* ---------- derive an initial graph from the workflow's levels ---------- */
 
@@ -684,7 +691,13 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     timersRef.current.forEach(clearTimeout)
     timersRef.current = []
     setNodes((ns) => ns.map((n) => ((n.data as WfData).lit ? { ...n, data: { ...n.data, lit: false } } : n)))
-    setEdges((es) => es.map((e) => (e.className ? { ...e, className: undefined } : e)))
+    setEdges((es) =>
+      es.map((e) =>
+        e.className?.includes('wfc-edge--lit')
+          ? { ...e, className: e.className.replace(/\s*wfc-edge--lit/, '') || undefined }
+          : e,
+      ),
+    )
   }, [setNodes, setEdges])
 
   useEffect(() => () => timersRef.current.forEach(clearTimeout), [])
@@ -710,7 +723,13 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
             setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, data: { ...n.data, lit: true } } : n)))
             if (i > 0) {
               const prev = res.path[i - 1]
-              setEdges((es) => es.map((e) => (e.source === prev && e.target === id ? { ...e, className: 'wfc-edge--lit' } : e)))
+              setEdges((es) =>
+                es.map((e) =>
+                  e.source === prev && e.target === id
+                    ? { ...e, className: e.className ? `${e.className} wfc-edge--lit` : 'wfc-edge--lit' }
+                    : e,
+                ),
+              )
             }
           }, 350 * i),
         )
