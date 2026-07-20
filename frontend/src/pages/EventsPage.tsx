@@ -607,6 +607,7 @@ export default function EventsPage() {
               funnel in one view.
             </p>
           </div>
+          <a className="btn btn--ghost" href="/careers/events" target="_blank" rel="noreferrer" style={{ marginRight: 8 }}>View public page →</a>
           <button className="btn btn--primary" onClick={() => setCreating(true)}>New event</button>
         </div>
       </div>

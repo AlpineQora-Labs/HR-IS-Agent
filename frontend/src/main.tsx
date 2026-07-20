@@ -13,6 +13,7 @@ import { AppShell } from './components/AppShell'
 import { StoreProvider } from './state/store'
 import { ConfigProvider, useConfig } from './state/config'
 import EventRegisterPage from './pages/EventRegisterPage'
+import CareersEventsPage from './pages/CareersEventsPage'
 
 // Recruiter / ATS pages
 import OverviewPage from './pages/OverviewPage'
@@ -112,7 +113,9 @@ createRoot(document.getElementById('root')!).render(
         <StoreProvider>
           <BrowserRouter>
             <Routes>
-              {/* Shell-less public surface: the QR/event registration page. */}
+              {/* Shell-less public surface: the campus career site we host
+                  ourselves (replacing tal.net/Oleeo) — events board + registration. */}
+              <Route path="/careers/events" element={<CareersEventsPage />} />
               <Route path="/register/:eventId" element={<EventRegisterPage />} />
               {/* The recruiter console. The candidate-facing "Careers and Conv"
                   app is integrated separately. */}
