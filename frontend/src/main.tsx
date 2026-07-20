@@ -22,6 +22,7 @@ import JobDetailPage from './pages/JobDetailPage'
 import PipelinePage from './pages/PipelinePage'
 import CandidatesPage from './pages/CandidatesPage'
 import CandidateDetailPage from './pages/CandidateDetailPage'
+import ApprovalsPage from './pages/ApprovalsPage'
 import InterviewsPage from './pages/InterviewsPage'
 import AssessmentsPage from './pages/AssessmentsPage'
 import OffersPage from './pages/OffersPage'
@@ -62,6 +63,7 @@ function RecruiterApp() {
         <Route path="/pipeline" element={m('pipeline', <PipelinePage />)} />
         <Route path="/candidates" element={m('candidates', <CandidatesPage />)} />
         <Route path="/candidates/:id" element={m('candidates', <CandidateDetailPage />)} />
+        <Route path="/approvals" element={m('approvals', <ApprovalsPage />)} />
         <Route path="/interviews" element={m('interviews', <InterviewsPage />)} />
         <Route path="/assessments" element={m('assessments', <AssessmentsPage />)} />
         <Route path="/offers" element={m('offers', <OffersPage />)} />

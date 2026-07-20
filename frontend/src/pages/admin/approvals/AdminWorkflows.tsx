@@ -35,9 +35,15 @@ export default function AdminWorkflows() {
   const { data: serverWorkflows } = useServerWorkflows()
   const saveServer = useSaveServerWorkflows()
   const hydrated = useRef(false)
+  // Serialized snapshot of what the server already has: the debounce-save below
+  // only pushes when the working copy actually differs. Without this, a
+  // hydration echo or an HMR remount with stale preserved state re-saves and
+  // can clobber newer server data (e.g. a workflow saved from the canvas).
+  const lastPushed = useRef('')
   useEffect(() => {
     if (!hydrated.current && serverWorkflows && serverWorkflows.length) {
       hydrated.current = true
+      lastPushed.current = JSON.stringify(serverWorkflows.map((d) => toServerDto(fromServerDto(d))))
       setWorkflows(serverWorkflows.map(fromServerDto))
     }
   }, [serverWorkflows])
@@ -75,8 +81,14 @@ export default function AdminWorkflows() {
       return
     }
     if (!hydrated.current) return
+    const payload = workflows.map(toServerDto)
+    const json = JSON.stringify(payload)
+    if (json === lastPushed.current) return
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => saveServer.mutate(workflows.map(toServerDto)), 900)
+    saveTimer.current = setTimeout(() => {
+      lastPushed.current = json
+      saveServer.mutate(payload)
+    }, 900)
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current)
     }
