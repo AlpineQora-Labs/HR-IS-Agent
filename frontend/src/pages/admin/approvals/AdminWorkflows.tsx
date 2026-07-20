@@ -40,6 +40,10 @@ export default function AdminWorkflows() {
   // hydration echo or an HMR remount with stale preserved state re-saves and
   // can clobber newer server data (e.g. a workflow saved from the canvas).
   const lastPushed = useRef('')
+  // Saves fire ONLY after an explicit user edit in this mount. Hydration echoes,
+  // HMR remounts with preserved state, and stale react-query cache can otherwise
+  // schedule a push that overwrites newer server data.
+  const dirty = useRef(false)
   useEffect(() => {
     if (!hydrated.current && serverWorkflows && serverWorkflows.length) {
       hydrated.current = true
@@ -50,18 +54,31 @@ export default function AdminWorkflows() {
 
   // ---- local mutators (were config-store helpers) ----
   const replaceWorkflows = (list: ApprovalWorkflow[]) => setWorkflows(list)
-  const updateWorkflow = (id: string, patch: Partial<ApprovalWorkflow>) =>
+  const updateWorkflow = (id: string, patch: Partial<ApprovalWorkflow>) => {
+    dirty.current = true
     setWorkflows((ws) => ws.map((w) => (w.id === id ? { ...w, ...patch } : w)))
+  }
   const addWorkflowLevel = (id: string) =>
-    setWorkflows((ws) => ws.map((w) => (w.id === id
+    {
+    dirty.current = true
+    return setWorkflows((ws) => ws.map((w) => (w.id === id
       ? { ...w, levels: [...w.levels, { id: `l${Date.now()}`, approverRole: roles[0]?.key ?? 'admin', condition: 'Always' }] } : w)))
+  }
   const removeWorkflowLevel = (id: string, lid: string) =>
-    setWorkflows((ws) => ws.map((w) => (w.id === id ? { ...w, levels: w.levels.filter((l) => l.id !== lid) } : w)))
+    {
+    dirty.current = true
+    return setWorkflows((ws) => ws.map((w) => (w.id === id ? { ...w, levels: w.levels.filter((l) => l.id !== lid) } : w)))
+  }
   const updateWorkflowLevel = (id: string, lid: string, patch: Partial<ApprovalWorkflow['levels'][number]>) =>
-    setWorkflows((ws) => ws.map((w) => (w.id === id
+    {
+    dirty.current = true
+    return setWorkflows((ws) => ws.map((w) => (w.id === id
       ? { ...w, levels: w.levels.map((l) => (l.id === lid ? { ...l, ...patch } : l)) } : w)))
+  }
   const moveWorkflowLevel = (id: string, lid: string, dir: -1 | 1) =>
-    setWorkflows((ws) => ws.map((w) => {
+    {
+    dirty.current = true
+    return setWorkflows((ws) => ws.map((w) => {
       if (w.id !== id) return w
       const i = w.levels.findIndex((l) => l.id === lid)
       const j = i + dir
@@ -73,6 +90,7 @@ export default function AdminWorkflows() {
   // referenced to satisfy the linter (used via canvas onSaved below)
   void replaceWorkflows
   void useMemo
+  }
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const firstRender = useRef(true)
   useEffect(() => {
@@ -81,6 +99,7 @@ export default function AdminWorkflows() {
       return
     }
     if (!hydrated.current) return
+    if (!dirty.current) return
     const payload = workflows.map(toServerDto)
     const json = JSON.stringify(payload)
     if (json === lastPushed.current) return
