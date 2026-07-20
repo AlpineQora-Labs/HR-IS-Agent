@@ -377,10 +377,15 @@ button.card:hover {
   padding-top: 8px;
 }
 
-/* Overlays (SlideOver drawers) read this to sit level with the floating
-   cards — i.e. below the top chrome band. Absent outside the shell. */
+/* Overlays (SlideOver drawers, the approval canvas) read these to sit level
+   with the floating cards — i.e. below the top chrome band and beside the
+   rail. Absent outside the shell. */
 .app {
   --shell-chrome-h: 60px;
+  --shell-rail-w: 232px;
+}
+.app--collapsed {
+  --shell-rail-w: 78px;
 }
 
 /* ---- Floating content card ----

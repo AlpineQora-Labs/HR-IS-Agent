@@ -358,13 +358,16 @@ const BLOCKS: { type: 'approval' | 'condition' | 'email'; label: string }[] = [
 ]
 
 export default function ApprovalCanvas(props: { workflow: ApprovalWorkflow; onClose: () => void; onSaved: (w: ApprovalWorkflow) => void }) {
-  // Portal to <body> so the full-screen canvas escapes the app shell's transformed
-  // ancestor — otherwise React Flow can't measure nodes and edges won't render.
+  // Portal onto the shell element (not <body>): escapes the content subtree's
+  // transformed ancestors — otherwise React Flow can't measure nodes and edges
+  // won't render — while still inheriting the shell's geometry CSS vars
+  // (--shell-chrome-h / --shell-rail-w), which the overlay uses to cover only
+  // the content card. The top band and rail stay visible around it.
   return createPortal(
     <ReactFlowProvider>
       <ApprovalCanvasInner {...props} />
     </ReactFlowProvider>,
-    document.body,
+    document.querySelector('.app') ?? document.body,
   )
 }
 
@@ -677,7 +680,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   )
 
   return (
-    <div className="wfc" style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#fff', display: 'flex', flexDirection: 'column' }}>
+    <div className="wfc wfc--card">
       <div className="wfc-top">
         <div className="wfc-top__meta">
           <div className="wfc-top__kicker">Approval canvas</div>

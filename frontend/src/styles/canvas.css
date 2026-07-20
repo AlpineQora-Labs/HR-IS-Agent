@@ -434,3 +434,25 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+
+/* ---- content-card mode ----
+   The canvas covers exactly the shell's floating content card (not the whole
+   viewport), so the top band and left rail stay visible around it. Geometry
+   comes from the shell's vars; `left` transitions with the rail collapse so
+   the canvas rides the same animation as the card it replaces. */
+.wfc--card {
+  position: fixed;
+  top: calc(var(--shell-chrome-h, 0px) + 12px);
+  left: calc(var(--shell-rail-w, 0px) + 12px);
+  right: 12px;
+  bottom: 12px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid var(--line, #e5e7eb);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 10px 32px rgba(16, 22, 38, 0.08), 0 2px 8px rgba(16, 22, 38, 0.05);
+  transition: left 0.16s ease;
+}
