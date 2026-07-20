@@ -9,8 +9,8 @@ import { useStore } from '@/state/store'
    each clearing its chain level by level. Decisions are role-gated server-side
    (ADMIN / HIRING_MANAGER). */
 
-const typeBadge = (t: string) =>
-  t === 'EVENT' ? 'badge--info' : t === 'OFFER' ? 'badge--purple' : t === 'REQUISITION' ? 'badge--warn' : 'badge'
+// Item type is a category, not a state — no color.
+const typeBadge = (_t: string) => ''
 
 const typeLabel = (t: string) => t.replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase())
 

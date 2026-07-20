@@ -19,13 +19,9 @@ const TYPE_OPTIONS = [
   { value: 'WEBINAR', label: 'Webinar / info session' },
 ]
 
-function typeBadge(type: string) {
-  const key = type.toUpperCase()
-  if (key === 'CAMPUS') return 'badge--purple'
-  if (key === 'CAREER_FAIR' || key === 'FAIR') return 'badge--info'
-  if (key === 'HIRING_EVENT' || key === 'HIRING') return 'badge--ok'
-  if (key === 'WEBINAR' || key === 'VIRTUAL') return 'badge--warn'
-  return 'badge'
+function typeBadge(_type: string) {
+  // Event type is a category, not a state — no color.
+  return ''
 }
 
 function typeLabel(type: string) {

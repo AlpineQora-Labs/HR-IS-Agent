@@ -226,7 +226,7 @@ function WorkflowCard({
       <div className="card__head">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <h3 style={{ fontSize: 16 }}>{w.name}</h3>
-          <span className="badge badge--info">{w.trigger}</span>
+          <span className="badge">{w.trigger}</span>
           <span className={`badge ${w.enabled ? 'badge--ok' : ''}`}>{w.enabled ? 'Active' : 'Disabled'}</span>
           {w.graph && <span className="badge">canvas</span>}
         </div>
