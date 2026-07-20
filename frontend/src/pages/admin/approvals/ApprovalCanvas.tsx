@@ -382,6 +382,18 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   const [selId, setSelId] = useState<string | null>(null)
   const [idc, setIdc] = useState(1)
 
+  // Drag-from-palette snap preview: while a block is dragged over the canvas,
+  // the edge (or approver box) it would snap into is highlighted; dropping
+  // splices it in and auto-aligns. dataTransfer is unreadable during dragover,
+  // so the dragged type lives in a ref set by the palette's dragstart.
+  const dragTypeRef = useRef<'approval' | 'condition' | 'email' | null>(null)
+  const [snapEdgeId, setSnapEdgeId] = useState<string | null>(null)
+  const [snapNodeId, setSnapNodeId] = useState<string | null>(null)
+  const clearSnap = () => {
+    setSnapEdgeId(null)
+    setSnapNodeId(null)
+  }
+
   // Email templates for the notification rules (right panel).
   const { data: templates } = useQuery({ queryKey: ['email-templates'], queryFn: commsApi.getEmailTemplates })
 
@@ -427,7 +439,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
 
   /* ---------- drag & drop from the blocks palette ---------- */
 
-  const { screenToFlowPosition } = useReactFlow()
+  const { screenToFlowPosition, fitView } = useReactFlow()
 
   /** Is a flow-space point inside a node's box? */
   const hitNode = (p: { x: number; y: number }, n: Node) => {
@@ -471,37 +483,57 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     flash('Email notification attached — pick a template on the right')
   }
 
-  /** Splice an email node into the middle of an existing edge. */
-  const spliceEmail = (edge: Edge, p: { x: number; y: number }) => {
-    const id = `n-email-${idc}`
+  /** Splice a block into an existing edge (the snap drop), then auto-arrange so
+   *  the new step falls in line with the flow. */
+  const spliceIntoEdge = (type: 'approval' | 'condition' | 'email', edge: Edge, p: { x: number; y: number }) => {
+    const id = `n-${type}-${idc}`
     setIdc((n) => n + 1)
-    setNodes((ns) => [
-      ...ns,
-      sized({
-        id,
-        type: 'email',
-        position: { x: p.x - 92, y: p.y - 36 },
-        data: { label: 'Email notification', emailTrigger: EMAIL_TRIGGERS[0] },
-      }),
-    ])
-    setEdges((es) => [
-      ...es.filter((e) => e.id !== edge.id),
+    const data: WfData =
+      type === 'approval'
+        ? { label: 'New approval', approverRole: roles[0]?.name }
+        : type === 'condition'
+          ? { condition: 'Always' }
+          : { label: 'Email notification', emailTrigger: EMAIL_TRIGGERS[0] }
+    const node = sized({ id, type, position: { x: p.x - 92, y: p.y - 36 }, data })
+    const newEdges = [
+      ...edges.filter((e) => e.id !== edge.id),
       decorateEdge({ id: `e-${edge.source}-${id}`, source: edge.source, target: id, sourceHandle: edge.sourceHandle }),
-      decorateEdge({ id: `e-${id}-${edge.target}`, source: id, target: edge.target }),
-    ])
+      // A spliced condition continues down its YES branch; NO stays free to wire.
+      decorateEdge({ id: `e-${id}-${edge.target}`, source: id, target: edge.target, sourceHandle: type === 'condition' ? 'yes' : undefined }),
+    ]
+    setNodes(autoLayout([...nodes, node], newEdges))
+    setEdges(newEdges)
     setSelId(id)
     measureSoon(id)
-    flash('Email step added to the flow — pick a template on the right')
+    setTimeout(() => fitView({ padding: 0.2, maxZoom: 1, duration: 300 }), 90)
+    flash(type === 'email' ? 'Email step added to the flow — pick a template on the right' : 'Step added and aligned with the flow')
   }
 
   const onDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
+    const type = dragTypeRef.current
+    if (!type) return
+    const p = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+    let nodeId: string | null = null
+    if (type === 'email') nodeId = nodes.find((n) => n.type === 'approval' && hitNode(p, n))?.id ?? null
+    const edgeId = nodeId ? null : (nearestEdge(p)?.id ?? null)
+    if (nodeId !== snapNodeId) setSnapNodeId(nodeId)
+    if (edgeId !== snapEdgeId) setSnapEdgeId(edgeId)
+  }
+
+  const onDragLeave = (e: React.DragEvent) => {
+    // Ignore leave events into our own children — only clear when the drag
+    // actually exits the canvas area.
+    if (e.currentTarget.contains(e.relatedTarget as globalThis.Node | null)) return
+    clearSnap()
   }
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault()
     const type = e.dataTransfer.getData('application/reactflow') as 'approval' | 'condition' | 'email' | ''
+    dragTypeRef.current = null
+    clearSnap()
     if (!type) return
     const p = screenToFlowPosition({ x: e.clientX, y: e.clientY })
     if (type === 'email') {
@@ -510,16 +542,15 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
         attachEmail(target.id)
         return
       }
-      const edge = nearestEdge(p)
-      if (edge) {
-        spliceEmail(edge, p)
-        return
-      }
+    }
+    const edge = nearestEdge(p)
+    if (edge) {
+      spliceIntoEdge(type, edge, p)
+      return
     }
     addNode(type, { x: p.x - 92, y: p.y - 32 })
   }
 
-  const { fitView } = useReactFlow()
   const arrange = () => {
     setNodes((ns) => autoLayout(ns, edges))
     // Re-frame once the new positions have applied.
@@ -642,6 +673,16 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     }
   }
 
+  // Snap-preview decoration: highlight the would-be splice edge / attach box.
+  const displayEdges = useMemo(
+    () => edges.map((e) => (e.id === snapEdgeId ? { ...e, className: `${e.className ?? ''} wfc-edge--snap`.trim() } : e)),
+    [edges, snapEdgeId],
+  )
+  const displayNodes = useMemo(
+    () => nodes.map((n) => (n.id === snapNodeId ? { ...n, className: 'wfc-nodesnap' } : n)),
+    [nodes, snapNodeId],
+  )
+
   const selSpec = selected ? SPEC[selected.type as keyof typeof SPEC] : null
   const selData = (selected?.data ?? {}) as WfData
 
@@ -722,6 +763,11 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                 onDragStart={(e) => {
                   e.dataTransfer.setData('application/reactflow', b.type)
                   e.dataTransfer.effectAllowed = 'move'
+                  dragTypeRef.current = b.type
+                }}
+                onDragEnd={() => {
+                  dragTypeRef.current = null
+                  clearSnap()
                 }}
                 onClick={() => addNode(b.type)}
                 title={`${b.label} — drag onto the canvas, or click to add`}
@@ -740,10 +786,10 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
           </div>
         </div>
 
-        <div style={{ flex: 1, minWidth: 0 }} onDrop={onDrop} onDragOver={onDragOver}>
+        <div style={{ flex: 1, minWidth: 0 }} onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave}>
           <ReactFlow
-            nodes={nodes}
-            edges={edges}
+            nodes={displayNodes}
+            edges={displayEdges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}

@@ -455,3 +455,17 @@
   box-shadow: 0 10px 32px rgba(16, 22, 38, 0.08), 0 2px 8px rgba(16, 22, 38, 0.05);
   transition: left 0.16s ease;
 }
+
+/* ---- drag-from-palette snap preview ---- */
+/* The edge a dragged block would splice into: navy marching dashes. */
+.wfc .react-flow__edge.wfc-edge--snap .react-flow__edge-path {
+  stroke: var(--wfc-navy);
+  stroke-width: 2.8;
+  stroke-dasharray: 7 5;
+  animation: wfc-dash 500ms linear infinite;
+}
+/* The approver box an email would attach to: navy focus ring. */
+.wfc .react-flow__node.wfc-nodesnap .wfc-node {
+  border-color: var(--wfc-navy);
+  box-shadow: 0 0 0 3px rgba(1, 33, 105, 0.18), 0 10px 24px rgba(15, 23, 42, 0.12);
+}
