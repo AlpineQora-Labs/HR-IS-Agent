@@ -726,9 +726,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                 onClick={() => addNode(b.type)}
                 title={`${b.label} — drag onto the canvas, or click to add`}
               >
-                <span className="wfc-block__icon" style={{ background: SPEC[b.type].iconBg, color: SPEC[b.type].iconFg }}>
-                  {Icons[b.type]}
-                </span>
+                <span className="wfc-block__icon">{Icons[b.type]}</span>
                 <span className="wfc-block__label">{b.label}</span>
               </div>
             ))}

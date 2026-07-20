@@ -372,12 +372,16 @@
   cursor: grabbing;
 }
 .wfc-block__icon {
+  /* Plain monochrome glyphs — bank theme, no colored chips. */
   width: 30px;
   height: 30px;
-  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  color: var(--ink-2, #3c4a5f);
+}
+.wfc-block:hover .wfc-block__icon {
+  color: var(--bofa-navy, #012169);
 }
 .wfc-block__icon svg {
   width: 16px;
