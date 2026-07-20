@@ -322,7 +322,7 @@ function seedGraph(w: ApprovalWorkflow, roleName: (k: string) => string): { node
   edges.push(decorateEdge({ id: `e-${prev}-end`, source: prev, target: 'end' }))
   // Auto-approve policy: a visible fast-path branch that skips the chain.
   if (w.autoApprove) {
-    nodes.push(sized({ id: 'policy', type: 'policy', position: { x: 520, y: Math.max(120, Math.round(endY / 2) - 30) }, data: { label: `Within policy · ${w.threshold}` } }))
+    nodes.push(sized({ id: 'policy', type: 'policy', position: { x: 520, y: Math.max(120, Math.round(endY / 2) - 30) }, data: { label: 'Within policy' } }))
     edges.push(decorateEdge({ id: 'e-trigger-policy', source: 'trigger', target: 'policy' }))
     edges.push(decorateEdge({ id: 'e-policy-end', source: 'policy', target: 'end' }))
   }
@@ -682,7 +682,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   /* ---------- test / simulation ---------- */
 
   const [simOpen, setSimOpen] = useState(false)
-  const [sim, setSim] = useState({ billRate: '', amount: '', duration: '', flagged: false })
+  const [sim, setSim] = useState({ format: 'IN_PERSON', notice: '', flagged: false })
   const [simResult, setSimResult] = useState<SimulateResult | null>(null)
   const simulate = useSimulateWorkflow(workflow.id)
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
@@ -710,9 +710,8 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
       const patch = buildPatch()
       await saveServer.mutateAsync([toServerDto({ ...workflow, ...patch })])
       const res = await simulate.mutateAsync({
-        billRate: sim.billRate === '' ? null : Number(sim.billRate),
-        amount: sim.amount === '' ? null : Number(sim.amount),
-        durationMonths: sim.duration === '' ? null : Number(sim.duration),
+        eventFormat: sim.format,
+        daysNotice: sim.notice === '' ? null : Number(sim.notice),
         flaggedCritical: sim.flagged,
       })
       setSimResult(res)
@@ -895,16 +894,15 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
               </div>
               <div className="wfc-inspector__body">
                 <label>
-                  Bill rate ($/hr)
-                  <input className="input" type="number" value={sim.billRate} onChange={(e) => setSim((s) => ({ ...s, billRate: e.target.value }))} placeholder="e.g. 120" />
+                  Event format
+                  <select className="select" value={sim.format} onChange={(e) => setSim((s) => ({ ...s, format: e.target.value }))}>
+                    <option value="IN_PERSON">In-person</option>
+                    <option value="VIRTUAL">Virtual</option>
+                  </select>
                 </label>
                 <label>
-                  Amount ($)
-                  <input className="input" type="number" value={sim.amount} onChange={(e) => setSim((s) => ({ ...s, amount: e.target.value }))} placeholder="e.g. 250000" />
-                </label>
-                <label>
-                  Duration (months)
-                  <input className="input" type="number" value={sim.duration} onChange={(e) => setSim((s) => ({ ...s, duration: e.target.value }))} placeholder="e.g. 9" />
+                  Days of notice
+                  <input className="input" type="number" value={sim.notice} onChange={(e) => setSim((s) => ({ ...s, notice: e.target.value }))} placeholder="e.g. 30" />
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <input type="checkbox" checked={sim.flagged} onChange={(e) => setSim((s) => ({ ...s, flagged: e.target.checked }))} />
@@ -993,7 +991,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                   <label>
                     Condition
                     <select className="select" value={selData.condition ?? ''} onChange={(e) => patchData({ condition: e.target.value })}>
-                      {['Always', 'Bill rate over threshold', 'Amount over threshold', 'Duration over threshold', 'Flagged critical'].map(
+                      {['Always', 'In-person event', 'Virtual event', 'Short notice (under 14 days)', 'Flagged critical'].map(
                         (c) => (
                           <option key={c}>{c}</option>
                         ),

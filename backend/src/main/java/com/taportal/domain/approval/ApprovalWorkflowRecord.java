@@ -48,10 +48,6 @@ public class ApprovalWorkflowRecord {
     private boolean enabled;
 
     @Setter
-    @Column(nullable = false)
-    private String threshold;
-
-    @Setter
     @Column(name = "auto_approve", nullable = false)
     private boolean autoApprove;
 

@@ -15,15 +15,14 @@ public final class ApprovalDtos {
             String name,
             String trigger,
             boolean enabled,
-            String threshold,
             boolean autoApprove,
             JsonNode levels,
             JsonNode graph,
             OffsetDateTime updatedAt) {
     }
 
-    /** Sample request the engine evaluates a workflow against. */
-    public record SimulateRequest(Double billRate, Double amount, Double durationMonths, Boolean flaggedCritical) {
+    /** Sample request the engine evaluates a workflow against — real event context. */
+    public record SimulateRequest(String eventFormat, Double daysNotice, Boolean flaggedCritical) {
     }
 
     /** One approval the request would require. */
@@ -42,9 +41,10 @@ public final class ApprovalDtos {
             String itemRef,
             String title,
             String sub,
-            Double billRate,
-            Double amount,
-            Double durationMonths,
+            /** IN_PERSON | VIRTUAL — how the event runs. */
+            String eventFormat,
+            /** Days between submission and the event start. */
+            Double daysNotice,
             Boolean flaggedCritical) {
     }
 

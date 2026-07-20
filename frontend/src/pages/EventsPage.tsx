@@ -339,6 +339,7 @@ type Draft = {
   time: string
   endTime: string
   timezone: string
+  flagged: boolean
 }
 
 /** Event timezones offered in the wizard (IANA zone → label). */
@@ -368,6 +369,7 @@ const EMPTY_DRAFT: Draft = {
   time: '09:00',
   endTime: '11:00',
   timezone: 'America/New_York',
+  flagged: false,
 }
 
 const STEPS = ['Basics', 'Details', 'Review']
@@ -457,6 +459,7 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
       {
         name: d.name.trim(), type: d.type, location: d.location.trim(),
         startsAt, endsAt, timezone: d.timezone, intakeFormId: intakeFormId ?? undefined,
+        flaggedCritical: d.flagged,
       },
       {
         onSuccess: (ev) => {
@@ -536,6 +539,10 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
                   ))}
                 </select>
               </Field>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ink-2)', marginTop: 4 }}>
+                <input type="checkbox" checked={d.flagged} onChange={(e) => set({ flagged: e.target.checked })} />
+                Flag for compliance review — routes this event down the workflow's exception path
+              </label>
             </div>
           </div>
         )}

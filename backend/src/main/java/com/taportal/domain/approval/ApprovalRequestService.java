@@ -52,7 +52,7 @@ public class ApprovalRequestService {
     @Transactional
     public ApprovalRequestResponse submit(SubmitApprovalRequest in) {
         SimulateResponse verdict = engine.simulate(
-                in.wfKey(), new SimulateRequest(in.billRate(), in.amount(), in.durationMonths(), in.flaggedCritical()));
+                in.wfKey(), new SimulateRequest(in.eventFormat(), in.daysNotice(), in.flaggedCritical()));
         ApprovalRequest req = new ApprovalRequest(
                 null,
                 in.wfKey(),

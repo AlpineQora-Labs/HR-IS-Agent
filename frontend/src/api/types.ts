@@ -356,6 +356,8 @@ export interface EventCreate {
   endsAt?: string
   timezone?: string
   intakeFormId?: string
+  /** Route this event down the workflow's flagged/exception path. */
+  flaggedCritical?: boolean
 }
 
 // ---- Write payloads (recruiter actions) ----

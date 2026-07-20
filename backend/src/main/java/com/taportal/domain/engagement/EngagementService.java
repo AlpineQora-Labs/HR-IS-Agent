@@ -126,11 +126,16 @@ public class EngagementService {
         // Every new event routes through the Event-approval workflow (goes to the
         // approvals queue for hiring-manager sign-off). itemRef = event id so the
         // request links back to the event.
+        // Real event context for the workflow's conditions: format, lead time, flag.
+        boolean virtual = saved.getLocation() != null
+                && saved.getLocation().toLowerCase().matches(".*(virtual|online|remote).*");
+        Double daysNotice = saved.getStartsAt() == null ? null
+                : (double) java.time.Duration.between(java.time.OffsetDateTime.now(), saved.getStartsAt()).toDays();
         approvals.submit(new com.taportal.api.ApprovalDtos.SubmitApprovalRequest(
                 "e1", "EVENT", saved.getId().toString(),
                 saved.getName(),
                 saved.getLocation() + " · " + (saved.getStartsAt() == null ? "" : saved.getStartsAt().toLocalDate()),
-                null, null, null, null));
+                virtual ? "VIRTUAL" : "IN_PERSON", daysNotice, req.flaggedCritical()));
 
         return new EventRow(
                 saved.getId(),

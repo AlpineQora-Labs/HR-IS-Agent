@@ -46,7 +46,6 @@ export interface ApprovalWorkflow {
   name: string
   trigger: string
   enabled: boolean
-  threshold: string
   autoApprove: boolean
   levels: ApprovalLevel[]
   graph?: WorkflowGraph
@@ -65,7 +64,6 @@ export interface ServerWorkflowDto {
   name: string
   trigger: string
   enabled: boolean
-  threshold: string
   autoApprove: boolean
   levels: ApprovalLevel[]
   graph: WorkflowGraph | null
@@ -77,7 +75,6 @@ export const toServerDto = (w: ApprovalWorkflow): ServerWorkflowDto => ({
   name: w.name,
   trigger: w.trigger,
   enabled: w.enabled,
-  threshold: w.threshold,
   autoApprove: w.autoApprove,
   levels: w.levels,
   graph: w.graph ?? null,
@@ -89,7 +86,6 @@ export const fromServerDto = (d: ServerWorkflowDto): ApprovalWorkflow => ({
   name: d.name,
   trigger: d.trigger,
   enabled: d.enabled,
-  threshold: d.threshold,
   autoApprove: d.autoApprove,
   levels: d.levels ?? [],
   graph: d.graph ?? undefined,
@@ -112,9 +108,8 @@ export function useSaveServerWorkflows() {
 }
 
 export interface SimulateInput {
-  billRate?: number | null
-  amount?: number | null
-  durationMonths?: number | null
+  eventFormat?: string | null
+  daysNotice?: number | null
   flaggedCritical?: boolean
 }
 

@@ -21,7 +21,7 @@ function IconTrash({ className }: { className?: string }) {
 }
 
 const TRIGGERS = ['Event', 'Offer', 'Requisition', 'Onboarding', 'Compliance']
-const CONDITIONS = ['Always', 'Bill rate over threshold', 'Amount over threshold', 'Duration over threshold', 'Flagged critical']
+const CONDITIONS = ['Always', 'In-person event', 'Virtual event', 'Short notice (under 14 days)', 'Flagged critical']
 
 export default function AdminWorkflows() {
   const { roles } = useConfig()
@@ -140,7 +140,6 @@ export default function AdminWorkflows() {
             updateWorkflow(w.id, { enabled: !w.enabled })
             flash(`${w.name} ${w.enabled ? 'disabled' : 'enabled'}`)
           }}
-          onThreshold={(v) => updateWorkflow(w.id, { threshold: v })}
           onTrigger={(v) => updateWorkflow(w.id, { trigger: v, graph: undefined })}
           onAuto={() => updateWorkflow(w.id, { autoApprove: !w.autoApprove, graph: undefined })}
           onAddLevel={() => addWorkflowLevel(w.id)}
@@ -180,7 +179,7 @@ function MiniFlow({ w, roleName }: { w: ApprovalWorkflow; roleName: (k: string) 
       {w.autoApprove && (
         <>
           {arrow}
-          {pill('policy', `Auto ≤ ${w.threshold}`)}
+          {pill('policy', 'Auto-approve')}
         </>
       )}
       {w.levels.map((l) => (
@@ -200,7 +199,6 @@ function WorkflowCard({
   roles,
   roleName,
   onToggle,
-  onThreshold,
   onTrigger,
   onAuto,
   onAddLevel,
@@ -214,7 +212,6 @@ function WorkflowCard({
   roles: { key: string; name: string }[]
   roleName: (k: string) => string
   onToggle: () => void
-  onThreshold: (v: string) => void
   onTrigger: (v: string) => void
   onAuto: () => void
   onAddLevel: () => void
@@ -252,10 +249,6 @@ function WorkflowCard({
                 <option key={t}>{t}</option>
               ))}
             </select>
-          </div>
-          <div className="field" style={{ width: 220 }}>
-            <span className="field__label">Threshold</span>
-            <input className="input" value={w.threshold} onChange={(e) => onThreshold(e.target.value)} placeholder="e.g. $100,000" />
           </div>
           <div className="field" style={{ flex: 'none' }}>
             <span className="field__label">Auto-approve within policy</span>

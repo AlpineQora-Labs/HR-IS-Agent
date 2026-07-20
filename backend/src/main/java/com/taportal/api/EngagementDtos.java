@@ -52,7 +52,9 @@ public final class EngagementDtos {
             OffsetDateTime startsAt,
             OffsetDateTime endsAt,
             String timezone,
-            UUID intakeFormId) {}
+            UUID intakeFormId,
+            /** Route this event down the workflow's flagged/exception path. */
+            Boolean flaggedCritical) {}
 
     public record SurveyRow(
             UUID id,

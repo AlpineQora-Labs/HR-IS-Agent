@@ -12,8 +12,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,8 +20,6 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 @Transactional(readOnly = true)
 public class ApprovalWorkflowService {
-
-    private static final Pattern NUMBER = Pattern.compile("([0-9][0-9,]*(?:\\.[0-9]+)?)");
 
     private final ApprovalWorkflowRepository repository;
     private final ObjectMapper mapper;
@@ -44,16 +40,19 @@ public class ApprovalWorkflowService {
             ApprovalWorkflowRecord rec = repository.findByWfKey(dto.key()).orElse(null);
             if (rec == null) {
                 rec = new ApprovalWorkflowRecord(
-                        null, dto.key(), dto.name(), dto.trigger(), dto.enabled(), dto.threshold(),
+                        null, dto.key(), dto.name(), dto.trigger(), dto.enabled(),
                         dto.autoApprove(), json(dto.levels(), "[]"), jsonOrNull(dto.graph()), null, null);
             } else {
                 rec.setName(dto.name());
                 rec.setTriggerType(dto.trigger());
                 rec.setEnabled(dto.enabled());
-                rec.setThreshold(dto.threshold());
                 rec.setAutoApprove(dto.autoApprove());
                 rec.setLevelsJson(json(dto.levels(), "[]"));
-                rec.setGraphJson(jsonOrNull(dto.graph()));
+                // Only the canvas sends graphs. A payload without one (the list
+                // page's autosave) must never erase a saved canvas graph.
+                if (dto.graph() != null && !dto.graph().isNull()) {
+                    rec.setGraphJson(jsonOrNull(dto.graph()));
+                }
             }
             repository.save(rec);
         }
@@ -65,19 +64,18 @@ public class ApprovalWorkflowService {
     public SimulateResponse simulate(String key, SimulateRequest req) {
         ApprovalWorkflowRecord wf = repository.findByWfKey(key)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Workflow not found"));
-        double threshold = parseNumber(wf.getThreshold());
         List<String> notes = new ArrayList<>();
 
+        // Within policy = nothing about the request demands human eyes: not
+        // flagged for review and not submitted on short notice.
         boolean flagged = Boolean.TRUE.equals(req.flaggedCritical());
-        boolean withinPolicy = !flagged
-                && under(req.billRate(), threshold)
-                && under(req.amount(), threshold)
-                && under(req.durationMonths(), threshold);
+        boolean shortNotice = req.daysNotice() != null && req.daysNotice() < 14;
+        boolean withinPolicy = !flagged && !shortNotice;
         boolean autoApproved = wf.isAutoApprove() && withinPolicy;
 
         JsonNode graph = readGraph(wf);
         if (graph == null) {
-            return simulateFromLevels(wf, req, threshold, autoApproved, notes);
+            return simulateFromLevels(wf, req, autoApproved, notes);
         }
 
         Map<String, JsonNode> nodes = new HashMap<>();
@@ -88,7 +86,7 @@ public class ApprovalWorkflowService {
         List<String> path = new ArrayList<>(List.of("trigger"));
         List<RequiredApproval> approvals = new ArrayList<>();
         if (autoApproved) {
-            notes.add("Request falls within the auto-approve policy (" + wf.getThreshold() + ") — chain skipped.");
+            notes.add("Request falls within the auto-approve policy — chain skipped.");
             // Prefer the explicit policy branch when it exists on the canvas.
             if (nodes.containsKey("policy")) {
                 path.add("policy");
@@ -106,7 +104,7 @@ public class ApprovalWorkflowService {
 
             JsonNode next = null;
             if ("condition".equals(type)) {
-                boolean yes = evalCondition(curNode.path("data").path("condition").asText("Always"), req, threshold, notes);
+                boolean yes = evalCondition(curNode.path("data").path("condition").asText("Always"), req);
                 String want = yes ? "yes" : "no";
                 next = outgoing.stream().filter(e -> want.equals(e.path("sourceHandle").asText(null))).findFirst()
                         .orElse(outgoing.isEmpty() ? null : outgoing.get(0));
@@ -148,11 +146,11 @@ public class ApprovalWorkflowService {
 
     /** Linear fallback when the canvas has never been saved: evaluate the level chain. */
     private SimulateResponse simulateFromLevels(
-            ApprovalWorkflowRecord wf, SimulateRequest req, double threshold, boolean autoApproved, List<String> notes) {
+            ApprovalWorkflowRecord wf, SimulateRequest req, boolean autoApproved, List<String> notes) {
         List<String> path = new ArrayList<>(List.of("trigger"));
         List<RequiredApproval> approvals = new ArrayList<>();
         if (autoApproved) {
-            notes.add("Request falls within the auto-approve policy (" + wf.getThreshold() + ") — chain skipped.");
+            notes.add("Request falls within the auto-approve policy — chain skipped.");
             path.add("end");
             return new SimulateResponse(true, path, approvals, notes);
         }
@@ -162,7 +160,7 @@ public class ApprovalWorkflowService {
             for (JsonNode lv : levels) {
                 i++;
                 String cond = lv.path("condition").asText("Always");
-                if (evalCondition(cond, req, threshold, notes)) {
+                if (evalCondition(cond, req)) {
                     String id = "lvl-" + lv.path("id").asText(String.valueOf(i));
                     path.add(id);
                     approvals.add(new RequiredApproval(id, "Level " + i, lv.path("approverRole").asText("")));
@@ -188,33 +186,22 @@ public class ApprovalWorkflowService {
         return sb.toString();
     }
 
-    private boolean evalCondition(String condition, SimulateRequest req, double threshold, List<String> notes) {
+    /** Conditions evaluate the request's real event context. */
+    private boolean evalCondition(String condition, SimulateRequest req) {
         return switch (condition) {
-            case "Bill rate over threshold" -> req.billRate() != null && req.billRate() > threshold;
-            case "Amount over threshold" -> req.amount() != null && req.amount() > threshold;
-            case "Duration over threshold" -> req.durationMonths() != null && req.durationMonths() > threshold;
+            case "In-person event" -> "IN_PERSON".equalsIgnoreCase(req.eventFormat());
+            case "Virtual event" -> "VIRTUAL".equalsIgnoreCase(req.eventFormat());
+            case "Short notice (under 14 days)" -> req.daysNotice() != null && req.daysNotice() < 14;
             case "Flagged critical" -> Boolean.TRUE.equals(req.flaggedCritical());
             default -> true; // "Always"
         };
-    }
-
-    private static boolean under(Double v, double threshold) {
-        return v == null || v <= threshold;
-    }
-
-    private static double parseNumber(String s) {
-        if (s == null) {
-            return Double.MAX_VALUE;
-        }
-        Matcher m = NUMBER.matcher(s);
-        return m.find() ? Double.parseDouble(m.group(1).replace(",", "")) : Double.MAX_VALUE;
     }
 
     /* ---------- json helpers ---------- */
 
     private WorkflowDto toDto(ApprovalWorkflowRecord r) {
         return new WorkflowDto(
-                r.getWfKey(), r.getName(), r.getTriggerType(), r.isEnabled(), r.getThreshold(), r.isAutoApprove(),
+                r.getWfKey(), r.getName(), r.getTriggerType(), r.isEnabled(), r.isAutoApprove(),
                 readJson(r.getLevelsJson()), readJson(r.getGraphJson()), r.getUpdatedAt());
     }
 
