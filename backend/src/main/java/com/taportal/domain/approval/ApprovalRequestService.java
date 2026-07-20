@@ -1,0 +1,151 @@
+package com.taportal.domain.approval;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.taportal.api.ApprovalDtos.ApprovalRequestResponse;
+import com.taportal.api.ApprovalDtos.RequiredApproval;
+import com.taportal.api.ApprovalDtos.SimulateRequest;
+import com.taportal.api.ApprovalDtos.SimulateResponse;
+import com.taportal.api.ApprovalDtos.SubmitApprovalRequest;
+import com.taportal.config.CurrentUser;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+/**
+ * The runtime side of the approval engine: real events submit here, the configured workflow
+ * decides the route (auto-approve or an approval chain), and approvers advance requests
+ * step by step.
+ */
+@Service
+@Transactional(readOnly = true)
+public class ApprovalRequestService {
+
+    private final ApprovalRequestRepository requests;
+    private final ApprovalWorkflowRepository workflows;
+    private final ApprovalWorkflowService engine;
+    private final ObjectMapper mapper;
+
+    public ApprovalRequestService(
+            ApprovalRequestRepository requests,
+            ApprovalWorkflowRepository workflows,
+            ApprovalWorkflowService engine,
+            ObjectMapper mapper) {
+        this.requests = requests;
+        this.workflows = workflows;
+        this.engine = engine;
+        this.mapper = mapper;
+    }
+
+    public List<ApprovalRequestResponse> list(ApprovalRequest.Status status) {
+        List<ApprovalRequest> rows = status == null
+                ? requests.findByOrderByCreatedAtDesc()
+                : requests.findByStatusOrderByCreatedAtDesc(status);
+        return rows.stream().map(this::toResponse).toList();
+    }
+
+    /** Route a real event through its workflow; returns the created (or auto-approved) request. */
+    @Transactional
+    public ApprovalRequestResponse submit(SubmitApprovalRequest in) {
+        SimulateResponse verdict = engine.simulate(
+                in.wfKey(), new SimulateRequest(in.billRate(), in.amount(), in.durationMonths(), in.flaggedCritical()));
+        ApprovalRequest req = new ApprovalRequest(
+                null,
+                in.wfKey(),
+                in.itemType(),
+                in.itemRef(),
+                in.title(),
+                in.sub(),
+                verdict.autoApproved() ? ApprovalRequest.Status.AUTO_APPROVED : ApprovalRequest.Status.PENDING,
+                writeJson(verdict.requiredApprovals()),
+                0,
+                verdict.autoApproved() ? "Policy engine" : null,
+                verdict.autoApproved() ? OffsetDateTime.now() : null,
+                null,
+                null);
+        return toResponse(requests.save(req));
+    }
+
+    @Transactional
+    public ApprovalRequestResponse approve(UUID id) {
+        requireApprover();
+        ApprovalRequest req = pending(id);
+        List<RequiredApproval> required = readRequired(req.getRequiredJson());
+        req.setCurrentStep(req.getCurrentStep() + 1);
+        if (req.getCurrentStep() >= required.size()) {
+            req.setStatus(ApprovalRequest.Status.APPROVED);
+            req.setDecidedBy(actor());
+            req.setDecidedAt(OffsetDateTime.now());
+        }
+        return toResponse(requests.save(req));
+    }
+
+    @Transactional
+    public ApprovalRequestResponse reject(UUID id) {
+        requireApprover();
+        ApprovalRequest req = pending(id);
+        req.setStatus(ApprovalRequest.Status.REJECTED);
+        req.setDecidedBy(actor());
+        req.setDecidedAt(OffsetDateTime.now());
+        return toResponse(requests.save(req));
+    }
+
+    /** Only manager-level roles decide approvals; viewers get 403. */
+    private static void requireApprover() {
+        String role = CurrentUser.role();
+        if (!"ADMIN".equals(role) && !"HIRING_MANAGER".equals(role)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed to decide approvals");
+        }
+    }
+
+    private ApprovalRequest pending(UUID id) {
+        ApprovalRequest req = requests.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Approval request not found"));
+        if (req.getStatus() != ApprovalRequest.Status.PENDING) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Request already decided");
+        }
+        return req;
+    }
+
+    private static String actor() {
+        return CurrentUser.name() != null ? CurrentUser.name() : "System";
+    }
+
+    private ApprovalRequestResponse toResponse(ApprovalRequest r) {
+        String wfName = workflows.findByWfKey(r.getWfKey()).map(ApprovalWorkflowRecord::getName).orElse(r.getWfKey());
+        return new ApprovalRequestResponse(
+                r.getId(),
+                r.getWfKey(),
+                wfName,
+                r.getItemType(),
+                r.getItemRef(),
+                r.getTitle(),
+                r.getSub(),
+                r.getStatus().name(),
+                r.getCurrentStep(),
+                readRequired(r.getRequiredJson()),
+                r.getDecidedBy(),
+                r.getDecidedAt(),
+                r.getCreatedAt());
+    }
+
+    private List<RequiredApproval> readRequired(String json) {
+        try {
+            return mapper.readValue(json, new TypeReference<List<RequiredApproval>>() {});
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private String writeJson(List<RequiredApproval> required) {
+        try {
+            return mapper.writeValueAsString(required);
+        } catch (Exception e) {
+            return "[]";
+        }
+    }
+}

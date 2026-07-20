@@ -17,6 +17,7 @@ public class EngagementService {
     private final ReferralRepository referralRepository;
     private final RecruitingEventRepository eventRepository;
     private final EventRegistrationRepository eventRegistrations;
+    private final com.taportal.domain.approval.ApprovalRequestService approvals;
     private final SurveyRepository surveyRepository;
 
     public EngagementService(
@@ -24,11 +25,13 @@ public class EngagementService {
             ReferralRepository referralRepository,
             RecruitingEventRepository eventRepository,
             SurveyRepository surveyRepository,
-            EventRegistrationRepository eventRegistrations) {
+            EventRegistrationRepository eventRegistrations,
+            com.taportal.domain.approval.ApprovalRequestService approvals) {
         this.campaignRepository = campaignRepository;
         this.referralRepository = referralRepository;
         this.eventRepository = eventRepository;
         this.eventRegistrations = eventRegistrations;
+        this.approvals = approvals;
         this.surveyRepository = surveyRepository;
     }
 
@@ -97,6 +100,16 @@ public class EngagementService {
         e.setAttended(0);
         e.setHires(0);
         RecruitingEvent saved = eventRepository.save(e);
+
+        // Every new event routes through the Event-approval workflow (goes to the
+        // approvals queue for hiring-manager sign-off). itemRef = event id so the
+        // request links back to the event.
+        approvals.submit(new com.taportal.api.ApprovalDtos.SubmitApprovalRequest(
+                "e1", "EVENT", saved.getId().toString(),
+                saved.getName(),
+                saved.getLocation() + " · " + (saved.getStartsAt() == null ? "" : saved.getStartsAt().toLocalDate()),
+                null, null, null, null));
+
         return new EventRow(
                 saved.getId(),
                 saved.getName(),
