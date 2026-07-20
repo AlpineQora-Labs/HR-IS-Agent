@@ -111,6 +111,7 @@ const ADMIN_SECTIONS: { tab: string | null; label: string; icon: string }[] = [
   { tab: 'users', label: 'Users & Access', icon: 'candidates' },
   { tab: 'communications', label: 'Communication', icon: 'campaigns' },
   { tab: 'forms', label: 'Forms', icon: 'offers' },
+  { tab: 'workflow', label: 'Workflow', icon: 'pipeline' },
   { tab: 'config', label: 'Configuration', icon: 'integrations' },
 ]
 

@@ -6,13 +6,15 @@ import SlideOver from '@/components/SlideOver'
 import { MODULES, PERMISSIONS, useConfig } from '@/state/config'
 import { usePersistentState } from './admin/builderStore'
 import FormBuilder from './admin/FormBuilder'
+import AdminWorkflows from './admin/approvals/AdminWorkflows'
 import { commsApi } from './admin/communications/commsApi'
 
-type Tab = 'users' | 'forms' | 'config'
+type Tab = 'users' | 'forms' | 'workflow' | 'config'
 
 const TABS: { key: Tab; label: string; blurb: string }[] = [
   { key: 'users', label: 'Users & Access', blurb: 'People, roles, and what each role can do' },
   { key: 'forms', label: 'Forms', blurb: 'Intake forms that feed event creation' },
+  { key: 'workflow', label: 'Workflow', blurb: 'Approval workflows — the visual builder + rules engine' },
   { key: 'config', label: 'Configuration', blurb: 'Workspace settings and module access' },
 ]
 
@@ -303,6 +305,11 @@ function AdminHub({ onOpen }: { onOpen: (t: Tab) => void }) {
       stat: `${intakeFieldCount()} intake field${intakeFieldCount() === 1 ? '' : 's'}`,
     },
     {
+      key: 'workflow', glyph: '⑃', title: 'Workflow',
+      blurb: 'Design approval workflows on a visual canvas — triggers, conditions, approval levels, and a live simulator.',
+      stat: 'Approval workflows',
+    },
+    {
       key: 'config', glyph: '⚙', title: 'Configuration',
       blurb: 'Workspace identity and which console modules are switched on.',
       stat: `${activeModules}/${MODULES.length} modules on`,
@@ -340,7 +347,7 @@ export default function AdminPage() {
   const rawTab = params.get('tab')
   // No ?tab → the hub of component tiles; a tab value → that component.
   const tab: Tab | null =
-    rawTab === 'users' || rawTab === 'forms' || rawTab === 'config' ? rawTab : null
+    rawTab === 'users' || rawTab === 'forms' || rawTab === 'workflow' || rawTab === 'config' ? rawTab : null
   const openTab = (t: Tab) => setParams({ tab: t })
 
   const active = TABS.find((t) => t.key === tab)
@@ -365,6 +372,7 @@ export default function AdminPage() {
           {/* Section switching lives in the left rail (contextual nav), not in-page tabs. */}
           {tab === 'users' && <UsersAndAccess />}
           {tab === 'forms' && <FormBuilder />}
+          {tab === 'workflow' && <AdminWorkflows />}
           {tab === 'config' && <Configuration />}
         </>
       )}
