@@ -42,6 +42,23 @@ function formatOf(e: EventRow) {
 const rate = (num: number, den: number) => (den > 0 ? Math.round((num / den) * 100) : 0)
 const isUpcoming = (iso: string) => new Date(iso).getTime() >= Date.now()
 
+/** "2:00–4:00 PM EST" in the event's own timezone. */
+const timeRange = (e: Pick<EventRow, 'startsAt' | 'endsAt' | 'timezone'>) => {
+  const tz = e.timezone || 'America/New_York'
+  const fmt = (iso: string, withZone: boolean) =>
+    new Date(iso).toLocaleTimeString('en-US', {
+      timeZone: tz, hour: 'numeric', minute: '2-digit', ...(withZone ? { timeZoneName: 'short' } : {}),
+    })
+  return e.endsAt ? `${fmt(e.startsAt, false)}–${fmt(e.endsAt, true)}` : fmt(e.startsAt, true)
+}
+
+const approvalBadge = (s: string | null) =>
+  s === 'PENDING' ? (
+    <span className="badge badge--warn">Pending approval</span>
+  ) : s === 'REJECTED' ? (
+    <span className="badge badge--danger">Rejected</span>
+  ) : null
+
 function StatTile({ label, value, meta }: { label: string; value: string | number; meta?: string }) {
   return (
     <div className="stat">
@@ -119,9 +136,12 @@ function EventDetail({ e, onClose }: { e: EventRow; onClose: () => void }) {
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
-        <Fact label="When">{date(e.startsAt)}</Fact>
+        <Fact label="When">{`${date(e.startsAt)} · ${timeRange(e)}`}</Fact>
         <Fact label={formatOf(e) === 'Virtual' ? 'Link' : 'Location'}>{e.location || '—'}</Fact>
-        <Fact label="Status">{isUpcoming(e.startsAt) ? 'Upcoming' : 'Past'}</Fact>
+        <Fact label="Status">
+          {isUpcoming(e.startsAt) ? 'Upcoming' : 'Past'}
+          {e.approvalStatus === 'PENDING' ? ' · awaiting approval' : e.approvalStatus === 'REJECTED' ? ' · rejected' : ''}
+        </Fact>
 
         <div style={{ marginTop: 18 }}>
           <div className="eyebrow" style={{ marginBottom: 8 }}>Conversion funnel</div>
@@ -317,6 +337,26 @@ type Draft = {
   location: string
   day: string
   time: string
+  endTime: string
+  timezone: string
+}
+
+/** Event timezones offered in the wizard (IANA zone → label). */
+const TIMEZONES: { value: string; label: string }[] = [
+  { value: 'America/New_York', label: 'Eastern (ET)' },
+  { value: 'America/Chicago', label: 'Central (CT)' },
+  { value: 'America/Denver', label: 'Mountain (MT)' },
+  { value: 'America/Los_Angeles', label: 'Pacific (PT)' },
+  { value: 'Europe/London', label: 'UK (GMT/BST)' },
+  { value: 'UTC', label: 'UTC' },
+]
+
+/** "day + hh:mm in IANA zone" → absolute ISO instant (offset derived per-date, DST-safe). */
+function zonedToIso(day: string, time: string, tz: string): string {
+  const naive = new Date(`${day}T${time}:00Z`)
+  const inTz = new Date(naive.toLocaleString('en-US', { timeZone: tz }))
+  const inUtc = new Date(naive.toLocaleString('en-US', { timeZone: 'UTC' }))
+  return new Date(naive.getTime() + (inUtc.getTime() - inTz.getTime())).toISOString()
 }
 
 const EMPTY_DRAFT: Draft = {
@@ -326,6 +366,8 @@ const EMPTY_DRAFT: Draft = {
   location: '',
   day: '',
   time: '09:00',
+  endTime: '11:00',
+  timezone: 'America/New_York',
 }
 
 const STEPS = ['Basics', 'Details', 'Review']
@@ -399,7 +441,8 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
   const submitResponse = useSubmitFormResponse()
   const [answers, setAnswers] = useState<Record<string, Answer>>({})
 
-  const basicsValid = d.name.trim().length > 0 && d.day.length > 0
+  const endAfterStart = !d.endTime || !d.time || d.endTime > d.time
+  const basicsValid = d.name.trim().length > 0 && d.day.length > 0 && endAfterStart
   // If/then rules (Admin -> Forms -> Configuration): hidden questions are
   // neither rendered, required, nor submitted.
   const isVisible = (f: IntakeField) => fieldVisible(intake, f.id, (id) => answerText(answers[id]))
@@ -408,9 +451,13 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
   const isLast = step === STEPS.length - 1
 
   function submit() {
-    const startsAt = new Date(`${d.day}T${d.time || '09:00'}:00`).toISOString()
+    const startsAt = zonedToIso(d.day, d.time || '09:00', d.timezone)
+    const endsAt = d.endTime ? zonedToIso(d.day, d.endTime, d.timezone) : undefined
     create.mutate(
-      { name: d.name.trim(), type: d.type, location: d.location.trim(), startsAt, intakeFormId: intakeFormId ?? undefined },
+      {
+        name: d.name.trim(), type: d.type, location: d.location.trim(),
+        startsAt, endsAt, timezone: d.timezone, intakeFormId: intakeFormId ?? undefined,
+      },
       {
         onSuccess: (ev) => {
           const filled = intakeFields
@@ -474,6 +521,21 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
               <Field label="Start time" style={{ flex: 1 }}>
                 <input className="input" type="time" value={d.time} onChange={(e) => set({ time: e.target.value })} />
               </Field>
+              <Field label="End time" style={{ flex: 1 }}>
+                <input className="input" type="time" value={d.endTime} onChange={(e) => set({ endTime: e.target.value })} />
+                {!endAfterStart && (
+                  <div style={{ fontSize: 11.5, color: 'var(--danger-fg, #b3261e)', marginTop: 4 }}>Must be after the start time</div>
+                )}
+              </Field>
+              <Field label="Timezone" style={{ flex: 1 }}>
+                <select className="select" value={d.timezone} onChange={(e) => set({ timezone: e.target.value })}>
+                  {TIMEZONES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
             </div>
           </div>
         )}
@@ -519,7 +581,11 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
             <Fact label="Type">{typeLabel(d.type)}</Fact>
             <Fact label="Format">{d.format}</Fact>
             <Fact label={d.format === 'Virtual' ? 'Link' : 'Location'}>{d.location || '—'}</Fact>
-            <Fact label="When">{d.day ? `${d.day} ${d.time}` : '—'}</Fact>
+            <Fact label="When">
+              {d.day
+                ? `${d.day} · ${d.time}${d.endTime ? `–${d.endTime}` : ''} ${TIMEZONES.find((t) => t.value === d.timezone)?.label ?? ''}`
+                : '—'}
+            </Fact>
             {intakeFields
               .filter((f) => !DISPLAY_TYPES.includes(f.type))
               .filter((f) => answerText(answers[f.id]).trim() !== '')
@@ -653,7 +719,8 @@ export default function EventsPage() {
               <div className="muted" style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <span>{e.location || 'TBD'}</span>
                 <span style={{ color: 'var(--ink-5)' }}>·</span>
-                <span>{date(e.startsAt)}</span>
+                <span>{date(e.startsAt)} · {timeRange(e)}</span>
+                {approvalBadge(e.approvalStatus)}
                 <span className="badge" style={{ marginLeft: 'auto' }}>{formatOf(e)}</span>
               </div>
               <FunnelBar e={e} />

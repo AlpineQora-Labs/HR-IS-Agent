@@ -36,6 +36,7 @@ public class CampusService {
     private final SchoolRepository schools;
     private final EventRegistrationRepository registrations;
     private final RecruitingEventRepository events;
+    private final com.taportal.domain.approval.ApprovalRequestRepository approvalRequests;
     private final CandidateRepository candidates;
     private final FormDefinitionRepository formDefinitions;
     private final FormLogicService formLogic;
@@ -50,8 +51,10 @@ public class CampusService {
             FormDefinitionRepository formDefinitions,
             FormLogicService formLogic,
             FormResponseRepository formResponses,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            com.taportal.domain.approval.ApprovalRequestRepository approvalRequests) {
         this.schools = schools;
+        this.approvalRequests = approvalRequests;
         this.registrations = registrations;
         this.events = events;
         this.candidates = candidates;
@@ -138,8 +141,65 @@ public class CampusService {
      * @return the created roster row
      * @throws ResponseStatusException 422 on rule violations, 409 on duplicates
      */
+    /* ---------- public career-site surface (approval-gated) ---------- */
+
+    /**
+     * Is this event visible to candidates? Hidden while its latest approval
+     * request is PENDING or after a REJECTED decision; visible once approved.
+     * Events that never routed through the engine are grandfathered visible.
+     */
+    private boolean publiclyVisible(UUID eventId) {
+        return approvalRequests.findByItemTypeOrderByCreatedAtDesc("EVENT").stream()
+                .filter((r) -> r.getItemRef().equals(eventId.toString()))
+                .findFirst()
+                .map((r) -> switch (r.getStatus()) {
+                    case APPROVED, AUTO_APPROVED -> true;
+                    case PENDING, REJECTED -> false;
+                })
+                .orElse(true);
+    }
+
+    /**
+     * The public events board: upcoming, approved events, soonest first.
+     *
+     * @return public rows only — no funnel or hire data leaves this method
+     */
+    public List<com.taportal.api.CampusDtos.EventPublicInfo> publicBoard() {
+        OffsetDateTime cutoff = OffsetDateTime.now().minusDays(1);
+        return events.findByOrderByStartsAtDesc().stream()
+                .filter((e) -> e.getStartsAt() != null && e.getStartsAt().isAfter(cutoff))
+                .filter((e) -> publiclyVisible(e.getId()))
+                .sorted(java.util.Comparator.comparing(RecruitingEvent::getStartsAt))
+                .map(this::toPublicInfo)
+                .toList();
+    }
+
+    /**
+     * Public event header for the QR/registration page.
+     *
+     * @throws EntityNotFoundException when the event doesn't exist OR isn't
+     *         publicly visible yet — unapproved events don't leak their existence
+     */
+    public com.taportal.api.CampusDtos.EventPublicInfo publicInfo(UUID eventId) {
+        RecruitingEvent e = events.findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+        if (!publiclyVisible(eventId)) {
+            throw new EntityNotFoundException("Event not found: " + eventId);
+        }
+        return toPublicInfo(e);
+    }
+
+    private com.taportal.api.CampusDtos.EventPublicInfo toPublicInfo(RecruitingEvent e) {
+        return new com.taportal.api.CampusDtos.EventPublicInfo(
+                e.getId(), e.getName(), e.getType(), e.getLocation(),
+                e.getStartsAt(), e.getEndsAt(), e.getTimezone());
+    }
+
     @Transactional
     public RegistrationRow registerFromForm(UUID eventId, String answersJson) {
+        if (!publiclyVisible(eventId)) {
+            throw new EntityNotFoundException("Event not found: " + eventId);
+        }
         var definition = formDefinitions.findFirstByPurposeAndDefaultForKindTrueAndTemplateFalse("EVENT_REGISTRATION")
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "No registration form is configured"));
         String sanitized = formLogic.validateAndFilter(definition.getSchema(), answersJson);

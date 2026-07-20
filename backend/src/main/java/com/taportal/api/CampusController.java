@@ -29,23 +29,16 @@ public class CampusController {
         this.events = events;
     }
 
-    /** Public events board: upcoming events, soonest first (no funnel/hire data). */
+    /** Public events board: upcoming approved events, soonest first (no funnel/hire data). */
     @GetMapping("/v1/events/public")
     public java.util.List<EventPublicInfo> publicBoard() {
-        java.time.OffsetDateTime now = java.time.OffsetDateTime.now().minusDays(1);
-        return events.findByOrderByStartsAtDesc().stream()
-                .filter(e -> e.getStartsAt() != null && e.getStartsAt().isAfter(now))
-                .sorted(java.util.Comparator.comparing(com.taportal.domain.engagement.RecruitingEvent::getStartsAt))
-                .map(e -> new EventPublicInfo(e.getId(), e.getName(), e.getType(), e.getLocation(), e.getStartsAt()))
-                .toList();
+        return campusService.publicBoard();
     }
 
     /** Public event header for the QR/registration page (no auth in this POC). */
     @GetMapping("/v1/events/{id}/public")
     public EventPublicInfo publicInfo(@PathVariable UUID id) {
-        var e = events.findById(id)
-                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("Event not found: " + id));
-        return new EventPublicInfo(e.getId(), e.getName(), e.getType(), e.getLocation(), e.getStartsAt());
+        return campusService.publicInfo(id);
     }
 
     /**

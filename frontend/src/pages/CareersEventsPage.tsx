@@ -13,6 +13,8 @@ interface PublicEvent {
   type: string
   location: string
   startsAt: string
+  endsAt: string | null
+  timezone: string
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -24,6 +26,16 @@ const TYPE_LABEL: Record<string, string> = {
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+
+/** "2:00–4:00 PM EST" in the event's own timezone. */
+const fmtTime = (e: PublicEvent) => {
+  const tz = e.timezone || 'America/New_York'
+  const f = (iso: string, zone: boolean) =>
+    new Date(iso).toLocaleTimeString('en-US', {
+      timeZone: tz, hour: 'numeric', minute: '2-digit', ...(zone ? { timeZoneName: 'short' } : {}),
+    })
+  return e.endsAt ? `${f(e.startsAt, false)}–${f(e.endsAt, true)}` : f(e.startsAt, true)
+}
 
 const isVirtual = (loc: string) => /virtual|online/i.test(loc)
 
@@ -119,7 +131,7 @@ export default function CareersEventsPage() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-0, #1d1d1f)', lineHeight: 1.35 }}>{e.name}</div>
                   <div style={{ display: 'flex', gap: 14, marginTop: 5, fontSize: 12.5, color: 'var(--ink-4)', flexWrap: 'wrap' }}>
-                    <span>📅 {fmtDate(e.startsAt)}</span>
+                    <span>📅 {fmtDate(e.startsAt)} · {fmtTime(e)}</span>
                     <span>{isVirtual(e.location) ? '💻' : '📍'} {e.location}</span>
                     <span>{TYPE_LABEL[e.type] ?? e.type}</span>
                   </div>

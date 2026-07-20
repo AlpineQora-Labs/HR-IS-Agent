@@ -18,6 +18,7 @@ public class EngagementService {
     private final RecruitingEventRepository eventRepository;
     private final EventRegistrationRepository eventRegistrations;
     private final com.taportal.domain.approval.ApprovalRequestService approvals;
+    private final com.taportal.domain.approval.ApprovalRequestRepository approvalRequests;
     private final SurveyRepository surveyRepository;
 
     public EngagementService(
@@ -26,12 +27,14 @@ public class EngagementService {
             RecruitingEventRepository eventRepository,
             SurveyRepository surveyRepository,
             EventRegistrationRepository eventRegistrations,
-            com.taportal.domain.approval.ApprovalRequestService approvals) {
+            com.taportal.domain.approval.ApprovalRequestService approvals,
+            com.taportal.domain.approval.ApprovalRequestRepository approvalRequests) {
         this.campaignRepository = campaignRepository;
         this.referralRepository = referralRepository;
         this.eventRepository = eventRepository;
         this.eventRegistrations = eventRegistrations;
         this.approvals = approvals;
+        this.approvalRequests = approvalRequests;
         this.surveyRepository = surveyRepository;
     }
 
@@ -71,13 +74,23 @@ public class EngagementService {
     }
 
     public List<EventRow> events() {
+        java.util.Map<String, String> approvalByEvent = latestEventApprovals();
         return eventRepository.findByOrderByStartsAtDesc().stream()
-                .map(this::toEventRow)
+                .map((e) -> toEventRow(e, approvalByEvent.get(e.getId().toString())))
                 .toList();
     }
 
+    /** Latest approval status per event id (requests are newest-first). */
+    private java.util.Map<String, String> latestEventApprovals() {
+        java.util.Map<String, String> byEvent = new java.util.HashMap<>();
+        for (var r : approvalRequests.findByItemTypeOrderByCreatedAtDesc("EVENT")) {
+            byEvent.putIfAbsent(r.getItemRef(), r.getStatus().name());
+        }
+        return byEvent;
+    }
+
     /** Events with roster rows compute their funnel live; legacy rows keep their counters. */
-    private EventRow toEventRow(RecruitingEvent e) {
+    private EventRow toEventRow(RecruitingEvent e, String approvalStatus) {
         long rosterSize = eventRegistrations.countByEventId(e.getId());
         int registered = rosterSize > 0 ? (int) rosterSize : e.getRegistrations();
         int attended = rosterSize > 0
@@ -85,16 +98,25 @@ public class EngagementService {
                 : e.getAttended();
         return new EventRow(
                 e.getId(), e.getName(), e.getType(), e.getLocation(), e.getStartsAt(),
+                e.getEndsAt(), e.getTimezone(), approvalStatus,
                 registered, attended, e.getHires());
     }
 
     @Transactional
     public EventRow createEvent(com.taportal.api.EngagementDtos.EventCreate req) {
+        // Business rule: a scheduled end must come after the start.
+        if (req.endsAt() != null && req.startsAt() != null && !req.endsAt().isAfter(req.startsAt())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Event end time must be after the start time");
+        }
         RecruitingEvent e = new RecruitingEvent();
         e.setName(req.name());
         e.setType(req.type() != null ? req.type() : "HIRING_EVENT");
         e.setLocation(req.location());
         e.setStartsAt(req.startsAt());
+        e.setEndsAt(req.endsAt());
+        e.setTimezone(req.timezone() != null && !req.timezone().isBlank() ? req.timezone() : "America/New_York");
         e.setIntakeFormId(req.intakeFormId());
         e.setRegistrations(0);
         e.setAttended(0);
@@ -116,6 +138,9 @@ public class EngagementService {
                 saved.getType(),
                 saved.getLocation(),
                 saved.getStartsAt(),
+                saved.getEndsAt(),
+                saved.getTimezone(),
+                "PENDING",
                 saved.getRegistrations(),
                 saved.getAttended(),
                 saved.getHires());

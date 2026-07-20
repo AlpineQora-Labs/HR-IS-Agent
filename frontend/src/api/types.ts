@@ -306,6 +306,10 @@ export interface EventRow {
   type: string
   location: string
   startsAt: string
+  endsAt: string | null
+  timezone: string
+  /** Latest approval status (PENDING/APPROVED/AUTO_APPROVED/REJECTED), null if never routed. */
+  approvalStatus: string | null
   registrations: number
   attended: number
   hires: number
@@ -349,6 +353,8 @@ export interface EventCreate {
   type: string
   location: string
   startsAt: string
+  endsAt?: string
+  timezone?: string
   intakeFormId?: string
 }
 

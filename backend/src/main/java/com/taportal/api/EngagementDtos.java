@@ -36,6 +36,10 @@ public final class EngagementDtos {
             String type,
             String location,
             OffsetDateTime startsAt,
+            OffsetDateTime endsAt,
+            String timezone,
+            /** Latest approval status for this event (PENDING/APPROVED/…), null if never routed. */
+            String approvalStatus,
             int registrations,
             int attended,
             int hires) {}
@@ -46,6 +50,8 @@ public final class EngagementDtos {
             String type,
             String location,
             OffsetDateTime startsAt,
+            OffsetDateTime endsAt,
+            String timezone,
             UUID intakeFormId) {}
 
     public record SurveyRow(

@@ -9,4 +9,6 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
     List<ApprovalRequest> findByOrderByCreatedAtDesc();
 
     List<ApprovalRequest> findByStatusOrderByCreatedAtDesc(ApprovalRequest.Status status);
+
+    List<ApprovalRequest> findByItemTypeOrderByCreatedAtDesc(String itemType);
 }

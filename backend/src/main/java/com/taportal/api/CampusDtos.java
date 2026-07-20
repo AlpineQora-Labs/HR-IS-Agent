@@ -40,7 +40,8 @@ public final class CampusDtos {
 
     /** What the public registration page needs to render the event header. */
     public record EventPublicInfo(
-            UUID id, String name, String type, String location, OffsetDateTime startsAt) {
+            UUID id, String name, String type, String location,
+            OffsetDateTime startsAt, OffsetDateTime endsAt, String timezone) {
     }
 
     /** Form-driven registration: the builder-defined answers array as JSON. */

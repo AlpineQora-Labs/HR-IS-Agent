@@ -42,6 +42,16 @@ public class RecruitingEvent {
     @Column(name = "starts_at", nullable = false)
     private OffsetDateTime startsAt;
 
+    /** Optional end of the event (validated after startsAt on create). */
+    @Setter
+    @Column(name = "ends_at")
+    private OffsetDateTime endsAt;
+
+    /** IANA zone the event runs in — display context for candidates. */
+    @Setter
+    @Column(nullable = false)
+    private String timezone = "America/New_York";
+
     @Setter
     @Column(nullable = false)
     private int registrations;
