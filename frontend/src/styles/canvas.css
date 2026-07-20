@@ -328,7 +328,7 @@
 
 /* ---- blocks palette (left panel, builder-style) ---- */
 .wfc-blocks {
-  width: 200px;
+  width: 64px;
   flex-shrink: 0;
   border-right: 1px solid var(--line, #e5e7eb);
   background: #fbfcfe;
@@ -339,8 +339,9 @@
   overflow-y: auto;
 }
 .wfc-blocks__head {
+  text-align: center;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 9.5px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-4);
@@ -353,8 +354,8 @@
 .wfc-block {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  justify-content: center;
+  padding: 7px;
   background: #fff;
   border: 1px solid var(--line, #e2e6ee);
   border-radius: 10px;
@@ -383,15 +384,10 @@
   height: 16px;
 }
 .wfc-block__label {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink-2);
+  display: none; /* icon-only rail — the name lives in the tooltip */
 }
 .wfc-blocks__hint {
-  margin-top: auto;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--ink-4);
+  display: none; /* icon-only rail — guidance moved to the inspector's empty state */
 }
 
 /* ---- email notification badge on an approval step ---- */
