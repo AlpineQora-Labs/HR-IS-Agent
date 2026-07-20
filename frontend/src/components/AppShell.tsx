@@ -119,7 +119,6 @@ function AdminRailNav() {
   const cur = new URLSearchParams(location.search).get('tab')
   return (
     <nav className="app__side">
-      <div className="nav-group">Admin</div>
       {ADMIN_SECTIONS.map(({ tab, label, icon }) => {
         const Icon = ICONS[icon]
         // Communications is a real sub-route (lifted component set); the other
@@ -147,10 +146,9 @@ function AdminRailNav() {
 
 /* The contextual rail: only the ACTIVE group's modules, labeled. Short by
    design — no scrolling, no collapse. */
-function RailNav({ group, keys }: { group: string; keys: string[] }) {
+function RailNav({ keys }: { keys: string[] }) {
   return (
     <nav className="app__side">
-      <div className="nav-group">{group}</div>
       {keys.map((k) => (
         <Item key={k} to={ROUTES[k]} Icon={ICONS[k]} label={MODULES.find((m) => m.key === k)!.label} />
       ))}
@@ -304,7 +302,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {activeGroup.group === 'Admin' ? (
           <AdminRailNav />
         ) : (
-          <RailNav group={activeGroup.group} keys={activeGroup.keys} />
+          <RailNav keys={activeGroup.keys} />
         )}
         <button
           className="app__collapse-handle"
