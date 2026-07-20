@@ -18,14 +18,33 @@ import {
   type Connection,
   type NodeProps,
 } from '@xyflow/react'
+import { useQuery } from '@tanstack/react-query'
 import '@xyflow/react/dist/style.css'
 import '@/styles/canvas.css'
 import { useConfig } from '@/state/config'
-import type { ApprovalWorkflow, Role, WorkflowGraph } from './approvals'
+import type { ApprovalWorkflow, Role, WorkflowGraph, WorkflowNode } from './approvals'
 import { useStore } from '@/state/store'
 import { useSaveServerWorkflows, useSimulateWorkflow, toServerDto, type SimulateResult } from './approvals'
+import { commsApi } from '../communications/commsApi'
 
-type WfData = { label?: string; approverRole?: string; condition?: string; lit?: boolean }
+type WfData = {
+  label?: string
+  approverRole?: string
+  condition?: string
+  lit?: boolean
+  emailAttached?: boolean
+  emailTemplateId?: string
+  emailTemplateName?: string
+  emailTrigger?: string
+}
+
+/** When an email notification fires, relative to the step/point it sits on. */
+const EMAIL_TRIGGERS = [
+  'When this point is reached',
+  'When the step approves',
+  'When the step rejects',
+  'When the request is fully approved',
+]
 
 /* ---------- node visual spec ---------- */
 
@@ -34,6 +53,7 @@ export const SPEC = {
   approval: { kicker: 'Approval', rail: '#3b6fd4', iconBg: '#eaf1fd', iconFg: '#2f5fc0' },
   condition: { kicker: 'Condition', rail: '#c98a00', iconBg: '#fdf5e3', iconFg: '#b07a00' },
   policy: { kicker: 'Policy', rail: '#0e8a80', iconBg: '#e6f5f3', iconFg: '#0b756d' },
+  email: { kicker: 'Email', rail: '#7c3aed', iconBg: '#f3ecfd', iconFg: '#6d28d9' },
   end: { kicker: 'Outcome', rail: '#1a9d55', iconBg: '#e9f7ef', iconFg: '#188a4b' },
 } as const
 
@@ -64,6 +84,12 @@ export const Icons = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 2.5 5 5v6c0 4.6 3 8.4 7 9.5 4-1.1 7-4.9 7-9.5V5l-7-2.5Z" />
       <path d="m8.8 12 2.2 2.2 4.2-4.6" />
+    </svg>
+  ),
+  email: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3.5 7 8.5 6 8.5-6" />
     </svg>
   ),
   end: (
@@ -148,6 +174,11 @@ function ApprovalNode({ data }: NodeProps) {
   const who = names.length ? names.slice(0, 2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '') : 'No users in role'
   return (
     <Card type="approval" title={d.label || 'Approval step'} sub={who} chip={d.approverRole || 'Any approver'} lit={d.lit}>
+      {d.emailAttached && (
+        <span className="wfc-node__mail" title={`Email: ${d.emailTemplateName || 'choose a template'} · ${d.emailTrigger || ''}`}>
+          {Icons.email}
+        </span>
+      )}
       <Handle type="target" position={Position.Top} />
       <Handle type="source" position={Position.Bottom} />
     </Card>
@@ -172,6 +203,15 @@ function PolicyNode({ data }: NodeProps) {
     </Card>
   )
 }
+function EmailNode({ data }: NodeProps) {
+  const d = data as WfData
+  return (
+    <Card type="email" title={d.emailTemplateName || 'Email notification'} sub={d.emailTrigger || 'Choose a template'} lit={d.lit}>
+      <Handle type="target" position={Position.Top} />
+      <Handle type="source" position={Position.Bottom} />
+    </Card>
+  )
+}
 function EndNode({ data }: NodeProps) {
   const d = data as WfData
   return (
@@ -181,7 +221,14 @@ function EndNode({ data }: NodeProps) {
   )
 }
 
-const nodeTypes = { trigger: TriggerNode, approval: ApprovalNode, condition: ConditionNode, policy: PolicyNode, end: EndNode }
+const nodeTypes = {
+  trigger: TriggerNode,
+  approval: ApprovalNode,
+  condition: ConditionNode,
+  policy: PolicyNode,
+  email: EmailNode,
+  end: EndNode,
+}
 
 // Explicit dimensions so nodes are "measured" even where ResizeObserver is flaky;
 // updateNodeInternals (below) computes handle bounds so edges render on mount.
@@ -190,6 +237,7 @@ const DIMS: Record<string, { width: number; height: number }> = {
   approval: { width: 184, height: 86 },
   condition: { width: 184, height: 82 },
   policy: { width: 184, height: 64 },
+  email: { width: 184, height: 72 },
   end: { width: 184, height: 64 },
 }
 const sized = (n: Node): Node => ({ ...n, ...DIMS[n.type as string] })
@@ -302,6 +350,13 @@ function autoLayout(nodes: Node[], edges: Edge[]): Node[] {
 
 /* ---------- the editor ---------- */
 
+/** Blocks the left palette offers — drag onto the canvas (or click to add). */
+const BLOCKS: { type: 'approval' | 'condition' | 'email'; label: string }[] = [
+  { type: 'approval', label: 'Approver' },
+  { type: 'condition', label: 'Condition' },
+  { type: 'email', label: 'Email' },
+]
+
 export default function ApprovalCanvas(props: { workflow: ApprovalWorkflow; onClose: () => void; onSaved: (w: ApprovalWorkflow) => void }) {
   // Portal to <body> so the full-screen canvas escapes the app shell's transformed
   // ancestor — otherwise React Flow can't measure nodes and edges won't render.
@@ -324,6 +379,9 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   const [selId, setSelId] = useState<string | null>(null)
   const [idc, setIdc] = useState(1)
 
+  // Email templates for the notification rules (right panel).
+  const { data: templates } = useQuery({ queryKey: ['email-templates'], queryFn: commsApi.getEmailTemplates })
+
   // Compute handle bounds after mount so edges render as soon as the canvas opens.
   // Retried on a short schedule: environments without a working ResizeObserver
   // (some embedded browsers) never self-measure, and a single early call can land
@@ -344,19 +402,118 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     [setEdges],
   )
 
-  const addNode = (type: 'approval' | 'condition') => {
+  const measureSoon = useCallback(
+    (id: string) => setTimeout(() => updateNodeInternals(id), 80),
+    [updateNodeInternals],
+  )
+
+  const addNode = (type: 'approval' | 'condition' | 'email', position?: { x: number; y: number }) => {
     const id = `n-${type}-${idc}`
+    setIdc((n) => n + 1)
+    const data: WfData =
+      type === 'approval'
+        ? { label: 'New approval', approverRole: roles[0]?.name }
+        : type === 'condition'
+          ? { condition: 'Always' }
+          : { label: 'Email notification', emailTrigger: EMAIL_TRIGGERS[0] }
+    setNodes((ns) => [...ns, sized({ id, type, position: position ?? { x: 560, y: 120 + ns.length * 40 }, data })])
+    setSelId(id)
+    measureSoon(id)
+    return id
+  }
+
+  /* ---------- drag & drop from the blocks palette ---------- */
+
+  const { screenToFlowPosition } = useReactFlow()
+
+  /** Is a flow-space point inside a node's box? */
+  const hitNode = (p: { x: number; y: number }, n: Node) => {
+    const w = (n.width as number) ?? DIMS[n.type as string]?.width ?? 184
+    const h = (n.height as number) ?? DIMS[n.type as string]?.height ?? 80
+    return p.x >= n.position.x && p.x <= n.position.x + w && p.y >= n.position.y && p.y <= n.position.y + h
+  }
+
+  /** Nearest edge whose segment passes within ~55px of the point (drop "between two boxes"). */
+  const nearestEdge = (p: { x: number; y: number }): Edge | null => {
+    const center = (id: string) => {
+      const n = nodes.find((n) => n.id === id)
+      if (!n) return null
+      const w = (n.width as number) ?? DIMS[n.type as string]?.width ?? 184
+      const h = (n.height as number) ?? DIMS[n.type as string]?.height ?? 80
+      return { x: n.position.x + w / 2, y: n.position.y + h / 2 }
+    }
+    let best: { e: Edge; d: number } | null = null
+    for (const e of edges) {
+      const a = center(e.source)
+      const b = center(e.target)
+      if (!a || !b) continue
+      const l2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2
+      const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2))
+      const d = Math.hypot(p.x - (a.x + t * (b.x - a.x)), p.y - (a.y + t * (b.y - a.y)))
+      if (d < 55 && (!best || d < best.d)) best = { e, d }
+    }
+    return best?.e ?? null
+  }
+
+  /** Attach an email notification to an approval step (envelope badge on the box). */
+  const attachEmail = (nodeId: string) => {
+    setNodes((ns) =>
+      ns.map((n) =>
+        n.id === nodeId
+          ? { ...n, data: { ...n.data, emailAttached: true, emailTrigger: (n.data as WfData).emailTrigger ?? 'When the step approves' } }
+          : n,
+      ),
+    )
+    setSelId(nodeId)
+    flash('Email notification attached — pick a template on the right')
+  }
+
+  /** Splice an email node into the middle of an existing edge. */
+  const spliceEmail = (edge: Edge, p: { x: number; y: number }) => {
+    const id = `n-email-${idc}`
     setIdc((n) => n + 1)
     setNodes((ns) => [
       ...ns,
       sized({
         id,
-        type,
-        position: { x: 560, y: 120 + ns.length * 40 },
-        data: type === 'approval' ? { label: 'New approval', approverRole: roles[0]?.name } : { condition: 'Always' },
+        type: 'email',
+        position: { x: p.x - 92, y: p.y - 36 },
+        data: { label: 'Email notification', emailTrigger: EMAIL_TRIGGERS[0] },
       }),
     ])
+    setEdges((es) => [
+      ...es.filter((e) => e.id !== edge.id),
+      decorateEdge({ id: `e-${edge.source}-${id}`, source: edge.source, target: id, sourceHandle: edge.sourceHandle }),
+      decorateEdge({ id: `e-${id}-${edge.target}`, source: id, target: edge.target }),
+    ])
     setSelId(id)
+    measureSoon(id)
+    flash('Email step added to the flow — pick a template on the right')
+  }
+
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const type = e.dataTransfer.getData('application/reactflow') as 'approval' | 'condition' | 'email' | ''
+    if (!type) return
+    const p = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+    if (type === 'email') {
+      const target = nodes.find((n) => n.type === 'approval' && hitNode(p, n))
+      if (target) {
+        attachEmail(target.id)
+        return
+      }
+      const edge = nearestEdge(p)
+      if (edge) {
+        spliceEmail(edge, p)
+        return
+      }
+    }
+    addNode(type, { x: p.x - 92, y: p.y - 32 })
   }
 
   const { fitView } = useReactFlow()
@@ -382,7 +539,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     const graph: WorkflowGraph = {
       nodes: nodes.map((n) => ({
         id: n.id,
-        type: n.type as 'trigger' | 'approval' | 'condition' | 'end' | 'policy',
+        type: n.type as WorkflowNode['type'],
         position: n.position,
         data: (({ lit: _lit, ...rest }) => rest)(n.data as WfData),
       })),
@@ -483,6 +640,41 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   }
 
   const selSpec = selected ? SPEC[selected.type as keyof typeof SPEC] : null
+  const selData = (selected?.data ?? {}) as WfData
+
+  /** Template + trigger selects, shared by email nodes and step-attached notifications. */
+  const emailRules = (
+    <>
+      <label>
+        Email template
+        <select
+          className="select"
+          value={selData.emailTemplateId ?? ''}
+          onChange={(e) => {
+            const t = templates?.find((t) => t.templateId === e.target.value)
+            patchData({ emailTemplateId: t?.templateId, emailTemplateName: t?.name })
+          }}
+        >
+          <option value="" disabled>
+            Choose a template…
+          </option>
+          {(templates ?? []).map((t) => (
+            <option key={t.templateId} value={t.templateId}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Trigger event
+        <select className="select" value={selData.emailTrigger ?? EMAIL_TRIGGERS[0]} onChange={(e) => patchData({ emailTrigger: e.target.value })}>
+          {EMAIL_TRIGGERS.map((t) => (
+            <option key={t}>{t}</option>
+          ))}
+        </select>
+      </label>
+    </>
+  )
 
   return (
     <div className="wfc" style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#fff', display: 'flex', flexDirection: 'column' }}>
@@ -492,14 +684,6 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
           <div className="wfc-top__title">{workflow.name}</div>
         </div>
         <div className="wfc-palette">
-          <button onClick={() => addNode('approval')}>
-            <span style={{ color: SPEC.approval.iconFg, display: 'inline-flex', width: 14, height: 14 }}>{Icons.approval}</span>
-            Approval
-          </button>
-          <button onClick={() => addNode('condition')}>
-            <span style={{ color: SPEC.condition.iconFg, display: 'inline-flex', width: 14, height: 14 }}>{Icons.condition}</span>
-            Condition
-          </button>
           <button onClick={arrange}>
             <span style={{ color: 'var(--wfc-navy)', display: 'inline-flex', width: 14, height: 14 }}>{Icons.arrange}</span>
             Auto-arrange
@@ -523,7 +707,39 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
       </div>
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {/* blocks palette — drag onto the canvas */}
+        <div className="wfc-blocks">
+          <div className="wfc-blocks__head">Blocks</div>
+          <div className="wfc-blocks__grid">
+            {BLOCKS.map((b) => (
+              <div
+                key={b.type}
+                className="wfc-block"
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('application/reactflow', b.type)
+                  e.dataTransfer.effectAllowed = 'move'
+                }}
+                onClick={() => addNode(b.type)}
+                title={`Drag onto the canvas, or click to add`}
+              >
+                <span className="wfc-block__icon" style={{ background: SPEC[b.type].iconBg, color: SPEC[b.type].iconFg }}>
+                  {Icons[b.type]}
+                </span>
+                <span className="wfc-block__label">{b.label}</span>
+              </div>
+            ))}
+          </div>
+          <div className="wfc-blocks__hint">
+            Drag a block onto the canvas.
+            <br />
+            <br />
+            Drop <b>Email</b> on an approver box to attach a notification to that step, or between two boxes to add it into the flow —
+            then pick the template and trigger on the right.
+          </div>
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }} onDrop={onDrop} onDragOver={onDragOver}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -547,7 +763,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
           </ReactFlow>
         </div>
 
-        {/* inspector / test panel */}
+        {/* inspector / rules panel */}
         <div className="wfc-inspector">
           {simOpen ? (
             <>
@@ -612,18 +828,18 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
           ) : !selected ? (
             <>
               <div className="wfc-inspector__empty">
-                Select a node to edit it.
+                Select a node to edit its rules.
                 <br />
                 <br />
-                Drag a node to move it. Drag from a <b>handle</b> (the dot on a node’s edge) to another node to connect steps. Add
-                steps with <b>Approval</b> / <b>Condition</b> above, then <b>Test</b> a sample request to watch the route light up.
+                Drag blocks from the <b>left panel</b> onto the canvas. Drag from a <b>handle</b> (the dot on a node’s edge) to
+                another node to connect steps, then <b>Test</b> a sample request to watch the route light up.
               </div>
               <div className="wfc-legend">
                 {(Object.keys(SPEC) as (keyof typeof SPEC)[]).map((k) => (
                   <div key={k} className="wfc-legend__row">
                     <span className="wfc-legend__dot" style={{ background: SPEC[k].rail }} />
                     {SPEC[k].kicker}
-                    {k === 'condition' ? ' · branches yes / no' : k === 'policy' ? ' · auto-approve fast path' : ''}
+                    {k === 'condition' ? ' · branches yes / no' : k === 'policy' ? ' · auto-approve fast path' : k === 'email' ? ' · notification step' : ''}
                   </div>
                 ))}
               </div>
@@ -636,30 +852,22 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                 </span>
                 <div>
                   <div className="wfc-node__kicker" style={{ color: selSpec!.rail }}>
-                    {selSpec!.kicker} node
+                    {selSpec!.kicker} rules
                   </div>
                   <div style={{ fontSize: 13.5, fontWeight: 650, color: 'var(--ink-0)' }}>
-                    {(selected.data as WfData).label || (selected.data as WfData).condition || '—'}
+                    {selData.label || selData.condition || '—'}
                   </div>
                 </div>
               </div>
               <div className="wfc-inspector__body">
                 <label>
                   Label
-                  <input
-                    className="input"
-                    value={(selected.data as WfData).label ?? ''}
-                    onChange={(e) => patchData({ label: e.target.value })}
-                  />
+                  <input className="input" value={selData.label ?? ''} onChange={(e) => patchData({ label: e.target.value })} />
                 </label>
                 {selected.type === 'approval' && (
                   <label>
                     Approver role
-                    <select
-                      className="select"
-                      value={(selected.data as WfData).approverRole ?? ''}
-                      onChange={(e) => patchData({ approverRole: e.target.value })}
-                    >
+                    <select className="select" value={selData.approverRole ?? ''} onChange={(e) => patchData({ approverRole: e.target.value })}>
                       {roles.map((r: Role) => (
                         <option key={r.key}>{r.name}</option>
                       ))}
@@ -669,11 +877,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                 {selected.type === 'condition' && (
                   <label>
                     Condition
-                    <select
-                      className="select"
-                      value={(selected.data as WfData).condition ?? ''}
-                      onChange={(e) => patchData({ condition: e.target.value })}
-                    >
+                    <select className="select" value={selData.condition ?? ''} onChange={(e) => patchData({ condition: e.target.value })}>
                       {['Always', 'Bill rate over threshold', 'Amount over threshold', 'Duration over threshold', 'Flagged critical'].map(
                         (c) => (
                           <option key={c}>{c}</option>
@@ -682,6 +886,40 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                     </select>
                   </label>
                 )}
+
+                {selected.type === 'email' && emailRules}
+
+                {selected.type === 'approval' && (
+                  <>
+                    <div className="wfc-inspector__divider" />
+                    <div className="wfc-inspector__section" style={{ color: SPEC.email.rail }}>
+                      <span style={{ display: 'inline-flex', width: 13, height: 13 }}>{Icons.email}</span>
+                      Email notification
+                    </div>
+                    {selData.emailAttached ? (
+                      <>
+                        {emailRules}
+                        <button
+                          className="btn btn--ghost btn--sm"
+                          style={{ color: 'var(--danger-fg, #b3261e)' }}
+                          onClick={() => patchData({ emailAttached: false, emailTemplateId: undefined, emailTemplateName: undefined, emailTrigger: undefined })}
+                        >
+                          Remove notification
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="btn btn--outline btn--sm" onClick={() => attachEmail(selected.id)}>
+                          + Attach email notification
+                        </button>
+                        <div style={{ fontSize: 11.5, color: 'var(--ink-4)', lineHeight: 1.5 }}>
+                          …or drag the <b>Email</b> block from the left panel onto this step.
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+
                 {selected.id !== 'trigger' && selected.id !== 'end' && (
                   <button className="btn btn--danger btn--sm" onClick={deleteSelected}>
                     Delete node

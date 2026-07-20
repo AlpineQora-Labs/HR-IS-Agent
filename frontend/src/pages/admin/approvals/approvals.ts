@@ -13,9 +13,18 @@ export interface ApprovalLevel {
 
 export interface WorkflowNode {
   id: string
-  type: 'trigger' | 'approval' | 'condition' | 'end' | 'policy'
+  type: 'trigger' | 'approval' | 'condition' | 'end' | 'policy' | 'email'
   position: { x: number; y: number }
-  data: { label?: string; approverRole?: string; condition?: string }
+  data: {
+    label?: string
+    approverRole?: string
+    condition?: string
+    /** Email notification attached to an approval step (dropped on the box). */
+    emailAttached?: boolean
+    emailTemplateId?: string
+    emailTemplateName?: string
+    emailTrigger?: string
+  }
 }
 
 export interface WorkflowEdge {

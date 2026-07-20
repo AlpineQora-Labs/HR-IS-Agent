@@ -131,6 +131,12 @@ public class ApprovalWorkflowService {
                         target,
                         tn.path("data").path("label").asText("Approval"),
                         tn.path("data").path("approverRole").asText("")));
+                if (tn.path("data").path("emailAttached").asBoolean(false)) {
+                    notes.add(emailNote("Step email", tn));
+                }
+            }
+            if (tn != null && "email".equals(tn.path("type").asText())) {
+                notes.add(emailNote("Email notification", tn));
             }
             cur = target;
         }
@@ -164,6 +170,19 @@ public class ApprovalWorkflowService {
         }
         path.add("end");
         return new SimulateResponse(false, path, approvals, notes);
+    }
+
+
+    /** Human note for an email step/badge the walk passed through. */
+    private static String emailNote(String kind, JsonNode node) {
+        String tmpl = node.path("data").path("emailTemplateName").asText("");
+        String trig = node.path("data").path("emailTrigger").asText("");
+        StringBuilder sb = new StringBuilder(kind);
+        sb.append(tmpl.isBlank() ? " — no template chosen yet" : " — sends \"" + tmpl + "\"");
+        if (!trig.isBlank()) {
+            sb.append(" (").append(trig.toLowerCase()).append(")");
+        }
+        return sb.toString();
     }
 
     private boolean evalCondition(String condition, SimulateRequest req, double threshold, List<String> notes) {
