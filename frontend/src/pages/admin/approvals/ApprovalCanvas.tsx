@@ -402,10 +402,16 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   // (some embedded browsers) never self-measure, and a single early call can land
   // before layout settles.
   const updateNodeInternals = useUpdateNodeInternals()
+  const nodesRef = useRef(nodes)
+  nodesRef.current = nodes
   useEffect(() => {
-    const ids = seed.nodes.map((n) => n.id)
+    // Measure every node in the CURRENT state (not just the seed): after a
+    // remount, dynamically-added nodes survive in preserved state but their
+    // handle bounds are gone — unmeasured handles silently refuse connections.
     const delays = [60, 200, 450, 800, 1400, 2200]
-    const timers = delays.map((ms) => setTimeout(() => ids.forEach((id) => updateNodeInternals(id)), ms))
+    const timers = delays.map((ms) =>
+      setTimeout(() => nodesRef.current.forEach((n) => updateNodeInternals(n.id)), ms),
+    )
     return () => timers.forEach(clearTimeout)
   }, [seed, updateNodeInternals])
 
@@ -417,8 +423,11 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     [setEdges],
   )
 
+  // Same retry schedule as the mount effect: a single early call can land before
+  // layout settles (or before a flaky ResizeObserver reports), leaving the new
+  // node's handle bounds unknown — which silently breaks connecting to it.
   const measureSoon = useCallback(
-    (id: string) => setTimeout(() => updateNodeInternals(id), 80),
+    (id: string) => [80, 250, 600, 1200].forEach((ms) => setTimeout(() => updateNodeInternals(id), ms)),
     [updateNodeInternals],
   )
 
@@ -796,6 +805,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
             onNodeClick={(_, n) => setSelId(n.id)}
             onPaneClick={() => setSelId(null)}
             nodeTypes={nodeTypes}
+            connectionRadius={38}
             fitView
             fitViewOptions={{ padding: 0.25, maxZoom: 1 }}
             proOptions={{ hideAttribution: true }}

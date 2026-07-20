@@ -25,7 +25,8 @@
     0 1px 2px rgba(15, 23, 42, 0.05),
     0 8px 24px -12px rgba(15, 23, 42, 0.18);
   transition: box-shadow 140ms ease, transform 140ms ease, border-color 140ms ease;
-  overflow: hidden;
+  /* NOT overflow:hidden — the connection ports sit just outside the card edge
+     and must stay visible and clickable. The rail rounds its own corners. */
   font-size: 13px;
 }
 .wfc-node:hover {
@@ -41,7 +42,7 @@
     0 14px 34px -12px rgba(15, 23, 42, 0.26);
 }
 
-.wfc-node__rail { position: absolute; inset: 0 auto 0 0; width: 4px; }
+.wfc-node__rail { position: absolute; inset: 0 auto 0 0; width: 4px; border-radius: 14px 0 0 14px; }
 
 .wfc-node__inner { display: flex; gap: 9px; padding: 9px 10px 9px 13px; align-items: flex-start; position: relative; }
 
@@ -92,19 +93,69 @@
 .wfc-node__branches .yes { color: var(--wfc-green); border-right: 1px solid rgba(15, 23, 42, 0.07); }
 .wfc-node__branches .no { color: var(--wfc-red); }
 
-/* handles */
+/* handles — visible connection PORTS. Drag from a bottom port to another
+   box's top port to connect the steps. */
 .wfc .react-flow__handle {
-  width: 9px;
-  height: 9px;
+  width: 15px;
+  height: 15px;
   border-radius: 999px;
-  background: #fff;
-  border: 2px solid var(--wfc-navy);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
-  transition: transform 120ms ease, background 120ms ease;
+  background: var(--wfc-navy);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
+  transition: background 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
 }
-.wfc .react-flow__handle:hover { transform: scale(1.35); background: var(--navy-050, #eef2fb); }
-.wfc .react-flow__handle-top { top: -6px; }
-.wfc .react-flow__handle-bottom { bottom: -6px; }
+/* the + glyph inside each port */
+.wfc .react-flow__handle::after {
+  content: '+';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  pointer-events: none;
+}
+/* generous invisible hit area so the port is easy to grab */
+.wfc .react-flow__handle::before {
+  content: '';
+  position: absolute;
+  inset: -9px;
+  border-radius: 999px;
+}
+.wfc .react-flow__handle:hover {
+  background: #2a52a8;
+  box-shadow: 0 0 0 4px rgba(1, 33, 105, 0.18), 0 1px 4px rgba(15, 23, 42, 0.35);
+}
+.wfc .react-flow__handle-top { top: -8px; }
+.wfc .react-flow__handle-bottom { bottom: -8px; }
+/* while dragging a connection: the origin port fills navy… */
+.wfc .react-flow__handle.connectingfrom {
+  background: #2a52a8;
+  box-shadow: 0 0 0 5px rgba(1, 33, 105, 0.22);
+}
+/* …and every prospective target port glows so you know where to land */
+.wfc .react-flow__connection ~ * .react-flow__handle,
+.wfc .react-flow__handle.connectingto,
+.wfc .react-flow__handle.valid {
+  border-color: var(--wfc-green);
+}
+.wfc .react-flow__handle.connectingto,
+.wfc .react-flow__handle.valid {
+  background: var(--wfc-green);
+  box-shadow: 0 0 0 5px rgba(26, 157, 85, 0.25);
+}
+/* the in-progress connection line */
+.wfc .react-flow__connection-path {
+  stroke: var(--wfc-navy);
+  stroke-width: 2.4;
+  stroke-dasharray: 7 5;
+}
+/* condition branches: tint the YES / NO ports to match their labels */
+.wfc .react-flow__handle[data-handleid='yes'] { background: var(--wfc-green); }
+.wfc .react-flow__handle[data-handleid='no'] { background: var(--wfc-red); }
 
 /* edges */
 .wfc .react-flow__edge-path {
