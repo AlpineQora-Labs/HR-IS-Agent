@@ -13,7 +13,7 @@ export interface ApprovalLevel {
 
 export interface WorkflowNode {
   id: string
-  type: 'trigger' | 'approval' | 'condition' | 'end' | 'policy' | 'email'
+  type: 'trigger' | 'approval' | 'condition' | 'end' | 'policy' | 'email' | 'exception'
   position: { x: number; y: number }
   data: {
     label?: string
@@ -32,6 +32,7 @@ export interface WorkflowEdge {
   source: string
   target: string
   sourceHandle?: string | null
+  targetHandle?: string | null
   label?: string
 }
 

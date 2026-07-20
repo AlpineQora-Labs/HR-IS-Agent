@@ -138,6 +138,9 @@ public class ApprovalWorkflowService {
             if (tn != null && "email".equals(tn.path("type").asText())) {
                 notes.add(emailNote("Email notification", tn));
             }
+            if (tn != null && "exception".equals(tn.path("type").asText())) {
+                notes.add("Routed to exception — " + tn.path("data").path("label").asText("Exception"));
+            }
             cur = target;
         }
         return new SimulateResponse(false, path, approvals, notes);

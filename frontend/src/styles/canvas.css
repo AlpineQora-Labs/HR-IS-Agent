@@ -102,7 +102,15 @@
   background: var(--wfc-navy);
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
-  transition: background 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  transition: background 120ms ease, box-shadow 120ms ease, border-color 120ms ease, opacity 120ms ease;
+  /* Ports stay hidden until you hover the box (or a connection is in progress),
+     keeping the canvas clean. They remain grabbable either way. */
+  opacity: 0;
+}
+.wfc .react-flow__node:hover .react-flow__handle,
+.wfc .react-flow__node.selected .react-flow__handle,
+.wfc:has(.react-flow__connection) .react-flow__handle {
+  opacity: 1;
 }
 /* the + glyph inside each port */
 .wfc .react-flow__handle::after {
@@ -131,13 +139,14 @@
 }
 .wfc .react-flow__handle-top { top: -8px; }
 .wfc .react-flow__handle-bottom { bottom: -8px; }
+.wfc .react-flow__handle-left { left: -8px; }
+.wfc .react-flow__handle-right { right: -8px; }
 /* while dragging a connection: the origin port fills navy… */
 .wfc .react-flow__handle.connectingfrom {
   background: #2a52a8;
   box-shadow: 0 0 0 5px rgba(1, 33, 105, 0.22);
 }
 /* …and every prospective target port glows so you know where to land */
-.wfc .react-flow__connection ~ * .react-flow__handle,
 .wfc .react-flow__handle.connectingto,
 .wfc .react-flow__handle.valid {
   border-color: var(--wfc-green);

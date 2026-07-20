@@ -8,6 +8,7 @@ import {
   Handle,
   Position,
   MarkerType,
+  ConnectionMode,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -54,6 +55,7 @@ export const SPEC = {
   condition: { kicker: 'Condition', rail: '#c98a00', iconBg: '#fdf5e3', iconFg: '#b07a00' },
   policy: { kicker: 'Policy', rail: '#0e8a80', iconBg: '#e6f5f3', iconFg: '#0b756d' },
   email: { kicker: 'Email', rail: '#7c3aed', iconBg: '#f3ecfd', iconFg: '#6d28d9' },
+  exception: { kicker: 'Exception', rail: '#e31837', iconBg: '#fdecee', iconFg: '#c31432' },
   end: { kicker: 'Outcome', rail: '#1a9d55', iconBg: '#e9f7ef', iconFg: '#188a4b' },
 } as const
 
@@ -90,6 +92,13 @@ export const Icons = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="5" width="18" height="14" rx="2" />
       <path d="m3.5 7 8.5 6 8.5-6" />
+    </svg>
+  ),
+  exception: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3 2.5 20h19L12 3Z" />
+      <path d="M12 10v4" />
+      <circle cx="12" cy="17" r="0.5" />
     </svg>
   ),
   end: (
@@ -162,7 +171,9 @@ function TriggerNode({ data }: NodeProps) {
   const d = data as WfData
   return (
     <Card type="trigger" title={d.label || 'Request'} sub="Starts the approval flow" lit={d.lit}>
-      <Handle type="source" position={Position.Bottom} />
+      <Handle type="source" position={Position.Bottom} id="b" />
+      <Handle type="source" position={Position.Left} id="l" />
+      <Handle type="source" position={Position.Right} id="r" />
     </Card>
   )
 }
@@ -179,8 +190,10 @@ function ApprovalNode({ data }: NodeProps) {
           {Icons.email}
         </span>
       )}
-      <Handle type="target" position={Position.Top} />
-      <Handle type="source" position={Position.Bottom} />
+      <Handle type="target" position={Position.Top} id="t" />
+      <Handle type="source" position={Position.Bottom} id="b" />
+      <Handle type="source" position={Position.Left} id="l" />
+      <Handle type="source" position={Position.Right} id="r" />
     </Card>
   )
 }
@@ -188,7 +201,9 @@ function ConditionNode({ data }: NodeProps) {
   const d = data as WfData
   return (
     <Card type="condition" title={d.condition || 'Always'} sub="Routes the request down a branch" branches lit={d.lit}>
-      <Handle type="target" position={Position.Top} />
+      <Handle type="target" position={Position.Top} id="t" />
+      <Handle type="target" position={Position.Left} id="l" />
+      <Handle type="target" position={Position.Right} id="r" />
       <Handle type="source" position={Position.Bottom} id="yes" style={{ left: '25%' }} />
       <Handle type="source" position={Position.Bottom} id="no" style={{ left: '75%' }} />
     </Card>
@@ -198,8 +213,10 @@ function PolicyNode({ data }: NodeProps) {
   const d = data as WfData
   return (
     <Card type="policy" title="Auto-approve" sub={d.label || 'Within policy'} lit={d.lit}>
-      <Handle type="target" position={Position.Top} />
-      <Handle type="source" position={Position.Bottom} />
+      <Handle type="target" position={Position.Top} id="t" />
+      <Handle type="source" position={Position.Bottom} id="b" />
+      <Handle type="source" position={Position.Left} id="l" />
+      <Handle type="source" position={Position.Right} id="r" />
     </Card>
   )
 }
@@ -207,8 +224,20 @@ function EmailNode({ data }: NodeProps) {
   const d = data as WfData
   return (
     <Card type="email" title={d.emailTemplateName || 'Email notification'} sub={d.emailTrigger || 'Choose a template'} lit={d.lit}>
-      <Handle type="target" position={Position.Top} />
-      <Handle type="source" position={Position.Bottom} />
+      <Handle type="target" position={Position.Top} id="t" />
+      <Handle type="source" position={Position.Bottom} id="b" />
+      <Handle type="source" position={Position.Left} id="l" />
+      <Handle type="source" position={Position.Right} id="r" />
+    </Card>
+  )
+}
+function ExceptionNode({ data }: NodeProps) {
+  const d = data as WfData
+  return (
+    <Card type="exception" title={d.label || 'Exception'} sub="Routed out for review" lit={d.lit}>
+      <Handle type="target" position={Position.Top} id="t" />
+      <Handle type="target" position={Position.Left} id="l" />
+      <Handle type="target" position={Position.Right} id="r" />
     </Card>
   )
 }
@@ -216,7 +245,9 @@ function EndNode({ data }: NodeProps) {
   const d = data as WfData
   return (
     <Card type="end" title={d.label || 'Approved'} sub="Flow complete" lit={d.lit}>
-      <Handle type="target" position={Position.Top} />
+      <Handle type="target" position={Position.Top} id="t" />
+      <Handle type="target" position={Position.Left} id="l" />
+      <Handle type="target" position={Position.Right} id="r" />
     </Card>
   )
 }
@@ -227,6 +258,7 @@ const nodeTypes = {
   condition: ConditionNode,
   policy: PolicyNode,
   email: EmailNode,
+  exception: ExceptionNode,
   end: EndNode,
 }
 
@@ -238,6 +270,7 @@ const DIMS: Record<string, { width: number; height: number }> = {
   condition: { width: 184, height: 82 },
   policy: { width: 184, height: 64 },
   email: { width: 184, height: 72 },
+  exception: { width: 184, height: 64 },
   end: { width: 184, height: 64 },
 }
 const sized = (n: Node): Node => ({ ...n, ...DIMS[n.type as string] })
@@ -351,11 +384,23 @@ function autoLayout(nodes: Node[], edges: Edge[]): Node[] {
 /* ---------- the editor ---------- */
 
 /** Blocks the left palette offers — drag onto the canvas (or click to add). */
-const BLOCKS: { type: 'approval' | 'condition' | 'email'; label: string }[] = [
+const BLOCKS: { type: BlockType; label: string }[] = [
   { type: 'approval', label: 'Approver' },
   { type: 'condition', label: 'Condition' },
   { type: 'email', label: 'Email' },
+  { type: 'exception', label: 'Exception' },
 ]
+
+type BlockType = 'approval' | 'condition' | 'email' | 'exception'
+
+const blockDefaults = (type: BlockType, firstRole?: string): WfData =>
+  type === 'approval'
+    ? { label: 'New approval', approverRole: firstRole }
+    : type === 'condition'
+      ? { condition: 'Always' }
+      : type === 'email'
+        ? { label: 'Email notification', emailTrigger: EMAIL_TRIGGERS[0] }
+        : { label: 'Exception' }
 
 export default function ApprovalCanvas(props: { workflow: ApprovalWorkflow; onClose: () => void; onSaved: (w: ApprovalWorkflow) => void }) {
   // Portal onto the shell element (not <body>): escapes the content subtree's
@@ -386,7 +431,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   // the edge (or approver box) it would snap into is highlighted; dropping
   // splices it in and auto-aligns. dataTransfer is unreadable during dragover,
   // so the dragged type lives in a ref set by the palette's dragstart.
-  const dragTypeRef = useRef<'approval' | 'condition' | 'email' | null>(null)
+  const dragTypeRef = useRef<BlockType | null>(null)
   const [snapEdgeId, setSnapEdgeId] = useState<string | null>(null)
   const [snapNodeId, setSnapNodeId] = useState<string | null>(null)
   const clearSnap = () => {
@@ -431,15 +476,10 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     [updateNodeInternals],
   )
 
-  const addNode = (type: 'approval' | 'condition' | 'email', position?: { x: number; y: number }) => {
+  const addNode = (type: BlockType, position?: { x: number; y: number }) => {
     const id = `n-${type}-${idc}`
     setIdc((n) => n + 1)
-    const data: WfData =
-      type === 'approval'
-        ? { label: 'New approval', approverRole: roles[0]?.name }
-        : type === 'condition'
-          ? { condition: 'Always' }
-          : { label: 'Email notification', emailTrigger: EMAIL_TRIGGERS[0] }
+    const data: WfData = blockDefaults(type, roles[0]?.name)
     setNodes((ns) => [...ns, sized({ id, type, position: position ?? { x: 560, y: 120 + ns.length * 40 }, data })])
     setSelId(id)
     measureSoon(id)
@@ -494,21 +534,19 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
 
   /** Splice a block into an existing edge (the snap drop), then auto-arrange so
    *  the new step falls in line with the flow. */
-  const spliceIntoEdge = (type: 'approval' | 'condition' | 'email', edge: Edge, p: { x: number; y: number }) => {
+  const spliceIntoEdge = (type: BlockType, edge: Edge, p: { x: number; y: number }) => {
     const id = `n-${type}-${idc}`
     setIdc((n) => n + 1)
-    const data: WfData =
-      type === 'approval'
-        ? { label: 'New approval', approverRole: roles[0]?.name }
-        : type === 'condition'
-          ? { condition: 'Always' }
-          : { label: 'Email notification', emailTrigger: EMAIL_TRIGGERS[0] }
+    const data: WfData = blockDefaults(type, roles[0]?.name)
     const node = sized({ id, type, position: { x: p.x - 92, y: p.y - 36 }, data })
     const newEdges = [
       ...edges.filter((e) => e.id !== edge.id),
       decorateEdge({ id: `e-${edge.source}-${id}`, source: edge.source, target: id, sourceHandle: edge.sourceHandle }),
       // A spliced condition continues down its YES branch; NO stays free to wire.
-      decorateEdge({ id: `e-${id}-${edge.target}`, source: id, target: edge.target, sourceHandle: type === 'condition' ? 'yes' : undefined }),
+      // An exception is terminal — it takes the incoming edge and goes no further.
+      ...(type === 'exception'
+        ? []
+        : [decorateEdge({ id: `e-${id}-${edge.target}`, source: id, target: edge.target, sourceHandle: type === 'condition' ? 'yes' : undefined })]),
     ]
     setNodes(autoLayout([...nodes, node], newEdges))
     setEdges(newEdges)
@@ -540,7 +578,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault()
-    const type = e.dataTransfer.getData('application/reactflow') as 'approval' | 'condition' | 'email' | ''
+    const type = e.dataTransfer.getData('application/reactflow') as BlockType | ''
     dragTypeRef.current = null
     clearSnap()
     if (!type) return
@@ -586,7 +624,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
         position: n.position,
         data: (({ lit: _lit, ...rest }) => rest)(n.data as WfData),
       })),
-      edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle ?? null })),
+      edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle ?? null, targetHandle: e.targetHandle ?? null })),
     }
     // Keep the tab's approval chain in sync: walk the graph from the trigger in
     // flow order and rebuild levels from the approval nodes it reaches.
@@ -805,6 +843,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
             onNodeClick={(_, n) => setSelId(n.id)}
             onPaneClick={() => setSelId(null)}
             nodeTypes={nodeTypes}
+            connectionMode={ConnectionMode.Loose}
             connectionRadius={38}
             fitView
             fitViewOptions={{ padding: 0.25, maxZoom: 1 }}
@@ -896,7 +935,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                   <div key={k} className="wfc-legend__row">
                     <span className="wfc-legend__dot" style={{ background: SPEC[k].rail }} />
                     {SPEC[k].kicker}
-                    {k === 'condition' ? ' · branches yes / no' : k === 'policy' ? ' · auto-approve fast path' : k === 'email' ? ' · notification step' : ''}
+                    {k === 'condition' ? ' · branches yes / no' : k === 'policy' ? ' · auto-approve fast path' : k === 'email' ? ' · notification step' : k === 'exception' ? ' · terminal · e.g. condition NO' : ''}
                   </div>
                 ))}
               </div>
