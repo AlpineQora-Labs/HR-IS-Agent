@@ -21,7 +21,8 @@ export default function SlideOver({
 }: {
   label: string
   onClose: () => void
-  width?: number
+  /** Number (px) or any CSS width (e.g. a calc() for the expanded state). */
+  width?: number | string
   children: React.ReactNode
 }) {
   const [closing, setClosing] = useState(false)
@@ -71,7 +72,8 @@ export default function SlideOver({
           right: 12,
           bottom: 12,
           width,
-          maxWidth: 'calc(92vw - 12px)',
+          maxWidth: 'calc(96vw - 12px)',
+          transition: 'width 240ms cubic-bezier(0.32, 0.72, 0, 1)',
           background: 'var(--app-panel)',
           border: '1px solid var(--line)',
           borderRadius: 16,
