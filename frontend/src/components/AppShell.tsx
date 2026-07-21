@@ -110,8 +110,9 @@ const GROUP_PILL_LABELS: Record<string, string> = {
 }
 
 /* Admin's rail shows its sections (the page has no in-page tabs). */
+// No 'Overview' entry: the locked Settings item at the rail's bottom already
+// navigates to the Admin hub — a second gear at the top duplicated it.
 const ADMIN_SECTIONS: { tab: string | null; label: string; icon: string }[] = [
-  { tab: null, label: 'Overview', icon: 'admin' },
   { tab: 'users', label: 'Users & Access', icon: 'candidates' },
   { tab: 'communications', label: 'Communication', icon: 'campaigns' },
   { tab: 'forms', label: 'Forms', icon: 'offers' },
