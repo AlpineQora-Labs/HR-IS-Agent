@@ -448,7 +448,8 @@ export default function CandidatesPage() {
               key={selected.id}
               label={`${selected.name} — candidate record`}
               onClose={() => setSel('')}
-              width={expanded ? 'calc(100vw - var(--shell-rail-w, 262px) - 36px)' : 440}
+              width={440}
+              stretchLeft={expanded ? 'calc(var(--shell-rail-w, 262px) + 12px)' : null}
             >
               <CandidateDetailPane
                 summary={selected}
