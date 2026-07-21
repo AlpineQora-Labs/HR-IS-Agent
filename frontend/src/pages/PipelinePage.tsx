@@ -672,17 +672,42 @@ export default function PipelinePage() {
               <span className="sub" style={{ margin: 0, marginLeft: 'auto', fontSize: 12 }}>Rejected · Withdrawn</span>
             </button>
             {closedOpen && (
-              <div style={{ padding: '0 14px 14px' }}>
-                {closedCards.length === 0 ? (
-                  <div style={{ fontSize: 12.5, color: 'var(--ink-5)', padding: '8px 0 4px' }}>No closed candidates.</div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+              closedCards.length === 0 ? (
+                <div style={{ fontSize: 12.5, color: 'var(--ink-5)', padding: '0 14px 14px' }}>No closed candidates.</div>
+              ) : (
+                /* Closed records read better as a table — they're history, not work in flight. */
+                <table className="data-table" style={{ borderTop: '1px solid var(--line)' }}>
+                  <thead>
+                    <tr>
+                      <th>Candidate</th>
+                      <th>Role</th>
+                      <th>Outcome</th>
+                      <th className="t-right">Fit</th>
+                      <th>Applied</th>
+                      <th>Closed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
                     {closedCards.map(({ card, tag }) => (
-                      <CandidateCard key={card.id} app={card} tag={tag} onSelect={setSelected} />
+                      <tr key={card.id} onClick={() => setSelected(card)} style={{ cursor: 'pointer' }}>
+                        <td>
+                          <span className="who">
+                            <span className="avatar" style={{ width: 28, height: 28, fontSize: 10.5 }}>{initials(card.candidateName)}</span>
+                            <span className="t-strong">{card.candidateName}</span>
+                          </span>
+                        </td>
+                        <td className="t-muted">{card.jobTitle}</td>
+                        <td>
+                          <span className={`badge ${tag === 'Rejected' ? 'badge--danger' : 'badge--purple'}`}>{tag}</span>
+                        </td>
+                        <td className="t-num t-right">{card.fitScore}</td>
+                        <td className="t-muted">{date(card.appliedAt)}</td>
+                        <td className="t-muted">{date(card.updatedAt)}</td>
+                      </tr>
                     ))}
-                  </div>
-                )}
-              </div>
+                  </tbody>
+                </table>
+              )
             )}
           </div>
         </>
