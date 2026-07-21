@@ -37,6 +37,7 @@ public class CampusService {
     private final EventRegistrationRepository registrations;
     private final RecruitingEventRepository events;
     private final com.taportal.domain.approval.ApprovalRequestRepository approvalRequests;
+    private final com.taportal.domain.notification.NotificationService notifications;
     private final CandidateRepository candidates;
     private final FormDefinitionRepository formDefinitions;
     private final FormLogicService formLogic;
@@ -52,9 +53,11 @@ public class CampusService {
             FormLogicService formLogic,
             FormResponseRepository formResponses,
             ObjectMapper objectMapper,
-            com.taportal.domain.approval.ApprovalRequestRepository approvalRequests) {
+            com.taportal.domain.approval.ApprovalRequestRepository approvalRequests,
+            com.taportal.domain.notification.NotificationService notifications) {
         this.schools = schools;
         this.approvalRequests = approvalRequests;
+        this.notifications = notifications;
         this.registrations = registrations;
         this.events = events;
         this.candidates = candidates;
@@ -115,6 +118,10 @@ public class CampusService {
         reg.setStatus(walkIn ? "CHECKED_IN" : "REGISTERED");
         reg.setCheckedInAt(walkIn ? OffsetDateTime.now() : null);
         reg = registrations.save(reg);
+        events.findById(eventId).ifPresent((ev) -> notifications.notifyRole("RECRUITER", "REGISTRATION",
+                "New registration: " + request.name(), ev.getName(), "/events"));
+        events.findById(eventId).ifPresent((ev) -> notifications.notifyRole("RECRUITER", "REGISTRATION",
+                "New registration: " + request.name(), ev.getName(), "/events"));
 
         String schoolName = reg.getSchoolId() == null ? null
                 : schools.findById(reg.getSchoolId()).map(School::getName).orElse(null);

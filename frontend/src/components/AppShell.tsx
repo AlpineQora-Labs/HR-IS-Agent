@@ -1,6 +1,7 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import CommandPalette from '@/components/CommandPalette'
+import NotificationsBell from '@/components/NotificationsBell'
 import { useStore } from '@/state/store'
 import { MODULES, useConfig } from '@/state/config'
 import {
@@ -307,9 +308,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           Career site
           <IconArrowRight className="ic" />
         </a>
-        <button className="btn btn--ghost btn--icon" aria-label="Notifications">
-          <IconBell className="ic" />
-        </button>
+        <NotificationsBell />
         <div className="avatar" title={currentUser?.name ?? 'Account'}>
           {currentUser?.initials ?? 'OA'}
         </div>

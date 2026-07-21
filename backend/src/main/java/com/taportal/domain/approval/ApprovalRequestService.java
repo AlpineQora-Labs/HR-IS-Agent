@@ -29,16 +29,19 @@ public class ApprovalRequestService {
     private final ApprovalWorkflowRepository workflows;
     private final ApprovalWorkflowService engine;
     private final ObjectMapper mapper;
+    private final com.taportal.domain.notification.NotificationService notifications;
 
     public ApprovalRequestService(
             ApprovalRequestRepository requests,
             ApprovalWorkflowRepository workflows,
             ApprovalWorkflowService engine,
-            ObjectMapper mapper) {
+            ObjectMapper mapper,
+            com.taportal.domain.notification.NotificationService notifications) {
         this.requests = requests;
         this.workflows = workflows;
         this.engine = engine;
         this.mapper = mapper;
+        this.notifications = notifications;
     }
 
     public List<ApprovalRequestResponse> list(ApprovalRequest.Status status) {
@@ -77,7 +80,23 @@ public class ApprovalRequestService {
                 verdict.autoApproved() ? OffsetDateTime.now() : null,
                 null,
                 null);
-        return toResponse(requests.save(req));
+        ApprovalRequestResponse saved = toResponse(requests.save(req));
+        if (req.getStatus() == ApprovalRequest.Status.PENDING && !verdict.requiredApprovals().isEmpty()) {
+            String role = verdict.requiredApprovals().get(0).role();
+            notifyApprovers(role, req.getTitle(), saved);
+        }
+        return saved;
+    }
+
+    /** The required role gets pinged; admins always see approval traffic too. */
+    private void notifyApprovers(String role, String title, ApprovalRequestResponse req) {
+        String key = com.taportal.domain.notification.NotificationService.roleKey(role);
+        notifications.notifyRole(key, "APPROVAL_NEEDED",
+                "Approval needed: " + title, req.sub(), "/approvals");
+        if (!"ADMIN".equals(key)) {
+            notifications.notifyRole("ADMIN", "APPROVAL_NEEDED",
+                    "Approval needed: " + title, req.sub(), "/approvals");
+        }
     }
 
     @Transactional
@@ -90,6 +109,11 @@ public class ApprovalRequestService {
             req.setStatus(ApprovalRequest.Status.APPROVED);
             req.setDecidedBy(actor());
             req.setDecidedAt(OffsetDateTime.now());
+            notifications.broadcast("APPROVED",
+                    "Approved: " + req.getTitle(), "Fully approved by " + actor(), "/approvals");
+        } else {
+            RequiredApproval next = required.get(req.getCurrentStep());
+            notifyApprovers(next.role(), req.getTitle(), toResponse(req));
         }
         return toResponse(requests.save(req));
     }
@@ -101,6 +125,8 @@ public class ApprovalRequestService {
         req.setStatus(ApprovalRequest.Status.REJECTED);
         req.setDecidedBy(actor());
         req.setDecidedAt(OffsetDateTime.now());
+        notifications.broadcast("REJECTED",
+                "Rejected: " + req.getTitle(), "Rejected by " + actor(), "/approvals");
         return toResponse(requests.save(req));
     }
 
