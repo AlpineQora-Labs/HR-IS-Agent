@@ -145,7 +145,21 @@ function AdminRailNav() {
           </Link>
         )
       })}
+      <RailFoot />
     </nav>
+  )
+}
+
+/** Locked rail footer: Settings lives at the bottom of EVERY rail, whatever
+ *  group is active. NavLink marks it current on any /admin route. */
+function RailFoot() {
+  return (
+    <div className="nav-foot">
+      <NavLink to="/admin" className="nav-item" title="Settings">
+        <IconAdmin className="ic" />
+        <span className="nav-label">Settings</span>
+      </NavLink>
+    </div>
   )
 }
 
@@ -157,6 +171,7 @@ function RailNav({ keys }: { keys: string[] }) {
       {keys.map((k) => (
         <Item key={k} to={ROUTES[k]} Icon={ICONS[k]} label={MODULES.find((m) => m.key === k)!.label} />
       ))}
+      <RailFoot />
     </nav>
   )
 }
@@ -294,9 +309,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         <button className="btn btn--ghost btn--icon" aria-label="Notifications">
           <IconBell className="ic" />
         </button>
-        <NavLink to="/admin" className="btn btn--ghost btn--icon" aria-label="Admin" title="Admin">
-          <IconAdmin className="ic" />
-        </NavLink>
         <div className="avatar" title={currentUser?.name ?? 'Account'}>
           {currentUser?.initials ?? 'OA'}
         </div>

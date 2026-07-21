@@ -262,6 +262,14 @@ button.card:hover {
 }
 .app__side {
   background: var(--bofa-navy-deep);
+  display: flex;
+  flex-direction: column;
+}
+/* Locked footer: Settings pinned to the rail's bottom on every screen. */
+.app__side .nav-foot {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
 }
 .app__side .nav-group {
   color: rgba(255, 255, 255, 0.52);

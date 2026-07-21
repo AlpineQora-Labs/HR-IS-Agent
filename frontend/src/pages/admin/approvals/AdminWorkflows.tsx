@@ -95,10 +95,30 @@ export default function AdminWorkflows() {
       ;[levels[i], levels[j]] = [levels[j], levels[i]]
       return { ...w, levels }
     }))
+  }
+
+  /** Create a workflow with a fresh key; the debounce-save persists it. */
+  const addWorkflow = () => {
+    dirty.current = true
+    const id = `wf-${Date.now()}`
+    setWorkflows((ws) => [
+      ...ws,
+      {
+        id,
+        name: 'New workflow',
+        trigger: 'Event',
+        enabled: true,
+        autoApprove: false,
+        levels: [{ id: 'l1', approverRole: roles[0]?.key ?? 'admin', condition: 'Always' }],
+      },
+    ])
+    flash('Workflow added — name it and set its chain')
+  }
+
   // referenced to satisfy the linter (used via canvas onSaved below)
   void replaceWorkflows
   void useMemo
-  }
+
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const firstRender = useRef(true)
   useEffect(() => {
@@ -132,9 +152,14 @@ export default function AdminWorkflows() {
         />
       )}
       <div className="card">
-        <div className="card__body" style={{ padding: '16px 20px', fontSize: 13, color: 'var(--ink-3)' }}>
-          Each request type routes through an ordered chain of approval levels. Items that fall within the auto-approve policy
-          skip the chain. Rules are evaluated top to bottom; a level fires only when its condition is met.
+        <div className="card__body" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px' }}>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', flex: 1 }}>
+            Each request type routes through an ordered chain of approval levels. Items that fall within the auto-approve policy
+            skip the chain. Rules are evaluated top to bottom; a level fires only when its condition is met.
+          </div>
+          <button className="btn btn--primary btn--sm" onClick={addWorkflow}>
+            New workflow
+          </button>
         </div>
       </div>
 
@@ -173,6 +198,7 @@ export default function AdminWorkflows() {
           w={w}
           roleName={roleName}
           roles={roles}
+          onName={(v) => updateWorkflow(w.id, { name: v })}
           onToggle={() => {
             updateWorkflow(w.id, { enabled: !w.enabled })
             flash(`${w.name} ${w.enabled ? 'disabled' : 'enabled'}`)
@@ -238,6 +264,7 @@ function WorkflowCard({
   w,
   roles,
   roleName,
+  onName,
   onToggle,
   onTrigger,
   onAuto,
@@ -251,6 +278,7 @@ function WorkflowCard({
   w: ApprovalWorkflow
   roles: { key: string; name: string }[]
   roleName: (k: string) => string
+  onName: (v: string) => void
   onToggle: () => void
   onTrigger: (v: string) => void
   onAuto: () => void
@@ -265,7 +293,12 @@ function WorkflowCard({
     <div className="card" style={{ opacity: w.enabled ? 1 : 0.66 }}>
       <div className="card__head">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h3 style={{ fontSize: 16 }}>{w.name}</h3>
+          <input
+            className="wf-name-input"
+            value={w.name}
+            onChange={(e) => onName(e.target.value)}
+            aria-label="Workflow name"
+          />
           <span className="badge">{w.trigger}</span>
           <span className={`badge ${w.enabled ? 'badge--ok' : ''}`}>{w.enabled ? 'Active' : 'Disabled'}</span>
           {w.graph && <span className="badge">canvas</span>}
