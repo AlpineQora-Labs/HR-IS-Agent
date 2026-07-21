@@ -64,23 +64,63 @@ export const SYSTEM_FIELDS: { label: string; hint: string }[] = [
   { label: 'Location / link', hint: 'Campus & room, or meeting URL' },
 ]
 
-const FIELD_PALETTE: { type: IntakeFieldType; label: string; hint: string; glyph: string }[] = [
-  { type: 'date', label: 'Date picker', hint: 'Calendar date', glyph: '▦' },
-  { type: 'email', label: 'Email', hint: 'Validated email address', glyph: '@' },
-  { type: 'fullname', label: 'Full Name', hint: 'First + last name', glyph: '👤' },
-  { type: 'header', label: 'Header', hint: 'Section heading (display)', glyph: 'H' },
-  { type: 'phone', label: 'Phone', hint: 'Phone number', glyph: '☎' },
-  { type: 'short', label: 'Short Text', hint: 'One line', glyph: '—' },
-  { type: 'long', label: 'Long Text', hint: 'Paragraph answer', glyph: '¶' },
-  { type: 'dropdown', label: 'Dropdown', hint: 'Pick one from a list', glyph: '▾' },
-  { type: 'single', label: 'Single choice', hint: 'Radio buttons', glyph: '◉' },
-  { type: 'multi', label: 'Multiple choice', hint: 'Checkboxes', glyph: '☑' },
-  { type: 'number', label: 'Number', hint: 'Capacity, headcount…', glyph: '#' },
-  { type: 'image', label: 'Image', hint: 'Show an image (display)', glyph: '🖼' },
-  { type: 'file', label: 'File upload', hint: 'Attach a document', glyph: '📎' },
-  { type: 'typeahead', label: 'Type ahead', hint: 'Search-as-you-type', glyph: '⌕' },
-  { type: 'yesno', label: 'Yes / No', hint: 'Waitlist, approval…', glyph: '⇄' },
+const FIELD_PALETTE: { type: IntakeFieldType; label: string; hint: string }[] = [
+  { type: 'date', label: 'Date picker', hint: 'Calendar date' },
+  { type: 'email', label: 'Email', hint: 'Validated email address' },
+  { type: 'fullname', label: 'Full Name', hint: 'First + last name' },
+  { type: 'header', label: 'Header', hint: 'Section heading (display)' },
+  { type: 'phone', label: 'Phone', hint: 'Phone number' },
+  { type: 'short', label: 'Short Text', hint: 'One line' },
+  { type: 'long', label: 'Long Text', hint: 'Paragraph answer' },
+  { type: 'dropdown', label: 'Dropdown', hint: 'Pick one from a list' },
+  { type: 'single', label: 'Single choice', hint: 'Radio buttons' },
+  { type: 'multi', label: 'Multiple choice', hint: 'Checkboxes' },
+  { type: 'number', label: 'Number', hint: 'Capacity, headcount…' },
+  { type: 'image', label: 'Image', hint: 'Show an image (display)' },
+  { type: 'file', label: 'File upload', hint: 'Attach a document' },
+  { type: 'typeahead', label: 'Type ahead', hint: 'Search-as-you-type' },
+  { type: 'yesno', label: 'Yes / No', hint: 'Waitlist, approval…' },
 ]
+
+/** Monochrome line icons for the palette — one visual language, no emoji. */
+const FIELD_ICON_PATHS: Record<string, React.ReactNode> = {
+  date: (<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /></>),
+  email: (<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3.5 7 8.5 6 8.5-6" /></>),
+  fullname: (<><circle cx="12" cy="8" r="3.5" /><path d="M5.5 20c.7-3.6 3.3-5.5 6.5-5.5s5.8 1.9 6.5 5.5" /></>),
+  header: (<path d="M6 5v14M18 5v14M6 12h12" />),
+  phone: (<path d="M5 4h4l2 5-2.5 1.5a12 12 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2Z" />),
+  short: (<path d="M4 12h16" />),
+  long: (<path d="M4 7h16M4 12h16M4 17h10" />),
+  dropdown: (<><rect x="3" y="6" width="18" height="12" rx="2" /><path d="m14 11 2.5 2.5L19 11" /></>),
+  single: (<><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" /></>),
+  multi: (<><rect x="4" y="4" width="16" height="16" rx="3" /><path d="m8.5 12.5 2.5 2.5 5-5.5" /></>),
+  number: (<path d="M9 4 7 20M17 4l-2 16M5 9h15M4 15h15" />),
+  image: (<><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="8.5" cy="10" r="1.5" /><path d="m3 17 5-4 4 3 4-4 5 5" /></>),
+  file: (<path d="m16.5 6.5-6.8 6.8a2.1 2.1 0 0 0 3 3l6.8-6.8a4.2 4.2 0 1 0-6-6L6.7 10.3a6.3 6.3 0 0 0 9 9l6-6" />),
+  typeahead: (<><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>),
+  yesno: (<><rect x="3" y="8" width="18" height="8" rx="4" /><circle cx="16" cy="12" r="2.5" /></>),
+  'layout-single': (<rect x="3" y="8" width="18" height="8" rx="2" />),
+  'layout-double': (<><rect x="3" y="8" width="8" height="8" rx="2" /><rect x="13" y="8" width="8" height="8" rx="2" /></>),
+  chevron: (<path d="m9 6 6 6-6 6" />),
+}
+
+function FieldIcon({ kind, size = 15 }: { kind: string; size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {FIELD_ICON_PATHS[kind]}
+    </svg>
+  )
+}
 
 /** Palette accordion groups — click a header to expand downward. */
 const FIELD_GROUPS: { name: string; types: IntakeFieldType[] }[] = [
@@ -90,9 +130,9 @@ const FIELD_GROUPS: { name: string; types: IntakeFieldType[] }[] = [
   { name: 'Content & uploads', types: ['header', 'image', 'file'] },
 ]
 
-const LAYOUT_PALETTE: { kind: 'single' | 'double'; label: string; hint: string; glyph: string }[] = [
-  { kind: 'single', label: 'Single field', hint: 'One long field per row', glyph: '▭' },
-  { kind: 'double', label: 'Side by side', hint: 'Two fields in one row', glyph: '◫' },
+const LAYOUT_PALETTE: { kind: 'single' | 'double'; label: string; hint: string }[] = [
+  { kind: 'single', label: 'Single field', hint: 'One long field per row' },
+  { kind: 'double', label: 'Side by side', hint: 'Two fields in one row' },
 ]
 
 const TYPE_LABEL: Record<IntakeFieldType, string> = {
@@ -584,11 +624,11 @@ function LivePreview({ form }: { form: IntakeForm }) {
   return (
     <div className="card" style={{ maxWidth: 680, margin: '0 auto', overflow: 'hidden' }}>
       <div style={{ background: 'var(--bofa-navy)', color: '#fff', padding: '14px 18px' }}>
-        <div style={{ fontSize: 11, opacity: 0.8, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-          Live preview{ruleCount > 0 ? ` · ${ruleCount} rule${ruleCount === 1 ? '' : 's'} active` : ''}
+        <div style={{ fontSize: 12, opacity: 0.75 }}>
+          Preview{ruleCount > 0 ? ` · ${ruleCount} rule${ruleCount === 1 ? '' : 's'} active` : ''}
         </div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginTop: 2 }}>
-          Answer it like a real user — questions appear and disappear per your rules
+          Form preview
         </div>
       </div>
       <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -611,7 +651,7 @@ function LivePreview({ form }: { form: IntakeForm }) {
 
 // ── Main builder ────────────────────────────────────────────────────────────
 const KINDS = [
-  { key: 'EVENT_INTAKE', label: 'Event intake', hint: 'Used by Campus → New event', fallback: defaultIntakeForm },
+  { key: 'EVENT_INTAKE', label: 'Event intake', hint: 'Used by Campus · New event', fallback: defaultIntakeForm },
   { key: 'EVENT_REGISTRATION', label: 'Student registration', hint: 'What students fill in (and Aria asks) to register', fallback: defaultRegistrationForm },
 ] as const
 
@@ -795,7 +835,7 @@ export default function FormBuilder() {
               return forms.length === 0 ? null : (
                 <optgroup key={k.key} label={k.label}>
                   {forms.map((f: FormMeta) => (
-                    <option key={f.id} value={f.id}>{f.name}{f.defaultForKind ? ' ★' : ''}</option>
+                    <option key={f.id} value={f.id}>{f.name}{f.defaultForKind ? ' (default)' : ''}</option>
                   ))}
                 </optgroup>
               )
@@ -803,7 +843,7 @@ export default function FormBuilder() {
             {(library ?? []).some((f) => f.template) && (
               <optgroup label="Templates">
                 {(library ?? []).filter((f) => f.template).map((f: FormMeta) => (
-                  <option key={f.id} value={f.id}>🏷 {f.name}</option>
+                  <option key={f.id} value={f.id}>{f.name}</option>
                 ))}
               </optgroup>
             )}
@@ -839,7 +879,7 @@ export default function FormBuilder() {
               Make default
             </button>
           )}
-          {serverForm?.defaultForKind && <span className="badge badge--ok">★ Default for {meta.label}</span>}
+          {serverForm?.defaultForKind && <span className="badge badge--ok">Default for {meta.label}</span>}
           <span style={{ flex: 1 }} />
           {serverForm && !serverForm.defaultForKind && (
             <button className="btn btn--outline btn--sm" style={{ color: 'var(--bofa-red, #c41230)' }} disabled={deleteForm.isPending}
@@ -868,7 +908,7 @@ export default function FormBuilder() {
                   onChange={(e) => setPanelSource(e.target.value)}>
                   <option value="blank">Start blank</option>
                   {(library ?? []).filter((f) => f.purpose === panelKind).map((f) => (
-                    <option key={f.id} value={f.id}>Copy of: {f.template ? '🏷 ' : ''}{f.name}</option>
+                    <option key={f.id} value={f.id}>Copy of: {f.name}{f.template ? ' (template)' : ''}</option>
                   ))}
                 </select>
                 <button className="btn btn--primary btn--sm" disabled={!panelName.trim() || createForm.isPending}
@@ -934,7 +974,7 @@ export default function FormBuilder() {
                 title="Drag onto the canvas (or click to append)"
                 style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid var(--line)', background: 'var(--app-panel)', cursor: 'grab', borderRadius: 'var(--ra-2)', padding: '8px 10px', marginBottom: 6 }}
               >
-                <span style={{ width: 20, textAlign: 'center', color: 'var(--bofa-navy)', fontSize: 14 }}>{l.glyph}</span>
+                <span style={{ width: 20, display: 'inline-flex', justifyContent: 'center', color: 'var(--ink-3)' }}><FieldIcon kind={`layout-${l.kind}`} /></span>
                 <span>
                   <div style={{ fontSize: 13, color: 'var(--ink-1)', fontWeight: 500 }}>{l.label}</div>
                   <div style={{ fontSize: 11, color: 'var(--ink-5)' }}>{l.hint}</div>
@@ -960,9 +1000,9 @@ export default function FormBuilder() {
                     }}
                   >
                     <span style={{
-                      display: 'inline-block', transition: 'transform .12s ease',
-                      transform: open ? 'rotate(90deg)' : 'none', color: 'var(--ink-4)', fontSize: 11,
-                    }}>▸</span>
+                      display: 'inline-flex', transition: 'transform .12s ease',
+                      transform: open ? 'rotate(90deg)' : 'none', color: 'var(--ink-4)',
+                    }}><FieldIcon kind="chevron" size={12} /></span>
                     <span style={{ flex: 1 }}>{g.name}</span>
                     <span className="muted" style={{ fontSize: 10.5 }}>{g.types.length}</span>
                   </button>
@@ -983,7 +1023,7 @@ export default function FormBuilder() {
                             title="Drag into a slot or onto the canvas (or click to append)"
                             style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid var(--line)', background: 'var(--app-panel)', cursor: 'grab', borderRadius: 'var(--ra-2)', padding: '7px 10px' }}
                           >
-                            <span style={{ width: 20, textAlign: 'center', color: 'var(--bofa-navy)', fontSize: 14 }}>{p.glyph}</span>
+                            <span style={{ width: 20, display: 'inline-flex', justifyContent: 'center', color: 'var(--ink-3)' }}><FieldIcon kind={p.type} /></span>
                             <span>
                               <div style={{ fontSize: 13, color: 'var(--ink-1)', fontWeight: 500 }}>{p.label}</div>
                               <div style={{ fontSize: 11, color: 'var(--ink-5)' }}>{p.hint}</div>
@@ -1008,7 +1048,13 @@ export default function FormBuilder() {
             <div className="card__body" style={{ padding: '14px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                 <span className="eyebrow">System fields</span>
-                <span className="badge">🔒 always collected</span>
+                <span className="badge" style={{ gap: 6 }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <rect x="5" y="11" width="14" height="10" rx="2" />
+                    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                  </svg>
+                  Always collected
+                </span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 8 }}>
                 {SYSTEM_FIELDS.map((sf) => (
