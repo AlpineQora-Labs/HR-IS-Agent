@@ -582,7 +582,7 @@ function LivePreview({ form }: { form: IntakeForm }) {
   const val = (id: string) => answerText(answers[id])
   const ruleCount = (form.rules ?? []).length
   return (
-    <div className="card" style={{ maxWidth: 680, overflow: 'hidden' }}>
+    <div className="card" style={{ maxWidth: 680, margin: '0 auto', overflow: 'hidden' }}>
       <div style={{ background: 'var(--bofa-navy)', color: '#fff', padding: '14px 18px' }}>
         <div style={{ fontSize: 11, opacity: 0.8, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
           Live preview{ruleCount > 0 ? ` · ${ruleCount} rule${ruleCount === 1 ? '' : 's'} active` : ''}
