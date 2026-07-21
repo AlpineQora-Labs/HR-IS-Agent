@@ -110,26 +110,30 @@ function CandidateDetailPane({ summary, tab, setTab, frameless = false, expanded
         </Link>
         {frameless && (
           <>
-            <button
-              type="button"
-              onClick={() => onToggleExpand?.()}
-              aria-label={expanded ? 'Collapse drawer' : 'Expand drawer'}
-              title={expanded ? 'Collapse' : 'Expand to full width'}
-              style={{ border: 0, background: 'none', cursor: 'pointer', color: 'var(--ink-4)', lineHeight: 1, padding: '4px' }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                {expanded ? (
-                  <>
-                    <path d="M9 5l7 7-7 7" />
-                  </>
-                ) : (
-                  <>
-                    <path d="M15 5l-7 7 7 7" />
-                    <path d="M4 5v14" />
-                  </>
-                )}
-              </svg>
-            </button>
+            {expanded ? (
+              <button
+                type="button"
+                className="btn btn--outline btn--sm"
+                onClick={() => onToggleExpand?.()}
+                aria-label="Collapse drawer"
+                style={{ flexShrink: 0 }}
+              >
+                ‹ Back to list
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onToggleExpand?.()}
+                aria-label="Expand drawer"
+                title="Expand to full width"
+                style={{ border: 0, background: 'none', cursor: 'pointer', color: 'var(--ink-4)', lineHeight: 1, padding: '4px' }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 5l-7 7 7 7" />
+                  <path d="M4 5v14" />
+                </svg>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => drawerClose?.()}
