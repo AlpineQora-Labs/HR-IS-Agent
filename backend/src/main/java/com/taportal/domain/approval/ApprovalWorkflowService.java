@@ -56,6 +56,21 @@ public class ApprovalWorkflowService {
             }
             repository.save(rec);
         }
+        // Business rule: the trigger is the router, so at most ONE enabled
+        // workflow may handle a given trigger type. 422 rolls the save back.
+        Map<String, List<String>> enabledByTrigger = new HashMap<>();
+        for (ApprovalWorkflowRecord r : repository.findByOrderByWfKey()) {
+            if (r.isEnabled()) {
+                enabledByTrigger.computeIfAbsent(r.getTriggerType().toLowerCase(), k -> new ArrayList<>()).add(r.getName());
+            }
+        }
+        for (var entry : enabledByTrigger.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "Only one enabled workflow per trigger — " + String.join(" and ", entry.getValue())
+                                + " both handle it. Disable one first.");
+            }
+        }
         return list();
     }
 

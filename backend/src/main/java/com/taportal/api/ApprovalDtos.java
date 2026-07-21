@@ -36,7 +36,8 @@ public final class ApprovalDtos {
 
     /** Submit a real item through a workflow; the engine routes it. */
     public record SubmitApprovalRequest(
-            String wfKey,
+            /** Trigger type (Event, Offer, …) — the engine resolves WHICH workflow handles it. */
+            String trigger,
             String itemType,
             String itemRef,
             String title,

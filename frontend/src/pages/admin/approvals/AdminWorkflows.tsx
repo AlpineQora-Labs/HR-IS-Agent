@@ -97,6 +97,10 @@ export default function AdminWorkflows() {
     }))
   }
 
+  /** Mirror of the server rule: at most one ENABLED workflow per trigger. */
+  const triggerTakenBy = (id: string, trigger: string) =>
+    workflows.find((w) => w.id !== id && w.enabled && w.trigger.toLowerCase() === trigger.toLowerCase())?.name
+
   /** Create a workflow with a fresh key; the debounce-save persists it. */
   const addWorkflow = () => {
     dirty.current = true
@@ -107,12 +111,14 @@ export default function AdminWorkflows() {
         id,
         name: 'New workflow',
         trigger: 'Event',
-        enabled: true,
+        // Drafts start disabled: the trigger routes to ONE enabled workflow,
+        // so a new one must not silently collide with the live handler.
+        enabled: false,
         autoApprove: false,
         levels: [{ id: 'l1', approverRole: roles[0]?.key ?? 'admin', condition: 'Always' }],
       },
     ])
-    flash('Workflow added — name it and set its chain')
+    flash('Workflow added as a draft — set its chain, then enable it')
   }
 
   // referenced to satisfy the linter (used via canvas onSaved below)
@@ -134,7 +140,13 @@ export default function AdminWorkflows() {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       lastPushed.current = json
-      saveServer.mutate(payload)
+      saveServer.mutate(payload, {
+        onError: (e) => {
+          const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+          flash(msg ?? 'Could not save workflows')
+          lastPushed.current = '' // allow a retry after the user fixes the conflict
+        },
+      })
     }, 900)
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current)
@@ -200,10 +212,26 @@ export default function AdminWorkflows() {
           roles={roles}
           onName={(v) => updateWorkflow(w.id, { name: v })}
           onToggle={() => {
+            if (!w.enabled) {
+              const owner = triggerTakenBy(w.id, w.trigger)
+              if (owner) {
+                flash(`“${owner}” already handles the ${w.trigger} trigger — disable it first`)
+                return
+              }
+            }
             updateWorkflow(w.id, { enabled: !w.enabled })
             flash(`${w.name} ${w.enabled ? 'disabled' : 'enabled'}`)
           }}
-          onTrigger={(v) => updateWorkflow(w.id, { trigger: v, graph: undefined })}
+          onTrigger={(v) => {
+            if (w.enabled) {
+              const owner = triggerTakenBy(w.id, v)
+              if (owner) {
+                flash(`“${owner}” already handles the ${v} trigger — disable it first`)
+                return
+              }
+            }
+            updateWorkflow(w.id, { trigger: v })
+          }}
           onAuto={() => updateWorkflow(w.id, { autoApprove: !w.autoApprove, graph: undefined })}
           onAddLevel={() => addWorkflowLevel(w.id)}
           onRemoveLevel={(lid) => {

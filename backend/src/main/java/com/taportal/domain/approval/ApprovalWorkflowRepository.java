@@ -10,4 +10,6 @@ public interface ApprovalWorkflowRepository extends JpaRepository<ApprovalWorkfl
     List<ApprovalWorkflowRecord> findByOrderByWfKey();
 
     Optional<ApprovalWorkflowRecord> findByWfKey(String wfKey);
+
+    Optional<ApprovalWorkflowRecord> findFirstByTriggerTypeIgnoreCaseAndEnabledTrue(String triggerType);
 }

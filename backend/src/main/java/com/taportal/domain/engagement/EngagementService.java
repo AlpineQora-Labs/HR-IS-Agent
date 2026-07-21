@@ -132,7 +132,7 @@ public class EngagementService {
         Double daysNotice = saved.getStartsAt() == null ? null
                 : (double) java.time.Duration.between(java.time.OffsetDateTime.now(), saved.getStartsAt()).toDays();
         approvals.submit(new com.taportal.api.ApprovalDtos.SubmitApprovalRequest(
-                "e1", "EVENT", saved.getId().toString(),
+                "Event", "EVENT", saved.getId().toString(),
                 saved.getName(),
                 saved.getLocation() + " · " + (saved.getStartsAt() == null ? "" : saved.getStartsAt().toLocalDate()),
                 virtual ? "VIRTUAL" : "IN_PERSON", daysNotice, req.flaggedCritical()));

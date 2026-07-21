@@ -48,14 +48,24 @@ public class ApprovalRequestService {
         return rows.stream().map(this::toResponse).toList();
     }
 
-    /** Route a real event through its workflow; returns the created (or auto-approved) request. */
+    /**
+     * Route a real item through the workflow that handles its trigger type.
+     * Trigger is the router: the single ENABLED workflow for that trigger runs.
+     *
+     * @return the created (or auto-approved) request, or null when no enabled
+     *         workflow handles the trigger — nothing to approve
+     */
     @Transactional
     public ApprovalRequestResponse submit(SubmitApprovalRequest in) {
+        var wf = workflows.findFirstByTriggerTypeIgnoreCaseAndEnabledTrue(in.trigger()).orElse(null);
+        if (wf == null) {
+            return null;
+        }
         SimulateResponse verdict = engine.simulate(
-                in.wfKey(), new SimulateRequest(in.eventFormat(), in.daysNotice(), in.flaggedCritical()));
+                wf.getWfKey(), new SimulateRequest(in.eventFormat(), in.daysNotice(), in.flaggedCritical()));
         ApprovalRequest req = new ApprovalRequest(
                 null,
-                in.wfKey(),
+                wf.getWfKey(),
                 in.itemType(),
                 in.itemRef(),
                 in.title(),
