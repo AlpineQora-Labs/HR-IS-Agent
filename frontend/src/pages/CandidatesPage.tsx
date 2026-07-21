@@ -413,7 +413,7 @@ export default function CandidatesPage() {
           </div>
 
           {selected && (
-            <SlideOver key={selected.id} label={`${selected.name} — candidate record`} onClose={() => setSel('')} width={620}>
+            <SlideOver key={selected.id} label={`${selected.name} — candidate record`} onClose={() => setSel('')} width={440}>
               <CandidateDetailPane summary={selected} tab={tab} setTab={setTab} frameless />
             </SlideOver>
           )}
