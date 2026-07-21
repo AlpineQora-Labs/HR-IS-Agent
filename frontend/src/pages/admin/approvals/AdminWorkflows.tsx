@@ -47,7 +47,13 @@ export default function AdminWorkflows() {
   // schedule a push that overwrites newer server data.
   const dirty = useRef(false)
   useEffect(() => {
-    if (!hydrated.current && serverWorkflows && serverWorkflows.length) {
+    // Track the server until the user edits: react-query serves cached (possibly
+    // stale) data first and refetches after mount — hydrating once from the cache
+    // meant a later edit could push a stale snapshot wholesale (this overwrote
+    // saved canvas graphs repeatedly). Re-hydrate on every fresh payload while
+    // the working copy is untouched; stop the moment it's dirty.
+    if (dirty.current) return
+    if (serverWorkflows && serverWorkflows.length) {
       hydrated.current = true
       lastPushed.current = JSON.stringify(serverWorkflows.map((d) => toServerDto(fromServerDto(d))))
       setWorkflows(serverWorkflows.map(fromServerDto))
