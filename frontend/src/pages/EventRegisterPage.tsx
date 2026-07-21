@@ -17,6 +17,8 @@ interface EventInfo {
   type: string
   location: string
   startsAt: string
+  endsAt: string | null
+  timezone: string
 }
 
 interface ChatTurn {
@@ -26,8 +28,14 @@ interface ChatTurn {
   options: string[]
 }
 
-const when = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+/** The event's schedule in ITS OWN timezone — "Thu, Oct 14 · 5:00–7:00 PM EDT". */
+const when = (e: { startsAt: string; endsAt: string | null; timezone: string }) => {
+  const tz = e.timezone || 'America/New_York'
+  const day = new Date(e.startsAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz })
+  const t = (iso: string, zone: boolean) =>
+    new Date(iso).toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', ...(zone ? { timeZoneName: 'short' } : {}) })
+  return `${day} · ${e.endsAt ? `${t(e.startsAt, false)}–${t(e.endsAt, true)}` : t(e.startsAt, true)}`
+}
 
 export default function EventRegisterPage() {
   const { eventId } = useParams<{ eventId: string }>()
@@ -53,7 +61,7 @@ export default function EventRegisterPage() {
         <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 16 }}>Bank of America · Campus</div>
         {event && (
           <div style={{ marginTop: 6, fontSize: 13, opacity: 0.9 }}>
-            {event.name} · {when(event.startsAt)} · {event.location}
+            {event.name} · {when(event)} · {event.location}
           </div>
         )}
       </header>
