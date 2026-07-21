@@ -120,6 +120,14 @@ export interface SimulateResult {
   notes: string[]
 }
 
+export function useDeleteWorkflow() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (key: string) => api.delete(`/approval-workflows/${key}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['approval-workflows'] }),
+  })
+}
+
 export function useSimulateWorkflow(key: string) {
   return useMutation({
     mutationFn: (input: SimulateInput) =>

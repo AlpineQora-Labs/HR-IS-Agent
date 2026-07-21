@@ -4,7 +4,7 @@ import { useStore } from '@/state/store'
 import { IconChevronDown, IconChevronUp } from '@/components/icons'
 import ApprovalCanvas, { SPEC, Icons } from './ApprovalCanvas'
 import {
-  useServerWorkflows, useSaveServerWorkflows, fromServerDto, toServerDto,
+  useServerWorkflows, useSaveServerWorkflows, useDeleteWorkflow, fromServerDto, toServerDto,
   type ApprovalWorkflow,
 } from './approvals'
 import '@/styles/canvas.css'
@@ -30,6 +30,9 @@ export default function AdminWorkflows() {
   const [canvasId, setCanvasId] = useState<string | null>(null)
   // Removing an approval level is destructive to the chain — always confirm.
   const [confirmRemove, setConfirmRemove] = useState<{ wfId: string; wfName: string; levelId: string; index: number; role: string } | null>(null)
+  // Deleting a whole workflow is more destructive still — its own confirmation.
+  const [confirmDelete, setConfirmDelete] = useState<ApprovalWorkflow | null>(null)
+  const deleteWf = useDeleteWorkflow()
 
   // Workflows live in local state, hydrated from the server and debounce-saved back.
   const [workflows, setWorkflows] = useState<ApprovalWorkflow[]>([])
@@ -106,7 +109,6 @@ export default function AdminWorkflows() {
     dirty.current = true
     const id = `wf-${Date.now()}`
     setWorkflows((ws) => [
-      ...ws,
       {
         id,
         name: 'New workflow',
@@ -117,6 +119,7 @@ export default function AdminWorkflows() {
         autoApprove: false,
         levels: [{ id: 'l1', approverRole: roles[0]?.key ?? 'admin', condition: 'Always' }],
       },
+      ...ws,
     ])
     flash('Workflow added as a draft — set its chain, then enable it')
   }
@@ -204,6 +207,52 @@ export default function AdminWorkflows() {
         </div>
       )}
 
+      {confirmDelete && (
+        <div className="scrim" onClick={() => setConfirmDelete(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="modal__head">
+              <h3>Delete workflow?</h3>
+              <p>
+                “{confirmDelete.name}” will be permanently removed
+                {confirmDelete.enabled
+                  ? ` — and nothing will handle the ${confirmDelete.trigger} trigger, so new ${confirmDelete.trigger.toLowerCase()} requests will skip approval entirely.`
+                  : '.'}{' '}
+                Decided requests keep their history.
+              </p>
+            </div>
+            <div className="modal__foot">
+              <button className="btn btn--outline" onClick={() => setConfirmDelete(null)}>
+                Cancel
+              </button>
+              <button
+                className="btn btn--danger"
+                onClick={() => {
+                  const w = confirmDelete
+                  setConfirmDelete(null)
+                  deleteWf.mutate(w.id, {
+                    onSuccess: () => {
+                      if (canvasId === w.id) setCanvasId(null)
+                      setWorkflows((ws) => {
+                        const next = ws.filter((x) => x.id !== w.id)
+                        lastPushed.current = JSON.stringify(next.map(toServerDto))
+                        return next
+                      })
+                      flash(`“${w.name}” deleted`)
+                    },
+                    onError: (e) => {
+                      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+                      flash(msg ?? 'Could not delete the workflow')
+                    },
+                  })
+                }}
+              >
+                Delete workflow
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {workflows.map((w) => (
         <WorkflowCard
           key={w.id}
@@ -242,6 +291,7 @@ export default function AdminWorkflows() {
           onLevelCond={(lid, v) => updateWorkflowLevel(w.id, lid, { condition: v })}
           onMove={(lid, dir) => moveWorkflowLevel(w.id, lid, dir)}
           onCanvas={() => setCanvasId(w.id)}
+          onDelete={() => setConfirmDelete(w)}
         />
       ))}
     </div>
@@ -302,6 +352,7 @@ function WorkflowCard({
   onLevelCond,
   onMove,
   onCanvas,
+  onDelete,
 }: {
   w: ApprovalWorkflow
   roles: { key: string; name: string }[]
@@ -316,6 +367,7 @@ function WorkflowCard({
   onLevelCond: (lid: string, v: string) => void
   onMove: (lid: string, dir: -1 | 1) => void
   onCanvas: () => void
+  onDelete: () => void
 }) {
   return (
     <div className="card" style={{ opacity: w.enabled ? 1 : 0.66 }}>
@@ -334,6 +386,15 @@ function WorkflowCard({
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button className="btn btn--outline btn--sm" onClick={onCanvas}>
             Open canvas
+          </button>
+          <button
+            className="btn btn--ghost btn--icon btn--sm"
+            onClick={onDelete}
+            title="Delete workflow"
+            aria-label="Delete workflow"
+            style={{ color: 'var(--danger-fg)' }}
+          >
+            <IconTrash className="ic" />
           </button>
           <label className="switch" title="Enable workflow">
             <input type="checkbox" checked={w.enabled} onChange={onToggle} />

@@ -5,6 +5,7 @@ import com.taportal.api.ApprovalDtos.SimulateResponse;
 import com.taportal.api.ApprovalDtos.WorkflowDto;
 import com.taportal.domain.approval.ApprovalWorkflowService;
 import java.util.List;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,6 +32,11 @@ public class ApprovalWorkflowController {
     @PutMapping
     public List<WorkflowDto> saveAll(@RequestBody List<WorkflowDto> workflows) {
         return service.saveAll(workflows);
+    }
+
+    @DeleteMapping("/{key}")
+    public void delete(@PathVariable String key) {
+        service.delete(key);
     }
 
     /** Evaluate a sample request against the workflow — the config-driven approval engine. */

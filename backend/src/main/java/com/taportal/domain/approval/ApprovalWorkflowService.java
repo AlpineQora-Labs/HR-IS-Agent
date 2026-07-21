@@ -22,15 +22,38 @@ import org.springframework.web.server.ResponseStatusException;
 public class ApprovalWorkflowService {
 
     private final ApprovalWorkflowRepository repository;
+    private final ApprovalRequestRepository requestRepository;
     private final ObjectMapper mapper;
 
-    public ApprovalWorkflowService(ApprovalWorkflowRepository repository, ObjectMapper mapper) {
+    public ApprovalWorkflowService(
+            ApprovalWorkflowRepository repository,
+            ApprovalRequestRepository requestRepository,
+            ObjectMapper mapper) {
         this.repository = repository;
+        this.requestRepository = requestRepository;
         this.mapper = mapper;
     }
 
     public List<WorkflowDto> list() {
-        return repository.findByOrderByWfKey().stream().map(this::toDto).toList();
+        return repository.findByOrderByCreatedAtDesc().stream().map(this::toDto).toList();
+    }
+
+    /**
+     * Delete a workflow. Blocked while PENDING requests still route through it —
+     * decide those first. Historical (decided) requests keep their record; they
+     * fall back to the raw key where the name used to resolve.
+     */
+    @Transactional
+    public void delete(String key) {
+        ApprovalWorkflowRecord rec = repository.findByWfKey(key)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Workflow not found"));
+        long pending = requestRepository.countByWfKeyAndStatus(key, ApprovalRequest.Status.PENDING);
+        if (pending > 0) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    pending + " pending request" + (pending == 1 ? "" : "s")
+                            + " still route through this workflow — decide them first.");
+        }
+        repository.delete(rec);
     }
 
     /** Upsert the full set (frontend saves its working copy wholesale). */
