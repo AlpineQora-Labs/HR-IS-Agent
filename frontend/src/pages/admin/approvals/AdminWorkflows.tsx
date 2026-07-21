@@ -28,6 +28,8 @@ export default function AdminWorkflows() {
   const { toastMsg: flash } = useStore()
   const roleName = (key: string) => roles.find((r) => r.key === key)?.name ?? key
   const [canvasId, setCanvasId] = useState<string | null>(null)
+  // Removing an approval level is destructive to the chain — always confirm.
+  const [confirmRemove, setConfirmRemove] = useState<{ wfId: string; wfName: string; levelId: string; index: number; role: string } | null>(null)
 
   // Workflows live in local state, hydrated from the server and debounce-saved back.
   const [workflows, setWorkflows] = useState<ApprovalWorkflow[]>([])
@@ -130,6 +132,35 @@ export default function AdminWorkflows() {
         </div>
       </div>
 
+      {confirmRemove && (
+        <div className="scrim" onClick={() => setConfirmRemove(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="modal__head">
+              <h3>Remove approval level?</h3>
+              <p>
+                Level {confirmRemove.index + 1} ({confirmRemove.role}) will be removed from “{confirmRemove.wfName}”.
+                New requests of this type will no longer wait on this sign-off.
+              </p>
+            </div>
+            <div className="modal__foot">
+              <button className="btn btn--outline" onClick={() => setConfirmRemove(null)}>
+                Cancel
+              </button>
+              <button
+                className="btn btn--danger"
+                onClick={() => {
+                  removeWorkflowLevel(confirmRemove.wfId, confirmRemove.levelId)
+                  flash('Approval level removed')
+                  setConfirmRemove(null)
+                }}
+              >
+                Remove level
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {workflows.map((w) => (
         <WorkflowCard
           key={w.id}
@@ -143,7 +174,10 @@ export default function AdminWorkflows() {
           onTrigger={(v) => updateWorkflow(w.id, { trigger: v, graph: undefined })}
           onAuto={() => updateWorkflow(w.id, { autoApprove: !w.autoApprove, graph: undefined })}
           onAddLevel={() => addWorkflowLevel(w.id)}
-          onRemoveLevel={(lid) => removeWorkflowLevel(w.id, lid)}
+          onRemoveLevel={(lid) => {
+            const idx = w.levels.findIndex((l) => l.id === lid)
+            setConfirmRemove({ wfId: w.id, wfName: w.name, levelId: lid, index: idx, role: roleName(w.levels[idx]?.approverRole ?? '') })
+          }}
           onLevelRole={(lid, v) => updateWorkflowLevel(w.id, lid, { approverRole: v })}
           onLevelCond={(lid, v) => updateWorkflowLevel(w.id, lid, { condition: v })}
           onMove={(lid, dir) => moveWorkflowLevel(w.id, lid, dir)}
