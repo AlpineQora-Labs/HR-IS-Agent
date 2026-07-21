@@ -17,16 +17,11 @@ export default function SlideOver({
   label,
   onClose,
   width = 440,
-  stretchLeft = null,
   children,
 }: {
   label: string
   onClose: () => void
-  /** Number (px) or any CSS width (e.g. a calc() for the expanded state). */
-  width?: number | string
-  /** When set, pins the drawer's LEFT edge (e.g. beside the rail) — width then
-   *  follows from both edges being anchored, no viewport math involved. */
-  stretchLeft?: string | null
+  width?: number
   children: React.ReactNode
 }) {
   const [closing, setClosing] = useState(false)
@@ -75,9 +70,8 @@ export default function SlideOver({
           top: 'calc(var(--shell-chrome-h, 0px) + 12px)',
           right: 12,
           bottom: 12,
-          ...(stretchLeft ? { left: stretchLeft, width: 'auto' } : { width }),
-          maxWidth: stretchLeft ? undefined : 'calc(96vw - 12px)',
-          transition: 'width 240ms cubic-bezier(0.32, 0.72, 0, 1), left 240ms cubic-bezier(0.32, 0.72, 0, 1)',
+          width,
+          maxWidth: 'calc(92vw - 12px)',
           background: 'var(--app-panel)',
           border: '1px solid var(--line)',
           borderRadius: 16,

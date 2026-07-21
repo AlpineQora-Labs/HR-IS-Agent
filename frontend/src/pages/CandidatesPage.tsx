@@ -61,15 +61,12 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 type Tab = 'overview' | 'applications' | 'interviews' | 'aria'
 
 // ── Right pane: the live record ─────────────────────────────────────────────
-function CandidateDetailPane({ summary, tab, setTab, frameless = false, expanded, onToggleExpand }: {
+function CandidateDetailPane({ summary, tab, setTab, frameless = false }: {
   summary: CandidateSummary
   tab: Tab
   setTab: (t: Tab) => void
   /** Drawer mode: no card chrome (the SlideOver provides the frame) + a close button. */
   frameless?: boolean
-  /** Drawer mode: whether the drawer is stretched to the rail; toggled by the arrow. */
-  expanded?: boolean
-  onToggleExpand?: () => void
 }) {
   const drawerClose = useSlideOverClose()
   const { data: c, isLoading } = useCandidate(summary.id)
@@ -109,40 +106,14 @@ function CandidateDetailPane({ summary, tab, setTab, frameless = false, expanded
           Open full record
         </Link>
         {frameless && (
-          <>
-            {expanded ? (
-              <button
-                type="button"
-                className="btn btn--outline btn--sm"
-                onClick={() => onToggleExpand?.()}
-                aria-label="Collapse drawer"
-                style={{ flexShrink: 0 }}
-              >
-                ‹ Back to list
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onToggleExpand?.()}
-                aria-label="Expand drawer"
-                title="Expand to full width"
-                style={{ border: 0, background: 'none', cursor: 'pointer', color: 'var(--ink-4)', lineHeight: 1, padding: '4px' }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15 5l-7 7 7 7" />
-                  <path d="M4 5v14" />
-                </svg>
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => drawerClose?.()}
-              aria-label="Close"
-              style={{ border: 0, background: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--ink-4)', lineHeight: 1, padding: '2px 4px' }}
-            >
-              ×
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={() => drawerClose?.()}
+            aria-label="Close"
+            style={{ border: 0, background: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--ink-4)', lineHeight: 1, padding: '2px 4px' }}
+          >
+            ×
+          </button>
         )}
       </div>
 
@@ -311,8 +282,6 @@ export default function CandidatesPage() {
   }, [data, filter])
 
   const selected = rows.find((c) => c.id === sel) ?? null
-  // Drawer size: standard 440, or stretched to the side rail via the header arrow.
-  const [expanded, setExpanded] = useState(false)
   const setSel = (id: string) => setParams(id ? { sel: id } : {}, { replace: true })
 
   // ↑/↓ move the selection — the split view's superpower.
@@ -444,21 +413,8 @@ export default function CandidatesPage() {
           </div>
 
           {selected && (
-            <SlideOver
-              key={selected.id}
-              label={`${selected.name} — candidate record`}
-              onClose={() => setSel('')}
-              width={440}
-              stretchLeft={expanded ? 'calc(var(--shell-rail-w, 262px) + 12px)' : null}
-            >
-              <CandidateDetailPane
-                summary={selected}
-                tab={tab}
-                setTab={setTab}
-                frameless
-                expanded={expanded}
-                onToggleExpand={() => setExpanded((e) => !e)}
-              />
+            <SlideOver key={selected.id} label={`${selected.name} — candidate record`} onClose={() => setSel('')} width={440}>
+              <CandidateDetailPane summary={selected} tab={tab} setTab={setTab} frameless />
             </SlideOver>
           )}
         </>
