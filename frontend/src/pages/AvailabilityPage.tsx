@@ -126,11 +126,10 @@ interface Requisition {
   roundCount: number
 }
 
-/* Interview setup — pick a requisition from the grid, then define its
-   interview WORKFLOW: a left-to-right flow of rounds (Round 1 -> Round 2 ->
-   Offer), each round carrying the interviewers aligned at intake. As soon as
-   interviewers are on a round, the engine reads their calendars live and shows
-   whether the round is bookable and when. */
+/* Interview setup — pick a requisition from the grid, then define its plan
+   as VERTICAL STAGES on a timeline spine: Candidate ready, Round 1..N,
+   Advance to offer. Each stage carries the interviewers aligned at intake and
+   the engine's live read of their calendars. */
 
 interface RoundHealth {
   nextAvailable: string | null
@@ -146,32 +145,66 @@ const nextLabel = (iso: string) => {
   return `${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
 }
 
-/* Terminal node of the flow rail (Start / Offer). */
-function EndCap({ label }: { label: string }) {
+const totalLabel = (rounds: PlanRound[]) => {
+  const min = rounds.reduce((t, r) => t + r.durationMin, 0)
+  if (!min) return ''
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return `${h ? `${h}h` : ''}${h && m ? ' ' : ''}${m ? `${m}m` : ''} of interviews`
+}
+
+const SPINE_W = 46
+
+/* One row of the timeline: spine cell (line + node) beside the content. */
+function SpineRow({
+  node,
+  last = false,
+  gap = 14,
+  children,
+}: {
+  node: React.ReactNode
+  last?: boolean
+  gap?: number
+  children: React.ReactNode
+}) {
   return (
-    <div
-      style={{
-        alignSelf: 'center', flexShrink: 0, padding: '8px 16px', borderRadius: 999,
-        background: 'var(--bofa-navy, #012169)', color: '#fff', fontSize: 12.5, fontWeight: 650,
-        letterSpacing: '0.01em', whiteSpace: 'nowrap',
-      }}
-    >
-      {label}
+    <div style={{ display: 'grid', gridTemplateColumns: `${SPINE_W}px 1fr` }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        {node}
+        {!last && <div style={{ width: 1.5, flex: 1, background: '#ccd4e0', minHeight: 14 }} />}
+      </div>
+      <div style={{ paddingBottom: last ? 0 : gap, minWidth: 0 }}>{children}</div>
     </div>
   )
 }
 
-/* Connector arrow between flow nodes. */
-function FlowArrow() {
+function StageDot() {
   return (
-    <svg width="34" height="12" viewBox="0 0 34 12" style={{ alignSelf: 'center', flexShrink: 0 }} aria-hidden>
-      <line x1="0" y1="6" x2="26" y2="6" stroke="#b7c0cf" strokeWidth="1.5" />
-      <path d="M25 1.5 L32 6 L25 10.5" fill="none" stroke="#b7c0cf" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <span
+      style={{
+        width: 11, height: 11, borderRadius: 999, background: 'var(--bofa-navy, #012169)',
+        marginTop: 5, flexShrink: 0,
+      }}
+    />
   )
 }
 
-function RoundNode({
+function StageNumber({ n }: { n: number }) {
+  return (
+    <span
+      style={{
+        width: 26, height: 26, borderRadius: 999, flexShrink: 0,
+        border: '1.5px solid var(--bofa-navy, #012169)', color: 'var(--bofa-navy, #012169)',
+        background: '#fff', fontSize: 12.5, fontWeight: 700,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      {n}
+    </span>
+  )
+}
+
+function StageCard({
   round,
   health,
   users,
@@ -193,102 +226,36 @@ function RoundNode({
   return (
     <div
       style={{
-        width: 250, flexShrink: 0, background: '#fff', border: '1px solid var(--line, #dfe4ec)',
-        borderRadius: 12, boxShadow: '0 1px 2px rgba(16,22,38,0.05)', display: 'flex', flexDirection: 'column',
+        background: '#fff', border: '1px solid var(--line, #dfe4ec)', borderRadius: 12,
+        boxShadow: '0 1px 2px rgba(16,22,38,0.04)', padding: '14px 18px',
       }}
     >
-      <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--line, #eef1f6)', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--ink-4)' }}>
-          ROUND {round.roundNo}
-        </span>
-        <button
-          className="btn btn--ghost btn--sm"
-          style={{ marginLeft: 'auto', padding: '2px 8px' }}
-          onClick={onRemove}
-          aria-label={`Remove round ${round.roundNo}`}
-        >
-          ×
-        </button>
-      </div>
-      <div style={{ padding: '10px 14px 12px', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <input
           className="input"
-          style={{ fontWeight: 650, fontSize: 13.5 }}
+          style={{ fontWeight: 650, fontSize: 14, width: 300 }}
           defaultValue={round.name}
           onBlur={(e) => {
             const v = e.target.value.trim()
             if (v && v !== round.name) onRename(v)
           }}
         />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input
-            className="input"
-            type="number"
-            min={15}
-            step={15}
-            style={{ width: 68 }}
-            defaultValue={round.durationMin}
-            onBlur={(e) => {
-              const v = Number(e.target.value)
-              if (v >= 15 && v !== round.durationMin) onDuration(v)
-            }}
-          />
-          <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>minutes</span>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {round.members.map((m) => (
-            <div key={m.userId} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span
-                className="avatar"
-                style={{ width: 26, height: 26, fontSize: 10, flexShrink: 0 }}
-              >
-                {initialsOf(m.name)}
-              </span>
-              <span style={{ minWidth: 0, flex: 1 }}>
-                <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: 'var(--ink-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {m.name}
-                </span>
-                <span style={{ display: 'block', fontSize: 11, color: 'var(--ink-4)' }}>{roleLabel(m.role)}</span>
-              </span>
-              <button
-                onClick={() => onMembers(round.members.filter((x) => x.userId !== m.userId).map((x) => x.userId))}
-                style={{ font: 'inherit', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--ink-4)', padding: 2, lineHeight: 1 }}
-                aria-label={`Remove ${m.name}`}
-              >
-                ×
-              </button>
-            </div>
-          ))}
-          {adding ? (
-            <select
-              className="input"
-              autoFocus
-              defaultValue=""
-              onBlur={() => setAdding(false)}
-              onChange={(e) => {
-                if (e.target.value) onMembers([...round.members.map((m) => m.userId), e.target.value])
-                setAdding(false)
-              }}
-            >
-              <option value="" disabled>Add interviewer…</option>
-              {users
-                .filter((u) => !round.members.some((m) => m.userId === u.id))
-                .map((u) => (
-                  <option key={u.id} value={u.id}>{u.name} — {roleLabel(u.role)}</option>
-                ))}
-            </select>
-          ) : (
-            <button className="btn btn--outline btn--sm" style={{ alignSelf: 'flex-start' }} onClick={() => setAdding(true)}>
-              + Interviewer
-            </button>
-          )}
-        </div>
-
-        {/* the engine's live calendar read for this lineup */}
-        <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--line, #eef1f6)', fontSize: 11.5 }}>
+        <input
+          className="input"
+          type="number"
+          min={15}
+          step={15}
+          style={{ width: 68 }}
+          defaultValue={round.durationMin}
+          onBlur={(e) => {
+            const v = Number(e.target.value)
+            if (v >= 15 && v !== round.durationMin) onDuration(v)
+          }}
+        />
+        <span style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>min</span>
+        <span style={{ marginLeft: 'auto', fontSize: 12 }}>
           {!hasPeople ? (
-            <span style={{ color: 'var(--ink-4)' }}>Add interviewers to check calendars</span>
+            <span style={{ color: 'var(--ink-4)' }}>No interviewers yet</span>
           ) : !health ? (
             <span style={{ color: 'var(--ink-4)' }}>Checking calendars…</span>
           ) : health.blocked ? (
@@ -298,7 +265,55 @@ function RoundNode({
               <span style={{ color: '#2e7d43' }}>●</span> Next open: {health.nextAvailable ? nextLabel(health.nextAvailable) : '—'}
             </span>
           )}
-        </div>
+        </span>
+        <button className="btn btn--ghost btn--sm" onClick={onRemove} aria-label={`Remove round ${round.roundNo}`}>
+          Remove
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+        {round.members.map((m) => (
+          <span
+            key={m.userId}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 10px 4px 4px',
+              border: '1px solid var(--line, #e2e7ee)', borderRadius: 999, background: '#fafbfd',
+            }}
+          >
+            <span className="avatar" style={{ width: 24, height: 24, fontSize: 9.5 }}>{initialsOf(m.name)}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-1)' }}>{m.name}</span>
+            <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>{roleLabel(m.role)}</span>
+            <button
+              onClick={() => onMembers(round.members.filter((x) => x.userId !== m.userId).map((x) => x.userId))}
+              style={{ font: 'inherit', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--ink-4)', padding: 0, lineHeight: 1 }}
+              aria-label={`Remove ${m.name}`}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        {adding ? (
+          <select
+            className="input"
+            style={{ width: 230 }}
+            autoFocus
+            defaultValue=""
+            onBlur={() => setAdding(false)}
+            onChange={(e) => {
+              if (e.target.value) onMembers([...round.members.map((m) => m.userId), e.target.value])
+              setAdding(false)
+            }}
+          >
+            <option value="" disabled>Add interviewer…</option>
+            {users
+              .filter((u) => !round.members.some((m) => m.userId === u.id))
+              .map((u) => (
+                <option key={u.id} value={u.id}>{u.name} — {roleLabel(u.role)}</option>
+              ))}
+          </select>
+        ) : (
+          <button className="btn btn--outline btn--sm" onClick={() => setAdding(true)}>+ Interviewer</button>
+        )}
       </div>
     </div>
   )
@@ -337,49 +352,64 @@ function InterviewPlans({ users }: { users: UserRow[] }) {
   const open = reqs.find((r) => r.jobId === openId) ?? null
 
   if (open) {
+    const total = totalLabel(rounds)
     return (
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card__head" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button className="btn btn--outline btn--sm" onClick={() => setOpenId(null)}>‹ Requisitions</button>
-          <h3 style={{ margin: 0 }}>{open.title} — interview workflow</h3>
-          <span style={{ fontSize: 12.5, color: 'var(--ink-4)', marginLeft: 'auto' }}>
-            {[open.recruiterName && `Recruiter ${open.recruiterName}`, open.hiringManagerName && `HM ${open.hiringManagerName}`]
-              .filter(Boolean)
-              .join(' · ')}
-          </span>
-        </div>
-        <div className="card__body">
-          <div style={{ display: 'flex', gap: 0, alignItems: 'stretch', overflowX: 'auto', padding: '6px 2px 10px' }}>
-            <EndCap label="Candidate ready" />
-            <FlowArrow />
-            {rounds.map((round) => (
-              <div key={round.id} style={{ display: 'flex', alignItems: 'stretch' }}>
-                <RoundNode
-                  round={round}
-                  health={health[round.id]}
-                  users={users}
-                  onRename={(name) => api.put(`/interview-plan/rounds/${round.id}`, { name }).then(refresh)}
-                  onDuration={(durationMin) => api.put(`/interview-plan/rounds/${round.id}`, { durationMin }).then(refresh)}
-                  onRemove={() => api.delete(`/interview-plan/rounds/${round.id}`).then(refresh)}
-                  onMembers={(userIds) => api.put(`/interview-plan/rounds/${round.id}/members`, { userIds }).then(refresh)}
-                />
-                <FlowArrow />
-              </div>
-            ))}
-            <button
-              onClick={() => api.post(`/interview-plan/${open.jobId}/rounds`, {}).then(refresh)}
-              style={{
-                width: 150, flexShrink: 0, alignSelf: 'stretch', minHeight: 150, cursor: 'pointer',
-                border: '1.5px dashed #b7c0cf', borderRadius: 12, background: 'transparent',
-                font: 'inherit', fontSize: 13, fontWeight: 600, color: 'var(--ink-3)',
-              }}
-            >
-              + Add round
-            </button>
-            <FlowArrow />
-            <EndCap label="Advance to offer" />
+          <div style={{ minWidth: 0, marginRight: 'auto' }}>
+            <h3 style={{ margin: 0 }}>{open.title} — interview plan</h3>
+            <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 2 }}>
+              {[`${rounds.length} round${rounds.length === 1 ? '' : 's'}`, total,
+                open.recruiterName && `Recruiter ${open.recruiterName}`,
+                open.hiringManagerName && `HM ${open.hiringManagerName}`]
+                .filter(Boolean)
+                .join(' · ')}
+            </div>
           </div>
-          <p style={{ fontSize: 12, color: 'var(--ink-4)', margin: '10px 2px 0' }}>
+        </div>
+        <div className="card__body" style={{ maxWidth: 860 }}>
+          <SpineRow node={<StageDot />}>
+            <div style={{ fontSize: 12.5, fontWeight: 650, color: 'var(--ink-3)', paddingTop: 3 }}>Candidate ready for interviews</div>
+          </SpineRow>
+          {rounds.map((round) => (
+            <SpineRow key={round.id} node={<StageNumber n={round.roundNo} />}>
+              <StageCard
+                round={round}
+                health={health[round.id]}
+                users={users}
+                onRename={(name) => api.put(`/interview-plan/rounds/${round.id}`, { name }).then(refresh)}
+                onDuration={(durationMin) => api.put(`/interview-plan/rounds/${round.id}`, { durationMin }).then(refresh)}
+                onRemove={() => api.delete(`/interview-plan/rounds/${round.id}`).then(refresh)}
+                onMembers={(userIds) => api.put(`/interview-plan/rounds/${round.id}/members`, { userIds }).then(refresh)}
+              />
+            </SpineRow>
+          ))}
+          <SpineRow
+            node={
+              <span
+                style={{
+                  width: 26, height: 26, borderRadius: 999, flexShrink: 0,
+                  border: '1.5px dashed #aab4c4', color: 'var(--ink-3)', background: '#fff',
+                  fontSize: 15, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                +
+              </span>
+            }
+          >
+            <button
+              className="btn btn--outline btn--sm"
+              style={{ marginTop: 1 }}
+              onClick={() => api.post(`/interview-plan/${open.jobId}/rounds`, {}).then(refresh)}
+            >
+              Add round
+            </button>
+          </SpineRow>
+          <SpineRow node={<StageDot />} last>
+            <div style={{ fontSize: 12.5, fontWeight: 650, color: 'var(--ink-3)', paddingTop: 3 }}>Advance to offer</div>
+          </SpineRow>
+          <p style={{ fontSize: 12, color: 'var(--ink-4)', margin: '16px 0 0', maxWidth: 640 }}>
             Each round is scheduled against every listed interviewer's calendar — working windows, weekly preferences,
             vacations and load caps all apply. Blocked rounds notify their interviewers automatically.
           </p>
