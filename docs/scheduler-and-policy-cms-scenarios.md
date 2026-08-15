@@ -36,9 +36,9 @@ The point of the catalog: implement all of it, in the phase order at the bottom.
 
 | # | Scenario | Status |
 |---|---|---|
-| S13 | **Connected calendars.** Microsoft Graph / Google free-busy sync; busy blocks always win; writes go back as real calendar events. | 🔶 internal calendar_event blockers built; no external sync |
-| S14 | **Working hours & OOO.** Per-interviewer working hours, timezone, PTO/OOO windows respected automatically. | 🔶 global 9–5 ET; not per-person |
-| S15 | **Interview load caps & preferences.** Max interviews/day and /week per interviewer; protected focus blocks; preferred interviewing windows. | 🔶 2/day cap global; not per-person, no weekly cap |
+| S13 | **Connected calendars.** Microsoft Graph / Google free-busy sync; busy blocks always win; writes go back as real calendar events. | 🔶 internal calendar_event with BUSY/INTERVIEW (blocking) + TENTATIVE/IN_OFFICE (soft) + VACATION (blocking) statuses, week-view on /availability; no external sync |
+| S14 | **Working hours & OOO.** Per-interviewer working hours, timezone, PTO/OOO windows respected automatically. | ✅ per-person window + timezone (interviewer_settings) + weekly blackout rules ("no Monday mornings"), editable on /availability |
+| S15 | **Interview load caps & preferences.** Max interviews/day and /week per interviewer; protected focus blocks; preferred interviewing windows. | ✅ per-person daily+weekly caps, preferred windows via INTERVIEW_BLOCK dedicated time (only-offer-inside semantics) |
 | S16 | **Interviewer pools.** Skill/level-tagged pools ("Java panel", "MD approver", "Spanish-speaking") that scheduling draws from. | ⬜ |
 | S17 | **Load balancing / fairness.** Rotation within a pool so the same two people don't absorb every interview; fairness stats visible. | 🔶 lightest-load-first picker exists; no rotation memory |
 | S18 | **Shadow / training pairs.** Trainee interviewers shadow qualified ones; system pairs them automatically and tracks graduation to solo. | ⬜ |
@@ -100,7 +100,7 @@ gates scheduling; only actual interview attendees do.
 | S45 | **Ask-to-overbook.** Identify LOW-priority conflicts (recurring 1:1s, focus blocks, tentative holds) and ask the interviewer, one click, to release one for the interview. Load caps become "over-cap with approval," never silent double-booking. | ⬜ |
 | S46 | **Waitlist + cancellation pounce.** Candidate joins a watch-list; any freed slot (cancellation, calendar change) is auto-offered to the head of the queue, first-accept-wins under the existing race protection. | ⬜ |
 | S47 | **Escalate with options.** After N stuck days: coordinator task + bell notification presenting concrete choices (approve over-cap slot / substitute X / extend horizon) instead of a bare alarm. | ⬜ |
-| S48 | **Structural capacity.** Reserved weekly "interview office-hours" blocks that self-scheduling draws from first; utilization analytics exposing chronic bottleneck interviewers; pool-widening via shadow training (S18). | ⬜ |
+| S48 | **Structural capacity.** Reserved weekly "interview office-hours" blocks that self-scheduling draws from first; utilization analytics exposing chronic bottleneck interviewers; pool-widening via shadow training (S18). | 🔶 dedicated INTERVIEW_BLOCK weekly rules shipped (offers land only inside them); analytics pending |
 | S49 | **Hold the candidate's trust.** While resolving: proactive "finding you a time, expect options by <date>" message with an SLA timer and a break-warning nudge. | ⬜ |
 
 ---
@@ -146,6 +146,9 @@ hours & caps, S39/S40 policy guardrails.
 
 **Phase 2 — Pools, loops, superdays**
 S16 pools, S17 fairness rotation, S19 declines/substitution, S22–S27 loops & cascade,
+(NEW 2026-08-15: per-requisition interview plans — rounds 1..N with aligned interviewers,
+defined at intake on /availability, round-driven self-scheduling, blocked-panel notifications —
+cover the plan/round half of the loop scenarios),
 S29 batch, S30 superday (ties into Campus), S34 scorecard chase, S43–S49 fully-booked
 playbook (widening + substitution + waitlist in P2; ask-to-overbook and office-hours in P4
 with calendar sync).
