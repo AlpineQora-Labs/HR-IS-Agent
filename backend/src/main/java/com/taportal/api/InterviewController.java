@@ -51,15 +51,18 @@ public class InterviewController {
      * Recruiter one-click: compute options from the hiring team's calendars and offer
      * them. An optional body {@code {interviewerUserIds: [...]}} sets the panel first.
      */
-    public record BeginSelfScheduleRequest(java.util.UUID applicationId, String type, Integer durationMin) {}
+    public record BeginSelfScheduleRequest(
+            java.util.UUID applicationId, String type, Integer durationMin, java.util.UUID roundId) {}
 
     /** Start (or reuse) candidate self-scheduling; the returned id backs /schedule/:id. */
     @PostMapping("/v1/interviews/self-schedule")
     public InterviewDtos.InterviewResponse beginSelfSchedule(@RequestBody BeginSelfScheduleRequest request) {
-        var interview = interviewService.beginSelfSchedule(
-                request.applicationId(),
-                request.type() == null ? "RECRUITER_SCREEN" : request.type(),
-                request.durationMin() == null ? 45 : request.durationMin());
+        var interview = request.roundId() != null
+                ? interviewService.beginRound(request.applicationId(), request.roundId())
+                : interviewService.beginSelfSchedule(
+                        request.applicationId(),
+                        request.type() == null ? "RECRUITER_SCREEN" : request.type(),
+                        request.durationMin() == null ? 45 : request.durationMin());
         return InterviewService.toResponse(interview);
     }
 

@@ -23,6 +23,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'approvals', label: 'Approvals', group: 'Recruiting' },
   // Interview
   { key: 'interviews', label: 'Interviews', group: 'Interview' },
+  { key: 'availability', label: 'Availability', group: 'Interview' },
   { key: 'assessments', label: 'Assessments', group: 'Interview' },
   // Offer & Hire
   { key: 'offers', label: 'Offers', group: 'Offer & Hire' },

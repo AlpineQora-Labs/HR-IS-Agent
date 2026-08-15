@@ -38,6 +38,8 @@ public class InterviewService {
     private final CandidateRepository candidates;
     private final RecruiterUserRepository recruiterUsers;
     private final InterviewPanelistRepository panelists;
+    private final InterviewRoundRepository rounds;
+    private final InterviewRoundMemberRepository roundMembers;
     private final SchedulingPolicyRepository policies;
     private final com.taportal.domain.notification.NotificationService notifications;
 
@@ -51,6 +53,8 @@ public class InterviewService {
             CandidateRepository candidates,
             RecruiterUserRepository recruiterUsers,
             InterviewPanelistRepository panelists,
+            InterviewRoundRepository rounds,
+            InterviewRoundMemberRepository roundMembers,
             SchedulingPolicyRepository policies,
             com.taportal.domain.notification.NotificationService notifications) {
         this.interviewRepository = interviewRepository;
@@ -62,6 +66,8 @@ public class InterviewService {
         this.candidates = candidates;
         this.recruiterUsers = recruiterUsers;
         this.panelists = panelists;
+        this.rounds = rounds;
+        this.roundMembers = roundMembers;
         this.policies = policies;
         this.notifications = notifications;
     }
@@ -146,6 +152,34 @@ public class InterviewService {
         return interviewRepository.findById(interview.getId()).orElseThrow();
     }
 
+    /**
+     * Begin self-scheduling for a specific round of the job's interview plan:
+     * the round names the interview, sets its length, and its aligned
+     * interviewers become the panel the engine schedules around.
+     */
+    @Transactional
+    public Interview beginRound(UUID applicationId, UUID roundId) {
+        InterviewRound round = rounds.findById(roundId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Round not found"));
+        Interview interview = interviewRepository.findByApplicationId(applicationId).stream()
+                .filter(i -> "REQUESTED".equals(i.getStatus()) || "SLOTS_PROPOSED".equals(i.getStatus()))
+                .findFirst()
+                .orElseGet(() -> {
+                    Interview i = new Interview();
+                    i.setApplicationId(applicationId);
+                    i.setStatus("REQUESTED");
+                    return interviewRepository.save(i);
+                });
+        interview.setType(round.getName());
+        interview.setDurationMin(round.getDurationMin());
+        interviewRepository.save(interview);
+        List<UUID> panel = roundMembers.findByRoundId(roundId).stream()
+                .map(InterviewRoundMember::getUserId)
+                .toList();
+        autoPropose(interview.getId(), panel);
+        return interviewRepository.findById(interview.getId()).orElseThrow();
+    }
+
     /** Compute fresh options from participants' calendars and offer them. */
     @Transactional
     public List<SlotResponse> autoPropose(UUID interviewId) {
@@ -187,6 +221,24 @@ public class InterviewService {
             proposed.add(slot);
         }
         slotRepository.saveAll(proposed);
+
+        if (proposed.isEmpty() && !team.isEmpty()) {
+            // Every panelist's calendar is blocked across the horizon — tell
+            // them directly, and alert recruiting so they can intervene.
+            String candidate = candidateName(interview);
+            for (RecruiterUser member : team) {
+                notifications.notifyUser(member.getId(), "SCHEDULING",
+                        "Your calendar is blocking an interview",
+                        "No open times found for " + candidate + " (" + interview.getType()
+                                + "). Free up time or adjust your availability rules.",
+                        "/availability");
+            }
+            notifications.notifyRole("RECRUITER", "SCHEDULING",
+                    "Interview scheduling blocked",
+                    "No open times for " + candidate + " — every panelist's calendar is full. "
+                            + "Consider a different panel or ask interviewers to open time.",
+                    "/interviews");
+        }
 
         interview.setStatus(proposed.isEmpty() ? "REQUESTED" : "SLOTS_PROPOSED");
         interview.setInterviewers(team.stream().map(RecruiterUser::getName).collect(Collectors.joining(", ")));

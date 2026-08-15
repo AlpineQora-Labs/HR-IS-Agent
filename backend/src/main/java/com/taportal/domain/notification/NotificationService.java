@@ -28,6 +28,11 @@ public class NotificationService {
     }
 
     @Transactional
+    public void notifyUser(UUID userId, String kind, String title, String body, String link) {
+        repository.save(new Notification(null, userId, null, kind, title, body, link, null, null));
+    }
+
+    @Transactional
     public void notifyRole(String role, String kind, String title, String body, String link) {
         repository.save(new Notification(null, null, roleKey(role), kind, title, body, link, null, null));
     }

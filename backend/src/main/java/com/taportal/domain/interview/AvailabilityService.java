@@ -41,17 +41,23 @@ public class AvailabilityService {
     private static final int MAX_PROPOSALS_PER_DAY = 2;
     private static final WeekFields WEEK = WeekFields.of(Locale.US);
 
+    /** Calendar kinds that do NOT block scheduling (soft/informational). */
+    private static final java.util.Set<String> NON_BLOCKING = java.util.Set.of("TENTATIVE", "IN_OFFICE");
+
     private final CalendarEventRepository calendarEvents;
     private final SchedulingPolicyRepository policies;
     private final InterviewerSettingsRepository settingsRepository;
+    private final InterviewerWeeklyRuleRepository weeklyRules;
 
     public AvailabilityService(
             CalendarEventRepository calendarEvents,
             SchedulingPolicyRepository policies,
-            InterviewerSettingsRepository settingsRepository) {
+            InterviewerSettingsRepository settingsRepository,
+            InterviewerWeeklyRuleRepository weeklyRules) {
         this.calendarEvents = calendarEvents;
         this.policies = policies;
         this.settingsRepository = settingsRepository;
+        this.weeklyRules = weeklyRules;
     }
 
     /** Up to {@code count} open [start,end) windows that fit every participant. */
@@ -66,6 +72,7 @@ public class AvailabilityService {
                 .findByUserIdInAndStartsAtLessThanAndEndsAtGreaterThan(
                         participantIds, windowEnd.toOffsetDateTime(), OffsetDateTime.now());
         Map<UUID, InterviewerSettings> settings = settingsFor(participantIds);
+        Map<UUID, List<InterviewerWeeklyRule>> rules = rulesFor(participantIds);
 
         Map<LocalDate, Integer> perDay = new HashMap<>();
         List<OffsetDateTime[]> out = new ArrayList<>();
@@ -84,6 +91,9 @@ public class AvailabilityService {
                 }
                 ZonedDateTime end = start.plusMinutes(durationMin);
                 if (!withinEveryWorkWindow(participantIds, settings, start, end)) {
+                    continue;
+                }
+                if (!weeklyRulesAllow(participantIds, settings, rules, start, end)) {
                     continue;
                 }
                 if (conflicts(busy, start.toOffsetDateTime(), end.toOffsetDateTime(), null, buffer)) {
@@ -110,6 +120,57 @@ public class AvailabilityService {
                 .findByUserIdInAndStartsAtLessThanAndEndsAtGreaterThan(
                         participantIds, end.plus(buffer), start.minus(buffer));
         return conflicts(busy, start, end, ignoreInterviewId, buffer);
+    }
+
+    private Map<UUID, List<InterviewerWeeklyRule>> rulesFor(List<UUID> participantIds) {
+        Map<UUID, List<InterviewerWeeklyRule>> map = new HashMap<>();
+        for (InterviewerWeeklyRule r : weeklyRules.findByUserIdIn(participantIds)) {
+            map.computeIfAbsent(r.getUserId(), (k) -> new ArrayList<>()).add(r);
+        }
+        return map;
+    }
+
+    /**
+     * Weekly preferences, per participant and in that participant's zone:
+     * the slot must dodge every NO_INTERVIEWS blackout, and when a person has
+     * INTERVIEW_BLOCK rules it must sit entirely inside one of them.
+     */
+    private static boolean weeklyRulesAllow(
+            List<UUID> participantIds, Map<UUID, InterviewerSettings> settings,
+            Map<UUID, List<InterviewerWeeklyRule>> rules,
+            ZonedDateTime start, ZonedDateTime end) {
+        for (UUID user : participantIds) {
+            List<InterviewerWeeklyRule> userRules = rules.getOrDefault(user, List.of());
+            if (userRules.isEmpty()) {
+                continue;
+            }
+            InterviewerSettings s = settings.get(user);
+            ZoneId zone = s == null ? ZONE : ZoneId.of(s.getTimezone());
+            ZonedDateTime ls = start.withZoneSameInstant(zone);
+            ZonedDateTime le = end.withZoneSameInstant(zone);
+            int day = ls.getDayOfWeek().getValue();
+            boolean hasBlocks = false;
+            boolean insideABlock = false;
+            for (InterviewerWeeklyRule r : userRules) {
+                if ("INTERVIEW_BLOCK".equals(r.getKind())) {
+                    hasBlocks = true;
+                    if (r.getDayOfWeek() == day
+                            && !ls.toLocalTime().isBefore(r.getStartTime())
+                            && !le.toLocalTime().isAfter(r.getEndTime())) {
+                        insideABlock = true;
+                    }
+                } else if ("NO_INTERVIEWS".equals(r.getKind()) && r.getDayOfWeek() == day) {
+                    // blackout intersects the slot?
+                    if (ls.toLocalTime().isBefore(r.getEndTime()) && le.toLocalTime().isAfter(r.getStartTime())) {
+                        return false;
+                    }
+                }
+            }
+            if (hasBlocks && !insideABlock) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private Map<UUID, InterviewerSettings> settingsFor(List<UUID> participantIds) {
@@ -146,6 +207,9 @@ public class AvailabilityService {
         for (CalendarEvent e : events) {
             if (ignoreInterviewId != null && ignoreInterviewId.equals(e.getInterviewId())) {
                 continue;
+            }
+            if (NON_BLOCKING.contains(e.getKind())) {
+                continue; // tentative holds and in-office markers don't block
             }
             OffsetDateTime s = e.getStartsAt();
             OffsetDateTime f = e.getEndsAt();
