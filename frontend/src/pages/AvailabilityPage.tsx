@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '@/api/client'
+import SlideOver, { useSlideOverClose } from '@/components/SlideOver'
 
 /* Interviewer availability — per-person working window + load caps, recurring
    weekly rules ("no Monday mornings", dedicated interview blocks) and a week
@@ -126,37 +127,34 @@ interface Requisition {
   roundCount: number
 }
 
-/* Interview plans by requisition — the intake output. Rounds in order, each
-   with the interviewers the manager aligned; the scheduler proposes times from
-   every round member's calendar and pings them when their calendars block. */
-function InterviewPlans({ users }: { users: UserRow[] }) {
-  const [reqs, setReqs] = useState<Requisition[]>([])
-  const [jobId, setJobId] = useState<string | null>(null)
+/* Interview plans — a grid of requisitions ready for interview setup. Row
+   click opens the standard drawer where the intake outcome is captured:
+   rounds in order, each with the interviewers the manager aligned. */
+function PlanEditor({
+  req,
+  users,
+  onChanged,
+}: {
+  req: Requisition
+  users: UserRow[]
+  onChanged: () => void
+}) {
+  const close = useSlideOverClose()
   const [rounds, setRounds] = useState<PlanRound[]>([])
   const [addFor, setAddFor] = useState<string | null>(null)
 
-  const loadReqs = useCallback(() => {
-    api.get<Requisition[]>('/interview-plan/requisitions').then((r) => {
-      setReqs(r.data)
-      setJobId((cur) => cur ?? r.data.find((x) => x.roundCount > 0)?.jobId ?? r.data[0]?.jobId ?? null)
-    })
-  }, [])
-  useEffect(loadReqs, [loadReqs])
-
   const loadPlan = useCallback(() => {
-    if (!jobId) return
-    api.get<PlanRound[]>('/interview-plan', { params: { jobId } }).then((r) => setRounds(r.data))
-  }, [jobId])
+    api.get<PlanRound[]>('/interview-plan', { params: { jobId: req.jobId } }).then((r) => setRounds(r.data))
+  }, [req.jobId])
   useEffect(loadPlan, [loadPlan])
 
   const refresh = () => {
     loadPlan()
-    loadReqs()
+    onChanged()
   }
 
   const addRound = async () => {
-    if (!jobId) return
-    await api.post(`/interview-plan/${jobId}/rounds`, {})
+    await api.post(`/interview-plan/${req.jobId}/rounds`, {})
     refresh()
   }
 
@@ -175,124 +173,175 @@ function InterviewPlans({ users }: { users: UserRow[] }) {
     refresh()
   }
 
-  const selectedReq = reqs.find((r) => r.jobId === jobId)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '18px 20px 12px' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, color: 'var(--ink-0)' }}>{req.title}</div>
+          <div style={{ fontSize: 12.5, color: 'var(--ink-4)', marginTop: 3 }}>
+            {[req.department, req.recruiterName && `Recruiter ${req.recruiterName}`, req.hiringManagerName && `HM ${req.hiringManagerName}`]
+              .filter(Boolean)
+              .join(' · ')}
+          </div>
+        </div>
+        <button
+          className="btn btn--ghost btn--sm"
+          style={{ marginLeft: 'auto', flexShrink: 0 }}
+          onClick={() => close?.()}
+          aria-label="Close"
+        >
+          ×
+        </button>
+      </div>
+      <div style={{ padding: '0 20px 20px', overflowY: 'auto', flex: 1 }}>
+        <p style={{ fontSize: 12.5, color: 'var(--ink-4)', margin: '0 0 14px', lineHeight: 1.5 }}>
+          Captured at intake: rounds in order, with the interviewers the manager aligned to each. The scheduler offers
+          candidates times that work for everyone in the round, and notifies interviewers whose calendars block.
+        </p>
+        {rounds.length === 0 && (
+          <div style={{ fontSize: 13, color: 'var(--ink-4)', padding: '10px 0 16px' }}>
+            No rounds yet — add the first round to start this requisition's plan.
+          </div>
+        )}
+        {rounds.map((round) => (
+          <div key={round.id} style={{ border: '1px solid var(--line, #e5e9f0)', borderRadius: 10, padding: '12px 14px', marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="badge">Round {round.roundNo}</span>
+              <button className="btn btn--ghost btn--sm" style={{ marginLeft: 'auto' }} onClick={() => removeRound(round.id)}>
+                Remove
+              </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+              <input
+                className="input"
+                style={{ flex: 1, minWidth: 0, fontWeight: 600 }}
+                defaultValue={round.name}
+                onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== round.name && updateRound(round.id, { name: e.target.value.trim() })}
+              />
+              <input
+                className="input"
+                type="number"
+                min={15}
+                step={15}
+                style={{ width: 72 }}
+                defaultValue={round.durationMin}
+                onBlur={(e) => Number(e.target.value) >= 15 && Number(e.target.value) !== round.durationMin && updateRound(round.id, { durationMin: Number(e.target.value) })}
+              />
+              <span style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>min</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+              {round.members.map((m) => (
+                <span key={m.userId} className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  {m.name}
+                  <button
+                    onClick={() => setMembers(round, round.members.filter((x) => x.userId !== m.userId).map((x) => x.userId))}
+                    style={{ font: 'inherit', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--ink-4)', padding: 0, lineHeight: 1 }}
+                    aria-label={`Remove ${m.name}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              {round.members.length === 0 && <span style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>No interviewers yet</span>}
+              {addFor === round.id ? (
+                <select
+                  className="input"
+                  style={{ width: 200 }}
+                  autoFocus
+                  defaultValue=""
+                  onBlur={() => setAddFor(null)}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setMembers(round, [...round.members.map((m) => m.userId), e.target.value])
+                    }
+                    setAddFor(null)
+                  }}
+                >
+                  <option value="" disabled>Add interviewer…</option>
+                  {users
+                    .filter((u) => !round.members.some((m) => m.userId === u.id))
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>{u.name} — {roleLabel(u.role)}</option>
+                    ))}
+                </select>
+              ) : (
+                <button className="btn btn--outline btn--sm" onClick={() => setAddFor(round.id)}>+ Add</button>
+              )}
+            </div>
+          </div>
+        ))}
+        <button className="btn btn--outline btn--sm" onClick={addRound}>Add round</button>
+      </div>
+    </div>
+  )
+}
+
+function InterviewPlans({ users }: { users: UserRow[] }) {
+  const [reqs, setReqs] = useState<Requisition[]>([])
+  const [openId, setOpenId] = useState<string | null>(null)
+
+  const loadReqs = useCallback(() => {
+    api.get<Requisition[]>('/interview-plan/requisitions').then((r) => setReqs(r.data))
+  }, [])
+  useEffect(loadReqs, [loadReqs])
+
+  const open = reqs.find((r) => r.jobId === openId) ?? null
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
-      <div className="card__head"><h3>Interview plans</h3></div>
-      <div className="card__body" style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 18, alignItems: 'start' }}>
-        {/* requisition list */}
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ fontSize: 12, color: 'var(--ink-4)', marginBottom: 6 }}>
-            Requisitions — click one to define its plan during intake.
-          </div>
-          {reqs.map((r) => (
-            <button
-              key={r.jobId}
-              onClick={() => setJobId(r.jobId)}
-              style={{
-                font: 'inherit', textAlign: 'left', cursor: 'pointer', border: 'none',
-                background: r.jobId === jobId ? '#f0f3f8' : 'transparent',
-                borderLeft: r.jobId === jobId ? '3px solid var(--bofa-navy, #012169)' : '3px solid transparent',
-                padding: '9px 12px',
-              }}
-            >
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-1)' }}>{r.title}</div>
-              <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 1 }}>
-                {[r.recruiterName && `Recruiter ${r.recruiterName}`, r.hiringManagerName && `HM ${r.hiringManagerName}`]
-                  .filter(Boolean)
-                  .join(' · ') || '—'}
-              </div>
-              <div style={{ fontSize: 12, color: r.roundCount ? 'var(--ink-3)' : 'var(--ink-4)', marginTop: 1 }}>
-                {r.roundCount ? `${r.roundCount} round${r.roundCount > 1 ? 's' : ''} defined` : 'No plan yet'}
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {/* rounds editor */}
-        <div style={{ minWidth: 0 }}>
-          {selectedReq && (
-            <div style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 10 }}>
-              Plan for <strong style={{ color: 'var(--ink-1)' }}>{selectedReq.title}</strong> — the scheduler offers
-              candidates times that work for every interviewer in the round, and notifies interviewers whose calendars
-              block scheduling.
-            </div>
-          )}
-          {rounds.length === 0 && (
-            <div style={{ fontSize: 13, color: 'var(--ink-4)', padding: '14px 0' }}>
-              No rounds yet — add the first round to start this requisition's plan.
-            </div>
-          )}
-          {rounds.map((round) => (
-            <div key={round.id} style={{ border: '1px solid var(--line, #e5e9f0)', borderRadius: 10, padding: '12px 14px', marginBottom: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <span className="badge">Round {round.roundNo}</span>
-                <input
-                  className="input"
-                  style={{ width: 240, fontWeight: 600 }}
-                  defaultValue={round.name}
-                  onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== round.name && updateRound(round.id, { name: e.target.value.trim() })}
-                />
-                <input
-                  className="input"
-                  type="number"
-                  min={15}
-                  step={15}
-                  style={{ width: 76 }}
-                  defaultValue={round.durationMin}
-                  onBlur={(e) => Number(e.target.value) >= 15 && Number(e.target.value) !== round.durationMin && updateRound(round.id, { durationMin: Number(e.target.value) })}
-                />
-                <span style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>min</span>
-                <button className="btn btn--ghost btn--sm" style={{ marginLeft: 'auto' }} onClick={() => removeRound(round.id)}>
-                  Remove
-                </button>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-                <span style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>Interviewers:</span>
-                {round.members.map((m) => (
-                  <span key={m.userId} className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    {m.name}
-                    <button
-                      onClick={() => setMembers(round, round.members.filter((x) => x.userId !== m.userId).map((x) => x.userId))}
-                      style={{ font: 'inherit', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--ink-4)', padding: 0, lineHeight: 1 }}
-                      aria-label={`Remove ${m.name}`}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-                {round.members.length === 0 && <span style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>none yet</span>}
-                {addFor === round.id ? (
-                  <select
-                    className="input"
-                    style={{ width: 200 }}
-                    autoFocus
-                    defaultValue=""
-                    onBlur={() => setAddFor(null)}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        setMembers(round, [...round.members.map((m) => m.userId), e.target.value])
-                      }
-                      setAddFor(null)
-                    }}
+      <div className="card__head"><h3>Interview setup</h3></div>
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Requisition</th>
+              <th>Recruiter</th>
+              <th>Hiring manager</th>
+              <th className="t-right">Rounds</th>
+              <th>Plan</th>
+            </tr>
+          </thead>
+          <tbody>
+            {reqs.length === 0 ? (
+              <tr>
+                <td colSpan={5} style={{ textAlign: 'center', color: 'var(--ink-4)', padding: '30px 18px' }}>
+                  No open requisitions.
+                </td>
+              </tr>
+            ) : (
+              reqs.map((r) => {
+                const active = r.jobId === openId
+                return (
+                  <tr
+                    key={r.jobId}
+                    onClick={() => setOpenId(r.jobId)}
+                    aria-selected={active}
+                    style={{ cursor: 'pointer', background: active ? 'var(--navy-050)' : undefined }}
                   >
-                    <option value="" disabled>Add interviewer…</option>
-                    {users
-                      .filter((u) => !round.members.some((m) => m.userId === u.id))
-                      .map((u) => (
-                        <option key={u.id} value={u.id}>{u.name} — {roleLabel(u.role)}</option>
-                      ))}
-                  </select>
-                ) : (
-                  <button className="btn btn--outline btn--sm" onClick={() => setAddFor(round.id)}>+ Add</button>
-                )}
-              </div>
-            </div>
-          ))}
-          <button className="btn btn--outline btn--sm" onClick={addRound}>Add round</button>
-        </div>
+                    <td>
+                      <span className="t-strong" style={{ display: 'block' }}>{r.title}</span>
+                      <span className="t-muted" style={{ display: 'block', fontSize: 12 }}>{r.department || '—'}</span>
+                    </td>
+                    <td className="t-muted">{r.recruiterName || '—'}</td>
+                    <td className="t-muted">{r.hiringManagerName || '—'}</td>
+                    <td className="t-num t-right">{r.roundCount || '—'}</td>
+                    <td>
+                      {r.roundCount > 0
+                        ? <span className="badge badge--ok">Configured</span>
+                        : <span className="badge badge--warn">Not set</span>}
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
       </div>
+      {open && (
+        <SlideOver key={open.jobId} label={`${open.title} — interview setup`} onClose={() => setOpenId(null)} width={440}>
+          <PlanEditor req={open} users={users} onChanged={loadReqs} />
+        </SlideOver>
+      )}
     </div>
   )
 }
