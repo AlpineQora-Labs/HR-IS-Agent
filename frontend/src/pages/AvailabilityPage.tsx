@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '@/api/client'
-import SlideOver, { useSlideOverClose } from '@/components/SlideOver'
 
 /* Interviewer availability — per-person working window + load caps, recurring
    weekly rules ("no Monday mornings", dedicated interview blocks) and a week
@@ -127,150 +126,179 @@ interface Requisition {
   roundCount: number
 }
 
-/* Interview plans — a grid of requisitions ready for interview setup. Row
-   click opens the standard drawer where the intake outcome is captured:
-   rounds in order, each with the interviewers the manager aligned. */
-function PlanEditor({
-  req,
-  users,
-  onChanged,
-}: {
-  req: Requisition
-  users: UserRow[]
-  onChanged: () => void
-}) {
-  const close = useSlideOverClose()
-  const [rounds, setRounds] = useState<PlanRound[]>([])
-  const [addFor, setAddFor] = useState<string | null>(null)
+/* Interview setup — pick a requisition from the grid, then define its
+   interview WORKFLOW: a left-to-right flow of rounds (Round 1 -> Round 2 ->
+   Offer), each round carrying the interviewers aligned at intake. As soon as
+   interviewers are on a round, the engine reads their calendars live and shows
+   whether the round is bookable and when. */
 
-  const loadPlan = useCallback(() => {
-    api.get<PlanRound[]>('/interview-plan', { params: { jobId: req.jobId } }).then((r) => setRounds(r.data))
-  }, [req.jobId])
-  useEffect(loadPlan, [loadPlan])
+interface RoundHealth {
+  nextAvailable: string | null
+  openSlots: number
+  blocked: boolean
+}
 
-  const refresh = () => {
-    loadPlan()
-    onChanged()
-  }
+const initialsOf = (name: string) =>
+  name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
 
-  const addRound = async () => {
-    await api.post(`/interview-plan/${req.jobId}/rounds`, {})
-    refresh()
-  }
+const nextLabel = (iso: string) => {
+  const d = new Date(iso)
+  return `${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+}
 
-  const updateRound = async (id: string, patch: { name?: string; durationMin?: number }) => {
-    await api.put(`/interview-plan/rounds/${id}`, patch)
-    refresh()
-  }
-
-  const removeRound = async (id: string) => {
-    await api.delete(`/interview-plan/rounds/${id}`)
-    refresh()
-  }
-
-  const setMembers = async (round: PlanRound, userIds: string[]) => {
-    await api.put(`/interview-plan/rounds/${round.id}/members`, { userIds })
-    refresh()
-  }
-
+/* Terminal node of the flow rail (Start / Offer). */
+function EndCap({ label }: { label: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '18px 20px 12px' }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, color: 'var(--ink-0)' }}>{req.title}</div>
-          <div style={{ fontSize: 12.5, color: 'var(--ink-4)', marginTop: 3 }}>
-            {[req.department, req.recruiterName && `Recruiter ${req.recruiterName}`, req.hiringManagerName && `HM ${req.hiringManagerName}`]
-              .filter(Boolean)
-              .join(' · ')}
-          </div>
-        </div>
+    <div
+      style={{
+        alignSelf: 'center', flexShrink: 0, padding: '8px 16px', borderRadius: 999,
+        background: 'var(--bofa-navy, #012169)', color: '#fff', fontSize: 12.5, fontWeight: 650,
+        letterSpacing: '0.01em', whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </div>
+  )
+}
+
+/* Connector arrow between flow nodes. */
+function FlowArrow() {
+  return (
+    <svg width="34" height="12" viewBox="0 0 34 12" style={{ alignSelf: 'center', flexShrink: 0 }} aria-hidden>
+      <line x1="0" y1="6" x2="26" y2="6" stroke="#b7c0cf" strokeWidth="1.5" />
+      <path d="M25 1.5 L32 6 L25 10.5" fill="none" stroke="#b7c0cf" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function RoundNode({
+  round,
+  health,
+  users,
+  onRename,
+  onDuration,
+  onRemove,
+  onMembers,
+}: {
+  round: PlanRound
+  health: RoundHealth | undefined
+  users: UserRow[]
+  onRename: (name: string) => void
+  onDuration: (min: number) => void
+  onRemove: () => void
+  onMembers: (userIds: string[]) => void
+}) {
+  const [adding, setAdding] = useState(false)
+  const hasPeople = round.members.length > 0
+  return (
+    <div
+      style={{
+        width: 250, flexShrink: 0, background: '#fff', border: '1px solid var(--line, #dfe4ec)',
+        borderRadius: 12, boxShadow: '0 1px 2px rgba(16,22,38,0.05)', display: 'flex', flexDirection: 'column',
+      }}
+    >
+      <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--line, #eef1f6)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--ink-4)' }}>
+          ROUND {round.roundNo}
+        </span>
         <button
           className="btn btn--ghost btn--sm"
-          style={{ marginLeft: 'auto', flexShrink: 0 }}
-          onClick={() => close?.()}
-          aria-label="Close"
+          style={{ marginLeft: 'auto', padding: '2px 8px' }}
+          onClick={onRemove}
+          aria-label={`Remove round ${round.roundNo}`}
         >
           ×
         </button>
       </div>
-      <div style={{ padding: '0 20px 20px', overflowY: 'auto', flex: 1 }}>
-        <p style={{ fontSize: 12.5, color: 'var(--ink-4)', margin: '0 0 14px', lineHeight: 1.5 }}>
-          Captured at intake: rounds in order, with the interviewers the manager aligned to each. The scheduler offers
-          candidates times that work for everyone in the round, and notifies interviewers whose calendars block.
-        </p>
-        {rounds.length === 0 && (
-          <div style={{ fontSize: 13, color: 'var(--ink-4)', padding: '10px 0 16px' }}>
-            No rounds yet — add the first round to start this requisition's plan.
-          </div>
-        )}
-        {rounds.map((round) => (
-          <div key={round.id} style={{ border: '1px solid var(--line, #e5e9f0)', borderRadius: 10, padding: '12px 14px', marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="badge">Round {round.roundNo}</span>
-              <button className="btn btn--ghost btn--sm" style={{ marginLeft: 'auto' }} onClick={() => removeRound(round.id)}>
-                Remove
+      <div style={{ padding: '10px 14px 12px', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+        <input
+          className="input"
+          style={{ fontWeight: 650, fontSize: 13.5 }}
+          defaultValue={round.name}
+          onBlur={(e) => {
+            const v = e.target.value.trim()
+            if (v && v !== round.name) onRename(v)
+          }}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input
+            className="input"
+            type="number"
+            min={15}
+            step={15}
+            style={{ width: 68 }}
+            defaultValue={round.durationMin}
+            onBlur={(e) => {
+              const v = Number(e.target.value)
+              if (v >= 15 && v !== round.durationMin) onDuration(v)
+            }}
+          />
+          <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>minutes</span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {round.members.map((m) => (
+            <div key={m.userId} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span
+                className="avatar"
+                style={{ width: 26, height: 26, fontSize: 10, flexShrink: 0 }}
+              >
+                {initialsOf(m.name)}
+              </span>
+              <span style={{ minWidth: 0, flex: 1 }}>
+                <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: 'var(--ink-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {m.name}
+                </span>
+                <span style={{ display: 'block', fontSize: 11, color: 'var(--ink-4)' }}>{roleLabel(m.role)}</span>
+              </span>
+              <button
+                onClick={() => onMembers(round.members.filter((x) => x.userId !== m.userId).map((x) => x.userId))}
+                style={{ font: 'inherit', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--ink-4)', padding: 2, lineHeight: 1 }}
+                aria-label={`Remove ${m.name}`}
+              >
+                ×
               </button>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-              <input
-                className="input"
-                style={{ flex: 1, minWidth: 0, fontWeight: 600 }}
-                defaultValue={round.name}
-                onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== round.name && updateRound(round.id, { name: e.target.value.trim() })}
-              />
-              <input
-                className="input"
-                type="number"
-                min={15}
-                step={15}
-                style={{ width: 72 }}
-                defaultValue={round.durationMin}
-                onBlur={(e) => Number(e.target.value) >= 15 && Number(e.target.value) !== round.durationMin && updateRound(round.id, { durationMin: Number(e.target.value) })}
-              />
-              <span style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>min</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-              {round.members.map((m) => (
-                <span key={m.userId} className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  {m.name}
-                  <button
-                    onClick={() => setMembers(round, round.members.filter((x) => x.userId !== m.userId).map((x) => x.userId))}
-                    style={{ font: 'inherit', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--ink-4)', padding: 0, lineHeight: 1 }}
-                    aria-label={`Remove ${m.name}`}
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-              {round.members.length === 0 && <span style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>No interviewers yet</span>}
-              {addFor === round.id ? (
-                <select
-                  className="input"
-                  style={{ width: 200 }}
-                  autoFocus
-                  defaultValue=""
-                  onBlur={() => setAddFor(null)}
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      setMembers(round, [...round.members.map((m) => m.userId), e.target.value])
-                    }
-                    setAddFor(null)
-                  }}
-                >
-                  <option value="" disabled>Add interviewer…</option>
-                  {users
-                    .filter((u) => !round.members.some((m) => m.userId === u.id))
-                    .map((u) => (
-                      <option key={u.id} value={u.id}>{u.name} — {roleLabel(u.role)}</option>
-                    ))}
-                </select>
-              ) : (
-                <button className="btn btn--outline btn--sm" onClick={() => setAddFor(round.id)}>+ Add</button>
-              )}
-            </div>
-          </div>
-        ))}
-        <button className="btn btn--outline btn--sm" onClick={addRound}>Add round</button>
+          ))}
+          {adding ? (
+            <select
+              className="input"
+              autoFocus
+              defaultValue=""
+              onBlur={() => setAdding(false)}
+              onChange={(e) => {
+                if (e.target.value) onMembers([...round.members.map((m) => m.userId), e.target.value])
+                setAdding(false)
+              }}
+            >
+              <option value="" disabled>Add interviewer…</option>
+              {users
+                .filter((u) => !round.members.some((m) => m.userId === u.id))
+                .map((u) => (
+                  <option key={u.id} value={u.id}>{u.name} — {roleLabel(u.role)}</option>
+                ))}
+            </select>
+          ) : (
+            <button className="btn btn--outline btn--sm" style={{ alignSelf: 'flex-start' }} onClick={() => setAdding(true)}>
+              + Interviewer
+            </button>
+          )}
+        </div>
+
+        {/* the engine's live calendar read for this lineup */}
+        <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--line, #eef1f6)', fontSize: 11.5 }}>
+          {!hasPeople ? (
+            <span style={{ color: 'var(--ink-4)' }}>Add interviewers to check calendars</span>
+          ) : !health ? (
+            <span style={{ color: 'var(--ink-4)' }}>Checking calendars…</span>
+          ) : health.blocked ? (
+            <span style={{ color: '#a33a3a', fontWeight: 600 }}>● Calendars blocked — no open times</span>
+          ) : (
+            <span style={{ color: 'var(--ink-3)' }}>
+              <span style={{ color: '#2e7d43' }}>●</span> Next open: {health.nextAvailable ? nextLabel(health.nextAvailable) : '—'}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -279,13 +307,86 @@ function PlanEditor({
 function InterviewPlans({ users }: { users: UserRow[] }) {
   const [reqs, setReqs] = useState<Requisition[]>([])
   const [openId, setOpenId] = useState<string | null>(null)
+  const [rounds, setRounds] = useState<PlanRound[]>([])
+  const [health, setHealth] = useState<Record<string, RoundHealth>>({})
 
   const loadReqs = useCallback(() => {
     api.get<Requisition[]>('/interview-plan/requisitions').then((r) => setReqs(r.data))
   }, [])
   useEffect(loadReqs, [loadReqs])
 
+  const loadPlan = useCallback(() => {
+    if (!openId) return
+    api.get<PlanRound[]>('/interview-plan', { params: { jobId: openId } }).then((r) => {
+      setRounds(r.data)
+      for (const round of r.data) {
+        if (round.members.length === 0) continue
+        api.get<RoundHealth>(`/interview-plan/rounds/${round.id}/health`)
+          .then((h) => setHealth((cur) => ({ ...cur, [round.id]: h.data })))
+          .catch(() => {})
+      }
+    })
+  }, [openId])
+  useEffect(loadPlan, [loadPlan])
+
+  const refresh = () => {
+    loadPlan()
+    loadReqs()
+  }
+
   const open = reqs.find((r) => r.jobId === openId) ?? null
+
+  if (open) {
+    return (
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card__head" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button className="btn btn--outline btn--sm" onClick={() => setOpenId(null)}>‹ Requisitions</button>
+          <h3 style={{ margin: 0 }}>{open.title} — interview workflow</h3>
+          <span style={{ fontSize: 12.5, color: 'var(--ink-4)', marginLeft: 'auto' }}>
+            {[open.recruiterName && `Recruiter ${open.recruiterName}`, open.hiringManagerName && `HM ${open.hiringManagerName}`]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+        </div>
+        <div className="card__body">
+          <div style={{ display: 'flex', gap: 0, alignItems: 'stretch', overflowX: 'auto', padding: '6px 2px 10px' }}>
+            <EndCap label="Candidate ready" />
+            <FlowArrow />
+            {rounds.map((round) => (
+              <div key={round.id} style={{ display: 'flex', alignItems: 'stretch' }}>
+                <RoundNode
+                  round={round}
+                  health={health[round.id]}
+                  users={users}
+                  onRename={(name) => api.put(`/interview-plan/rounds/${round.id}`, { name }).then(refresh)}
+                  onDuration={(durationMin) => api.put(`/interview-plan/rounds/${round.id}`, { durationMin }).then(refresh)}
+                  onRemove={() => api.delete(`/interview-plan/rounds/${round.id}`).then(refresh)}
+                  onMembers={(userIds) => api.put(`/interview-plan/rounds/${round.id}/members`, { userIds }).then(refresh)}
+                />
+                <FlowArrow />
+              </div>
+            ))}
+            <button
+              onClick={() => api.post(`/interview-plan/${open.jobId}/rounds`, {}).then(refresh)}
+              style={{
+                width: 150, flexShrink: 0, alignSelf: 'stretch', minHeight: 150, cursor: 'pointer',
+                border: '1.5px dashed #b7c0cf', borderRadius: 12, background: 'transparent',
+                font: 'inherit', fontSize: 13, fontWeight: 600, color: 'var(--ink-3)',
+              }}
+            >
+              + Add round
+            </button>
+            <FlowArrow />
+            <EndCap label="Advance to offer" />
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--ink-4)', margin: '10px 2px 0' }}>
+            Each round is scheduled against every listed interviewer's calendar — working windows, weekly preferences,
+            vacations and load caps all apply. Blocked rounds notify their interviewers automatically.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
@@ -309,39 +410,26 @@ function InterviewPlans({ users }: { users: UserRow[] }) {
                 </td>
               </tr>
             ) : (
-              reqs.map((r) => {
-                const active = r.jobId === openId
-                return (
-                  <tr
-                    key={r.jobId}
-                    onClick={() => setOpenId(r.jobId)}
-                    aria-selected={active}
-                    style={{ cursor: 'pointer', background: active ? 'var(--navy-050)' : undefined }}
-                  >
-                    <td>
-                      <span className="t-strong" style={{ display: 'block' }}>{r.title}</span>
-                      <span className="t-muted" style={{ display: 'block', fontSize: 12 }}>{r.department || '—'}</span>
-                    </td>
-                    <td className="t-muted">{r.recruiterName || '—'}</td>
-                    <td className="t-muted">{r.hiringManagerName || '—'}</td>
-                    <td className="t-num t-right">{r.roundCount || '—'}</td>
-                    <td>
-                      {r.roundCount > 0
-                        ? <span className="badge badge--ok">Configured</span>
-                        : <span className="badge badge--warn">Not set</span>}
-                    </td>
-                  </tr>
-                )
-              })
+              reqs.map((r) => (
+                <tr key={r.jobId} onClick={() => setOpenId(r.jobId)} style={{ cursor: 'pointer' }}>
+                  <td>
+                    <span className="t-strong" style={{ display: 'block' }}>{r.title}</span>
+                    <span className="t-muted" style={{ display: 'block', fontSize: 12 }}>{r.department || '—'}</span>
+                  </td>
+                  <td className="t-muted">{r.recruiterName || '—'}</td>
+                  <td className="t-muted">{r.hiringManagerName || '—'}</td>
+                  <td className="t-num t-right">{r.roundCount || '—'}</td>
+                  <td>
+                    {r.roundCount > 0
+                      ? <span className="badge badge--ok">Configured</span>
+                      : <span className="badge badge--warn">Not set</span>}
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>
       </div>
-      {open && (
-        <SlideOver key={open.jobId} label={`${open.title} — interview setup`} onClose={() => setOpenId(null)} width={440}>
-          <PlanEditor req={open} users={users} onChanged={loadReqs} />
-        </SlideOver>
-      )}
     </div>
   )
 }

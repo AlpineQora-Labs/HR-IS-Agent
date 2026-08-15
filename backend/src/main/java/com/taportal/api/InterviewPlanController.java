@@ -1,5 +1,6 @@
 package com.taportal.api;
 
+import com.taportal.domain.interview.AvailabilityService;
 import com.taportal.domain.interview.InterviewRound;
 import com.taportal.domain.interview.InterviewRoundMember;
 import com.taportal.domain.interview.InterviewRoundMemberRepository;
@@ -47,20 +48,45 @@ public class InterviewPlanController {
 
     public record MembersRequest(List<UUID> userIds) {}
 
+    /** The engine's live read of a round's calendars: can this panel be booked? */
+    public record RoundHealth(java.time.OffsetDateTime nextAvailable, int openSlots, boolean blocked) {}
+
     private final InterviewRoundRepository rounds;
     private final InterviewRoundMemberRepository members;
     private final JobRepository jobs;
     private final RecruiterUserRepository users;
+    private final AvailabilityService availability;
 
     public InterviewPlanController(
             InterviewRoundRepository rounds,
             InterviewRoundMemberRepository members,
             JobRepository jobs,
-            RecruiterUserRepository users) {
+            RecruiterUserRepository users,
+            AvailabilityService availability) {
         this.rounds = rounds;
         this.members = members;
         this.jobs = jobs;
         this.users = users;
+        this.availability = availability;
+    }
+
+    /**
+     * Live calendar check for a round: the same engine that proposes times to
+     * candidates (windows, weekly rules, caps, buffers) previews the round's
+     * panel. blocked=true means no bookable time in the whole horizon.
+     */
+    @GetMapping("/rounds/{roundId}/health")
+    public RoundHealth roundHealth(@PathVariable UUID roundId) {
+        InterviewRound round = rounds.findById(roundId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Round not found"));
+        List<UUID> ids = members.findByRoundId(roundId).stream()
+                .map(InterviewRoundMember::getUserId)
+                .toList();
+        if (ids.isEmpty()) {
+            return new RoundHealth(null, 0, false);
+        }
+        var slots = availability.openSlots(ids, round.getDurationMin(), 6);
+        return new RoundHealth(slots.isEmpty() ? null : slots.get(0)[0], slots.size(), slots.isEmpty());
     }
 
     /** Requisitions with their hiring team, for the availability screen's plan list. */
