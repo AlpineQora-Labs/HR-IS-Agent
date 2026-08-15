@@ -78,4 +78,9 @@ public class Interview {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
+
+    /** Candidate-driven reschedules, counted against the policy limit. */
+    @Setter
+    @Column(name = "reschedule_count", nullable = false)
+    private int rescheduleCount;
 }

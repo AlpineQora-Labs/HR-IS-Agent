@@ -11,45 +11,61 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.time.temporal.WeekFields;
+import java.util.Locale;
 import org.springframework.stereotype.Service;
 
 /**
  * Computes open interview times from all participants' calendars (ported from
- * the proven VMS scheduling engine). Policy:
+ * the proven VMS scheduling engine, hardened in Phase 1). Guardrails come from
+ * data, not constants:
  *
  * <ul>
- *   <li>Business hours 9:00–17:00 ET, weekdays only, 30-minute grid, 14-day window
- *   <li>Minimum candidate notice: 20 hours
- *   <li>15-minute buffer around existing INTERVIEW events (no back-to-backs)
- *   <li>At most 2 proposals per day (spread options across days)
- *   <li>At most 2 interviews per day per participant (interviewer-fairness cap)
+ *   <li>{@link SchedulingPolicy}: minimum candidate notice, search horizon,
+ *       interview buffers, reschedule limits (enforced in InterviewService)
+ *   <li>{@link InterviewerSettings}: per-person working window in the person's
+ *       own timezone, plus daily and weekly interview caps. No row = defaults
+ *       (9:00–17:00 ET, 2/day, 8/week).
+ *   <li>Weekdays only, 30-minute grid, at most 2 proposals per day so options
+ *       spread across days.
  * </ul>
  */
 @Service
 public class AvailabilityService {
 
     static final ZoneId ZONE = ZoneId.of("America/New_York");
-    private static final LocalTime DAY_START = LocalTime.of(9, 0);
-    private static final LocalTime DAY_END = LocalTime.of(17, 0);
-    private static final Duration MIN_NOTICE = Duration.ofHours(20);
-    private static final Duration INTERVIEW_BUFFER = Duration.ofMinutes(15);
-    private static final int WINDOW_DAYS = 14;
-    private static final int MAX_PER_DAY = 2;
-    private static final int MAX_INTERVIEWS_PER_DAY_PER_PERSON = 2;
+    private static final LocalTime DEFAULT_START = LocalTime.of(9, 0);
+    private static final LocalTime DEFAULT_END = LocalTime.of(17, 0);
+    private static final int DEFAULT_MAX_PER_DAY = 2;
+    private static final int DEFAULT_MAX_PER_WEEK = 8;
+    private static final int MAX_PROPOSALS_PER_DAY = 2;
+    private static final WeekFields WEEK = WeekFields.of(Locale.US);
 
     private final CalendarEventRepository calendarEvents;
+    private final SchedulingPolicyRepository policies;
+    private final InterviewerSettingsRepository settingsRepository;
 
-    public AvailabilityService(CalendarEventRepository calendarEvents) {
+    public AvailabilityService(
+            CalendarEventRepository calendarEvents,
+            SchedulingPolicyRepository policies,
+            InterviewerSettingsRepository settingsRepository) {
         this.calendarEvents = calendarEvents;
+        this.policies = policies;
+        this.settingsRepository = settingsRepository;
     }
 
     /** Up to {@code count} open [start,end) windows that fit every participant. */
     public List<OffsetDateTime[]> openSlots(List<UUID> participantIds, int durationMin, int count) {
-        ZonedDateTime earliest = ZonedDateTime.now(ZONE).plus(MIN_NOTICE);
-        ZonedDateTime windowEnd = ZonedDateTime.now(ZONE).plusDays(WINDOW_DAYS);
+        SchedulingPolicy policy = policies.current();
+        Duration minNotice = Duration.ofHours(policy.getMinNoticeHours());
+        Duration buffer = Duration.ofMinutes(policy.getBufferMinutes());
+
+        ZonedDateTime earliest = ZonedDateTime.now(ZONE).plus(minNotice);
+        ZonedDateTime windowEnd = ZonedDateTime.now(ZONE).plusDays(policy.getHorizonDays());
         List<CalendarEvent> busy = calendarEvents
                 .findByUserIdInAndStartsAtLessThanAndEndsAtGreaterThan(
                         participantIds, windowEnd.toOffsetDateTime(), OffsetDateTime.now());
+        Map<UUID, InterviewerSettings> settings = settingsFor(participantIds);
 
         Map<LocalDate, Integer> perDay = new HashMap<>();
         List<OffsetDateTime[]> out = new ArrayList<>();
@@ -58,20 +74,23 @@ public class AvailabilityService {
             if (day.getDayOfWeek().getValue() >= 6) {
                 continue; // weekend
             }
-            if (overCapDay(day, participantIds, busy)) {
-                continue; // a participant already has too many interviews that day
+            if (overCap(day, participantIds, settings, busy)) {
+                continue; // a participant is at their daily or weekly cap
             }
-            for (LocalTime t = DAY_START; !t.plusMinutes(durationMin).isAfter(DAY_END); t = t.plusMinutes(30)) {
+            for (LocalTime t = DEFAULT_START; !t.plusMinutes(durationMin).isAfter(LocalTime.of(20, 0)); t = t.plusMinutes(30)) {
                 ZonedDateTime start = day.atTime(t).atZone(ZONE);
                 if (start.isBefore(earliest)) {
                     continue;
                 }
                 ZonedDateTime end = start.plusMinutes(durationMin);
-                if (conflicts(busy, start.toOffsetDateTime(), end.toOffsetDateTime(), null)) {
+                if (!withinEveryWorkWindow(participantIds, settings, start, end)) {
+                    continue;
+                }
+                if (conflicts(busy, start.toOffsetDateTime(), end.toOffsetDateTime(), null, buffer)) {
                     continue;
                 }
                 int used = perDay.getOrDefault(day, 0);
-                if (used >= MAX_PER_DAY) {
+                if (used >= MAX_PROPOSALS_PER_DAY) {
                     break;
                 }
                 perDay.put(day, used + 1);
@@ -86,13 +105,44 @@ public class AvailabilityService {
 
     /** True if any participant has an overlapping event (with interview buffers applied). */
     public boolean hasConflict(List<UUID> participantIds, OffsetDateTime start, OffsetDateTime end, UUID ignoreInterviewId) {
+        Duration buffer = Duration.ofMinutes(policies.current().getBufferMinutes());
         List<CalendarEvent> busy = calendarEvents
                 .findByUserIdInAndStartsAtLessThanAndEndsAtGreaterThan(
-                        participantIds, end.plus(INTERVIEW_BUFFER), start.minus(INTERVIEW_BUFFER));
-        return conflicts(busy, start, end, ignoreInterviewId);
+                        participantIds, end.plus(buffer), start.minus(buffer));
+        return conflicts(busy, start, end, ignoreInterviewId, buffer);
     }
 
-    private static boolean conflicts(List<CalendarEvent> events, OffsetDateTime start, OffsetDateTime end, UUID ignoreInterviewId) {
+    private Map<UUID, InterviewerSettings> settingsFor(List<UUID> participantIds) {
+        Map<UUID, InterviewerSettings> map = new HashMap<>();
+        for (InterviewerSettings s : settingsRepository.findByUserIdIn(participantIds)) {
+            map.put(s.getUserId(), s);
+        }
+        return map;
+    }
+
+    /** The slot must sit inside EVERY participant's working window, evaluated in their own zone. */
+    private static boolean withinEveryWorkWindow(
+            List<UUID> participantIds, Map<UUID, InterviewerSettings> settings,
+            ZonedDateTime start, ZonedDateTime end) {
+        for (UUID user : participantIds) {
+            InterviewerSettings s = settings.get(user);
+            LocalTime ws = s == null ? DEFAULT_START : s.getWorkStart();
+            LocalTime we = s == null ? DEFAULT_END : s.getWorkEnd();
+            ZoneId zone = s == null ? ZONE : ZoneId.of(s.getTimezone());
+            ZonedDateTime ls = start.withZoneSameInstant(zone);
+            ZonedDateTime le = end.withZoneSameInstant(zone);
+            if (!ls.toLocalDate().equals(le.toLocalDate())
+                    || ls.toLocalTime().isBefore(ws)
+                    || le.toLocalTime().isAfter(we)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean conflicts(
+            List<CalendarEvent> events, OffsetDateTime start, OffsetDateTime end,
+            UUID ignoreInterviewId, Duration buffer) {
         for (CalendarEvent e : events) {
             if (ignoreInterviewId != null && ignoreInterviewId.equals(e.getInterviewId())) {
                 continue;
@@ -100,8 +150,8 @@ public class AvailabilityService {
             OffsetDateTime s = e.getStartsAt();
             OffsetDateTime f = e.getEndsAt();
             if ("INTERVIEW".equals(e.getKind())) {
-                s = s.minus(INTERVIEW_BUFFER);
-                f = f.plus(INTERVIEW_BUFFER);
+                s = s.minus(buffer);
+                f = f.plus(buffer);
             }
             if (s.isBefore(end) && f.isAfter(start)) {
                 return true;
@@ -110,16 +160,30 @@ public class AvailabilityService {
         return false;
     }
 
-    private static boolean overCapDay(LocalDate day, List<UUID> participantIds, List<CalendarEvent> busy) {
+    /** Daily AND weekly interview caps, per participant, from their settings. */
+    private static boolean overCap(
+            LocalDate day, List<UUID> participantIds,
+            Map<UUID, InterviewerSettings> settings, List<CalendarEvent> busy) {
+        int week = day.get(WEEK.weekOfWeekBasedYear());
         for (UUID user : participantIds) {
-            int n = 0;
+            InterviewerSettings s = settings.get(user);
+            int maxDay = s == null ? DEFAULT_MAX_PER_DAY : s.getMaxPerDay();
+            int maxWeek = s == null ? DEFAULT_MAX_PER_WEEK : s.getMaxPerWeek();
+            int onDay = 0;
+            int inWeek = 0;
             for (CalendarEvent e : busy) {
-                if ("INTERVIEW".equals(e.getKind()) && user.equals(e.getUserId())
-                        && e.getStartsAt().atZoneSameInstant(ZONE).toLocalDate().equals(day)) {
-                    n++;
+                if (!"INTERVIEW".equals(e.getKind()) || !user.equals(e.getUserId())) {
+                    continue;
+                }
+                LocalDate d = e.getStartsAt().atZoneSameInstant(ZONE).toLocalDate();
+                if (d.equals(day)) {
+                    onDay++;
+                }
+                if (d.get(WEEK.weekOfWeekBasedYear()) == week && d.getYear() == day.getYear()) {
+                    inWeek++;
                 }
             }
-            if (n >= MAX_INTERVIEWS_PER_DAY_PER_PERSON) {
+            if (onDay >= maxDay || inWeek >= maxWeek) {
                 return true;
             }
         }

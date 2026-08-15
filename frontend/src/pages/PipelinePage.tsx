@@ -17,6 +17,7 @@ import {
 } from '../api/hooks'
 import type { ApplicationRow, JobSummary } from '../api/types'
 import { date, initials } from '../lib/format'
+import { api } from '@/api/client'
 import { stageHue } from '@/lib/stages'
 
 // Terminal stages folded into the collapsible "Closed" lane so the active board
@@ -120,6 +121,32 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 }
 
 // Book an interview for this application onto one of the job's open slots.
+function SelfScheduleLink({ applicationId }: { applicationId: string }) {
+  const { toastMsg } = useStore()
+  const [busy, setBusy] = useState(false)
+  return (
+    <button
+      className="btn btn--outline btn--sm"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true)
+        try {
+          const r = await api.post<{ id: string }>('/interviews/self-schedule', { applicationId })
+          const url = `${window.location.origin}/schedule/${r.data.id}`
+          await navigator.clipboard.writeText(url)
+          toastMsg('Self-schedule link copied — send it to the candidate')
+        } catch {
+          toastMsg('Could not create the self-schedule link')
+        } finally {
+          setBusy(false)
+        }
+      }}
+    >
+      Copy self-schedule link
+    </button>
+  )
+}
+
 function ScheduleInterview({ applicationId, jobId }: { applicationId: string; jobId: string }) {
   const [open, setOpen] = useState(false)
   const { data: slots } = useSlots(open ? jobId : undefined)
@@ -358,6 +385,9 @@ function CandidateDrawer({
           </div>
 
           <ScheduleInterview applicationId={app.id} jobId={app.jobId} />
+          <div style={{ marginTop: 10 }}>
+            <SelfScheduleLink applicationId={app.id} />
+          </div>
           <AriaTranscript applicationId={app.id} />
         </div>
 

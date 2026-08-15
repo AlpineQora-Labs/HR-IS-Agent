@@ -38,6 +38,8 @@ public class InterviewService {
     private final CandidateRepository candidates;
     private final RecruiterUserRepository recruiterUsers;
     private final InterviewPanelistRepository panelists;
+    private final SchedulingPolicyRepository policies;
+    private final com.taportal.domain.notification.NotificationService notifications;
 
     public InterviewService(
             InterviewRepository interviewRepository,
@@ -48,7 +50,9 @@ public class InterviewService {
             JobRepository jobs,
             CandidateRepository candidates,
             RecruiterUserRepository recruiterUsers,
-            InterviewPanelistRepository panelists) {
+            InterviewPanelistRepository panelists,
+            SchedulingPolicyRepository policies,
+            com.taportal.domain.notification.NotificationService notifications) {
         this.interviewRepository = interviewRepository;
         this.slotRepository = slotRepository;
         this.calendarEvents = calendarEvents;
@@ -58,6 +62,8 @@ public class InterviewService {
         this.candidates = candidates;
         this.recruiterUsers = recruiterUsers;
         this.panelists = panelists;
+        this.policies = policies;
+        this.notifications = notifications;
     }
 
     public List<InterviewResponse> listByApplication(UUID applicationId) {
@@ -66,6 +72,20 @@ public class InterviewService {
 
     public List<SlotResponse> openSlots(UUID jobId) {
         return slotRepository.findByJobIdAndBookedFalse(jobId).stream().map(InterviewService::toSlotResponse).toList();
+    }
+
+    /** Proposed slots, generating a fresh set when none exist and the interview is unbooked. */
+    @Transactional
+    public List<SlotResponse> proposedSlotsOrPropose(UUID interviewId) {
+        List<SlotResponse> current = proposedSlots(interviewId);
+        if (!current.isEmpty()) {
+            return current;
+        }
+        Interview interview = load(interviewId);
+        if (interview.getScheduledAt() != null || "CANCELED".equals(interview.getStatus())) {
+            return current;
+        }
+        return autoPropose(interviewId);
     }
 
     public List<SlotResponse> proposedSlots(UUID interviewId) {
@@ -231,6 +251,60 @@ public class InterviewService {
         app.setStage("INTERVIEW");
         applications.save(app);
         return interview;
+    }
+
+    /**
+     * Candidate-driven reschedule — POLICIED, unlike the recruiter's
+     * {@link #reschedule}: limited to {@code reschedule_limit} times and blocked
+     * inside the {@code reschedule_cutoff_hours} window before the interview.
+     *
+     * @throws ResponseStatusException 422 when a policy blocks the reschedule
+     */
+    @Transactional
+    public List<SlotResponse> candidateReschedule(UUID interviewId) {
+        Interview interview = load(interviewId);
+        SchedulingPolicy policy = policies.current();
+        if (interview.getRescheduleCount() >= policy.getRescheduleLimit()) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Reschedule limit reached — a recruiter will reach out to help.");
+        }
+        if (interview.getScheduledAt() != null && interview.getScheduledAt()
+                .isBefore(OffsetDateTime.now().plusHours(policy.getRescheduleCutoffHours()))) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "The interview is less than " + policy.getRescheduleCutoffHours()
+                            + " hours away — please contact your recruiter to change it.");
+        }
+        interview.setRescheduleCount(interview.getRescheduleCount() + 1);
+        interviewRepository.save(interview);
+        List<SlotResponse> slots = reschedule(interviewId);
+        notifications.notifyRole("RECRUITER", "RESCHEDULE",
+                "Candidate rescheduled: " + candidateName(interview),
+                typeLabel(interview) + " — new times proposed", "/interviews");
+        return slots;
+    }
+
+    /**
+     * Candidate-driven cancel: frees the slot and every calendar immediately and
+     * alerts recruiting so re-engagement can start.
+     */
+    @Transactional
+    public void candidateCancel(UUID interviewId) {
+        Interview interview = load(interviewId);
+        transition(interviewId, "CANCELED");
+        notifications.notifyRole("RECRUITER", "CANCELLED",
+                "Interview cancelled by candidate: " + candidateName(interview),
+                typeLabel(interview), "/interviews");
+    }
+
+    private String candidateName(Interview interview) {
+        return applications.findById(interview.getApplicationId())
+                .flatMap((a) -> candidates.findById(a.getCandidateId()))
+                .map((c) -> c.getName())
+                .orElse("Candidate");
+    }
+
+    private static String typeLabel(Interview i) {
+        return i.getType() == null ? "Interview" : i.getType().replace('_', ' ').toLowerCase();
     }
 
     /** Free the booked time and immediately re-offer fresh calendar options. */

@@ -40,23 +40,28 @@ public class AriaNudgeJob {
     private final InterviewService interviewService;
     private final ConversationRepository conversations;
     private final MessageRepository messages;
+    private final com.taportal.domain.notification.NotificationService notifications;
 
     public AriaNudgeJob(
             InterviewRepository interviews,
             InterviewService interviewService,
             ConversationRepository conversations,
-            MessageRepository messages) {
+            MessageRepository messages,
+            com.taportal.domain.notification.NotificationService notifications) {
         this.interviews = interviews;
         this.interviewService = interviewService;
         this.conversations = conversations;
         this.messages = messages;
+        this.notifications = notifications;
     }
 
     @Scheduled(fixedDelayString = "${app.aria.nudge-sweep-ms:60000}")
     @Transactional
     public void sweep() {
         remindUpcoming();
+        remindFinalHour();
         recoverNoShows();
+        nudgeUnbooked();
     }
 
     private void remindUpcoming() {
@@ -64,6 +69,49 @@ public class AriaNudgeJob {
         for (Interview iv : interviews.findByStatusAndScheduledAtBetween("SCHEDULED", now, now.plusHours(24))) {
             String key = "remind:" + iv.getId();
             appendOnce(iv, key, reminderText(iv));
+        }
+    }
+
+    /** 1-hour reminder with the join link — the last-mile nudge. */
+    private void remindFinalHour() {
+        OffsetDateTime now = OffsetDateTime.now();
+        for (Interview iv : interviews.findByStatusAndScheduledAtBetween("SCHEDULED", now, now.plusHours(1))) {
+            String key = "remind1h:" + iv.getId();
+            StringBuilder sb = new StringBuilder("Starting soon — your interview is at ")
+                    .append(FMT.format(iv.getScheduledAt())).append(".");
+            if (iv.getMeetingLink() != null) {
+                sb.append("\nJoin here: ").append(iv.getMeetingLink());
+            }
+            sb.append("\nRunning late? Just reply here and we'll let the team know.");
+            appendOnce(iv, key, sb.toString());
+        }
+    }
+
+    /**
+     * Time-to-schedule SLA: proposals out for 48h with no booking -> nudge the
+     * candidate thread once and alert recruiting once (bell).
+     */
+    private void nudgeUnbooked() {
+        OffsetDateTime cutoff = OffsetDateTime.now().minusHours(48);
+        for (Interview iv : interviews.findByStatus("SLOTS_PROPOSED")) {
+            if (iv.getCreatedAt() == null || iv.getCreatedAt().isAfter(cutoff)) {
+                continue;
+            }
+            appendOnce(iv, "sla:" + iv.getId(),
+                    "Just checking in — the interview times we offered are still open. "
+                            + "Reply with a number to lock one in, or tell me what days work better.");
+            // The recruiter alert rides the same dedupe: only fires the first sweep
+            // after the threshold (message insert marks it as handled).
+            Conversation thread = threadFor(iv);
+            if (thread != null && messages.existsByConversationIdAndIntent(thread.getId(), "sla-alert:" + iv.getId())) {
+                continue;
+            }
+            if (thread != null) {
+                append(thread, "sla-alert:" + iv.getId(), "(recruiting team notified)");
+                notifications.notifyRole("RECRUITER", "SLA",
+                        "Unbooked for 48h: interview awaiting candidate booking",
+                        "Proposals were sent but nothing is booked yet", "/interviews");
+            }
         }
     }
 

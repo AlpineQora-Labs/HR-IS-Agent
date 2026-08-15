@@ -13,6 +13,7 @@ import { AppShell } from './components/AppShell'
 import { StoreProvider } from './state/store'
 import { ConfigProvider, useConfig } from './state/config'
 import EventRegisterPage from './pages/EventRegisterPage'
+import SelfSchedulePage from './pages/SelfSchedulePage'
 import CareersEventsPage from './pages/CareersEventsPage'
 
 // Recruiter / ATS pages
@@ -119,6 +120,7 @@ createRoot(document.getElementById('root')!).render(
                   ourselves (replacing tal.net/Oleeo) — events board + registration. */}
               <Route path="/careers/events" element={<CareersEventsPage />} />
               <Route path="/register/:eventId" element={<EventRegisterPage />} />
+              <Route path="/schedule/:interviewId" element={<SelfSchedulePage />} />
               {/* The recruiter console. The candidate-facing "Careers and Conv"
                   app is integrated separately. */}
               <Route path="/*" element={<RecruiterApp />} />
