@@ -87,6 +87,22 @@ The point of the catalog: implement all of it, in the phase order at the bottom.
 | S41 | **Accommodations.** Candidate can request extra time / accessibility accommodations in the flow; visibly attached to the booking. | ⬜ |
 | S42 | **Interviewer identity policy.** Configurable: hide interviewer names until confirmed (bias/privacy). | ⬜ |
 
+### A7. The fully-booked-interviewer playbook
+
+What happens when the hiring manager's (or any required interviewer's) calendar has no open
+slots. Applied as an escalation LADDER, in order — and note the recruiter's own calendar never
+gates scheduling; only actual interview attendees do.
+
+| # | Scenario | Status |
+|---|---|---|
+| S43 | **Silent widening.** Before reporting failure: extend the search horizon (e.g. 2→4 weeks), relax soft preferences (edge-of-day slots within working hours), shrink optional buffers. | ⬜ |
+| S44 | **Role-based substitution.** If the seat needs "someone qualified" rather than a specific person, draw an equivalent interviewer from the pool with fairness rotation (pairs with S16/S19). Not applicable to person-specific interviews (the HM on their own req). | ⬜ |
+| S45 | **Ask-to-overbook.** Identify LOW-priority conflicts (recurring 1:1s, focus blocks, tentative holds) and ask the interviewer, one click, to release one for the interview. Load caps become "over-cap with approval," never silent double-booking. | ⬜ |
+| S46 | **Waitlist + cancellation pounce.** Candidate joins a watch-list; any freed slot (cancellation, calendar change) is auto-offered to the head of the queue, first-accept-wins under the existing race protection. | ⬜ |
+| S47 | **Escalate with options.** After N stuck days: coordinator task + bell notification presenting concrete choices (approve over-cap slot / substitute X / extend horizon) instead of a bare alarm. | ⬜ |
+| S48 | **Structural capacity.** Reserved weekly "interview office-hours" blocks that self-scheduling draws from first; utilization analytics exposing chronic bottleneck interviewers; pool-widening via shadow training (S18). | ⬜ |
+| S49 | **Hold the candidate's trust.** While resolving: proactive "finding you a time, expect options by <date>" message with an SLA timer and a break-warning nudge. | ⬜ |
+
 ---
 
 ## Part B — Policy CMS + candidate Q&A through the career-site chat
@@ -130,7 +146,9 @@ hours & caps, S39/S40 policy guardrails.
 
 **Phase 2 — Pools, loops, superdays**
 S16 pools, S17 fairness rotation, S19 declines/substitution, S22–S27 loops & cascade,
-S29 batch, S30 superday (ties into Campus), S34 scorecard chase.
+S29 batch, S30 superday (ties into Campus), S34 scorecard chase, S43–S49 fully-booked
+playbook (widening + substitution + waitlist in P2; ask-to-overbook and office-hours in P4
+with calendar sync).
 
 **Phase 3 — Policy CMS + chat Q&A** *(can run in parallel with Phase 2 — different surface)*
 C1–C5 CMS + indexing + publish workflow, C7–C11 chat answering with citations and handoff,
