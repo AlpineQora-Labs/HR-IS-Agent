@@ -3,8 +3,11 @@ import { createPortal } from 'react-dom'
 import {
   ReactFlow,
   ReactFlowProvider,
-  Controls,
+  Background,
+  BackgroundVariant,
+  Panel,
   MiniMap,
+  useViewport,
   Handle,
   Position,
   MarkerType,
@@ -122,6 +125,65 @@ export const Icons = {
   ),
 }
 
+/* Floating preview of the selected Communications template — shown while
+   hovering an email step on the canvas. */
+function TemplatePreview({ templateId, anchor }: { templateId: string; anchor: DOMRect }) {
+  const { data: t } = useQuery({
+    queryKey: ['email-template', templateId],
+    queryFn: () => commsApi.getEmailTemplate(templateId),
+    staleTime: 60_000,
+  })
+  if (!t) return null
+  return createPortal(
+    <div
+      className="wfc-mailpreview"
+      style={{ top: Math.max(12, Math.min(anchor.top, window.innerHeight - 360)), left: Math.min(anchor.right + 14, window.innerWidth - 336) }}
+    >
+      <div className="wfc-mailpreview__subject">{t.subject || t.name}</div>
+      <div className="wfc-mailpreview__meta">
+        {t.fromName ? `From ${t.fromName}` : 'Email template'} · {t.status.toLowerCase()}
+      </div>
+      <div className="wfc-mailpreview__body">
+        <div dangerouslySetInnerHTML={{ __html: t.bodyHtml }} />
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+/** Wraps a node so hovering it previews its attached email template. */
+function MailHover({ templateId, children }: { templateId?: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [hover, setHover] = useState(false)
+  return (
+    <div ref={ref} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      {children}
+      {hover && templateId && ref.current && (
+        <TemplatePreview templateId={templateId} anchor={ref.current.getBoundingClientRect()} />
+      )}
+    </div>
+  )
+}
+
+/* Make-style floating canvas toolbar: zoom, fit, arrange. */
+function CanvasToolbar({ onArrange }: { onArrange: () => void }) {
+  const { zoomIn, zoomOut, fitView } = useReactFlow()
+  const { zoom } = useViewport()
+  return (
+    <Panel position="bottom-center" className="wfc-toolbar">
+      <button onClick={() => zoomOut()} aria-label="Zoom out">−</button>
+      <span className="wfc-toolbar__zoom">{Math.round(zoom * 100)}%</span>
+      <button onClick={() => zoomIn()} aria-label="Zoom in">+</button>
+      <span className="wfc-toolbar__sep" />
+      <button onClick={() => fitView({ padding: 0.25, maxZoom: 1 })}>Fit</button>
+      <button onClick={onArrange}>
+        <span style={{ display: 'inline-flex', width: 13, height: 13 }}>{Icons.arrange}</span>
+        Arrange
+      </button>
+    </Panel>
+  )
+}
+
 function Card({
   type,
   title,
@@ -184,6 +246,7 @@ function ApprovalNode({ data }: NodeProps) {
   const names = users.filter((u) => u.roleKey === role?.key).map((u) => u.name)
   const who = names.length ? names.slice(0, 2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '') : 'No users in role'
   return (
+    <MailHover templateId={d.emailAttached ? d.emailTemplateId : undefined}>
     <Card type="approval" title={d.label || 'Approval step'} sub={who} chip={d.approverRole || 'Any approver'} lit={d.lit}>
       {d.emailAttached && (
         <span className="wfc-node__mail" title={`Email: ${d.emailTemplateName || 'choose a template'} · ${d.emailTrigger || ''}`}>
@@ -195,6 +258,7 @@ function ApprovalNode({ data }: NodeProps) {
       <Handle type="source" position={Position.Left} id="l" />
       <Handle type="source" position={Position.Right} id="r" />
     </Card>
+    </MailHover>
   )
 }
 function ConditionNode({ data }: NodeProps) {
@@ -223,12 +287,14 @@ function PolicyNode({ data }: NodeProps) {
 function EmailNode({ data }: NodeProps) {
   const d = data as WfData
   return (
-    <Card type="email" title={d.emailTemplateName || 'Email notification'} sub={d.emailTrigger || 'Choose a template'} lit={d.lit}>
-      <Handle type="target" position={Position.Top} id="t" />
-      <Handle type="source" position={Position.Bottom} id="b" />
-      <Handle type="source" position={Position.Left} id="l" />
-      <Handle type="source" position={Position.Right} id="r" />
-    </Card>
+    <MailHover templateId={d.emailTemplateId}>
+      <Card type="email" title={d.emailTemplateName || 'Email notification'} sub={d.emailTrigger || 'Choose a template'} lit={d.lit}>
+        <Handle type="target" position={Position.Top} id="t" />
+        <Handle type="source" position={Position.Bottom} id="b" />
+        <Handle type="source" position={Position.Left} id="l" />
+        <Handle type="source" position={Position.Right} id="r" />
+      </Card>
+    </MailHover>
   )
 }
 function ExceptionNode({ data }: NodeProps) {
@@ -282,7 +348,7 @@ const decorateEdge = (e: Edge): Edge => {
   const color = branch === 'no' ? '#e31837' : branch === 'yes' ? '#1a9d55' : '#93a1b8'
   return {
     ...e,
-    type: 'smoothstep',
+    type: 'default',
     className: branch ? `wfc-edge--${branch}` : undefined,
     markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color },
     label: branch === 'yes' ? 'YES' : branch === 'no' ? 'NO' : undefined,
@@ -754,26 +820,28 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   /** Template + trigger selects, shared by email nodes and step-attached notifications. */
   const emailRules = (
     <>
-      <label>
-        Email template
-        <select
-          className="select"
-          value={selData.emailTemplateId ?? ''}
-          onChange={(e) => {
-            const t = templates?.find((t) => t.templateId === e.target.value)
-            patchData({ emailTemplateId: t?.templateId, emailTemplateName: t?.name })
-          }}
-        >
-          <option value="" disabled>
-            Choose a template…
-          </option>
-          {(templates ?? []).map((t) => (
-            <option key={t.templateId} value={t.templateId}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="wfc-inspector__label">Email template</div>
+      <div className="wfc-tpl-list">
+        {(templates ?? []).map((t) => (
+          <button
+            key={t.templateId}
+            className={`wfc-tpl${selData.emailTemplateId === t.templateId ? ' is-on' : ''}`}
+            onClick={() => patchData({ emailTemplateId: t.templateId, emailTemplateName: t.name })}
+          >
+            <span className={`wfc-tpl__dot${t.status === 'ACTIVE' ? ' is-active' : ''}`} />
+            <span style={{ minWidth: 0 }}>
+              <span className="wfc-tpl__name">{t.name}</span>
+              <span className="wfc-tpl__subject">{t.subject || 'No subject yet'}</span>
+            </span>
+          </button>
+        ))}
+        {(templates ?? []).length === 0 && (
+          <div className="wfc-tpl-empty">No templates yet — create them in Admin → Communications.</div>
+        )}
+      </div>
+      <div className="wfc-inspector__hint">
+        Templates come from <b>Communications</b>. Hover the step on the canvas to preview the selected email.
+      </div>
       <label>
         Trigger event
         <select className="select" value={selData.emailTrigger ?? EMAIL_TRIGGERS[0]} onChange={(e) => patchData({ emailTrigger: e.target.value })}>
@@ -792,12 +860,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
           <div className="wfc-top__kicker">Approval canvas</div>
           <div className="wfc-top__title">{workflow.name}</div>
         </div>
-        <div className="wfc-palette">
-          <button onClick={arrange}>
-            <span style={{ color: 'var(--wfc-navy)', display: 'inline-flex', width: 14, height: 14 }}>{Icons.arrange}</span>
-            Auto-arrange
-          </button>
-        </div>
+
         <button
           className={simOpen ? 'btn btn--primary btn--sm' : 'btn btn--outline btn--sm'}
           onClick={() => {
@@ -867,13 +930,15 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
             fitViewOptions={{ padding: 0.25, maxZoom: 1 }}
             proOptions={{ hideAttribution: true }}
           >
+            <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="#d3d9e5" />
             <MiniMap
               pannable
               zoomable
+              style={{ width: 140, height: 92 }}
               nodeColor={(n) => SPEC[n.type as keyof typeof SPEC]?.rail ?? '#93a1b8'}
               maskColor="rgba(242, 244, 248, 0.7)"
             />
-            <Controls />
+            <CanvasToolbar onArrange={arrange} />
           </ReactFlow>
         </div>
 
@@ -988,16 +1053,27 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                   </label>
                 )}
                 {selected.type === 'condition' && (
-                  <label>
-                    Condition
-                    <select className="select" value={selData.condition ?? ''} onChange={(e) => patchData({ condition: e.target.value })}>
-                      {['Always', 'In-person event', 'Virtual event', 'Short notice (under 14 days)', 'Flagged critical'].map(
-                        (c) => (
-                          <option key={c}>{c}</option>
-                        ),
-                      )}
-                    </select>
-                  </label>
+                  <>
+                    <div className="wfc-inspector__label">Route to YES when</div>
+                    <div className="wfc-choice">
+                      {[
+                        { v: 'Always', d: 'Every request takes the YES branch.' },
+                        { v: 'In-person event', d: 'The event happens in person.' },
+                        { v: 'Virtual event', d: 'The event is virtual.' },
+                        { v: 'Short notice (under 14 days)', d: 'Less than 14 days of lead time.' },
+                        { v: 'Flagged critical', d: 'The requester flagged it critical.' },
+                      ].map((c) => (
+                        <button
+                          key={c.v}
+                          className={`wfc-choice__row${(selData.condition ?? 'Always') === c.v ? ' is-on' : ''}`}
+                          onClick={() => patchData({ condition: c.v })}
+                        >
+                          <span className="wfc-choice__name">{c.v}</span>
+                          <span className="wfc-choice__desc">{c.d}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
 
                 {selected.type === 'email' && emailRules}

@@ -540,3 +540,248 @@
   stroke: var(--wfc-red);
   stroke-width: 2;
 }
+
+/* ── Make-style canvas refresh ─────────────────────────────────────────────
+   Softer cards on a dotted grid, curved edges, floating zoom toolbar, and
+   friendlier rules: template rows + plain-English condition choices. */
+
+.wfc .react-flow__pane,
+.wfc .react-flow__renderer {
+  background: #f7f8fb;
+}
+
+.wfc-node {
+  border-radius: 16px;
+  border: 1px solid #e7ebf2;
+  box-shadow: 0 6px 18px rgba(16, 22, 38, 0.07), 0 1px 2px rgba(16, 22, 38, 0.04);
+  transition: box-shadow 140ms ease, transform 140ms ease;
+}
+.wfc-node:hover {
+  box-shadow: 0 10px 26px rgba(16, 22, 38, 0.11), 0 2px 4px rgba(16, 22, 38, 0.05);
+}
+.wfc-node__rail {
+  width: 0 !important; /* color now lives in the icon tile, Make-style */
+}
+.wfc-node__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+.wfc-node__icon svg {
+  width: 17px;
+  height: 17px;
+}
+.react-flow__node.selected .wfc-node {
+  border-color: var(--wfc-navy, #012169);
+  box-shadow: 0 0 0 3px rgba(1, 33, 105, 0.12), 0 10px 26px rgba(16, 22, 38, 0.1);
+}
+
+.wfc .react-flow__edge-path {
+  stroke-width: 1.8;
+}
+.wfc .react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 2.4;
+}
+
+/* floating bottom toolbar */
+.wfc-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: #fff;
+  border: 1px solid #e3e8f0;
+  border-radius: 999px;
+  box-shadow: 0 8px 22px rgba(16, 22, 38, 0.1);
+  padding: 4px 8px;
+  margin-bottom: 14px !important;
+}
+.wfc-toolbar button {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2, #3c4557);
+  background: none;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+.wfc-toolbar button:hover {
+  background: #f0f3f8;
+  color: var(--wfc-navy, #012169);
+}
+.wfc-toolbar__zoom {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--ink-4, #8a93a6);
+  min-width: 38px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.wfc-toolbar__sep {
+  width: 1px;
+  height: 16px;
+  background: #e3e8f0;
+  margin: 0 4px;
+}
+
+/* inspector: labels + hints */
+.wfc-inspector__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-4, #8a93a6);
+}
+.wfc-inspector__hint {
+  font-size: 11.5px;
+  color: var(--ink-4, #8a93a6);
+  line-height: 1.5;
+}
+
+/* template picker rows */
+.wfc-tpl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wfc-tpl {
+  font: inherit;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e3e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.wfc-tpl:hover {
+  border-color: #c6cfdd;
+}
+.wfc-tpl.is-on {
+  border-color: var(--wfc-navy, #012169);
+  box-shadow: 0 0 0 2.5px rgba(1, 33, 105, 0.1);
+}
+.wfc-tpl__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #c9d1de;
+  flex-shrink: 0;
+}
+.wfc-tpl__dot.is-active {
+  background: #1a9d55;
+}
+.wfc-tpl__name {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--ink-1, #23293a);
+}
+.wfc-tpl__subject {
+  display: block;
+  font-size: 11.5px;
+  color: var(--ink-4, #8a93a6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+.wfc-tpl-empty {
+  font-size: 12px;
+  color: var(--ink-4, #8a93a6);
+  padding: 10px;
+  border: 1px dashed #d3d9e5;
+  border-radius: 10px;
+}
+
+/* plain-English condition choices */
+.wfc-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wfc-choice__row {
+  font: inherit;
+  text-align: left;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e3e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.wfc-choice__row:hover {
+  border-color: #c6cfdd;
+}
+.wfc-choice__row.is-on {
+  border-color: var(--wfc-navy, #012169);
+  box-shadow: 0 0 0 2.5px rgba(1, 33, 105, 0.1);
+}
+.wfc-choice__name {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--ink-1, #23293a);
+}
+.wfc-choice__desc {
+  display: block;
+  font-size: 11.5px;
+  color: var(--ink-4, #8a93a6);
+  margin-top: 1px;
+}
+
+/* hover preview of the attached email template */
+.wfc-mailpreview {
+  position: fixed;
+  z-index: 90;
+  width: 320px;
+  background: #fff;
+  border: 1px solid #e3e8f0;
+  border-radius: 14px;
+  box-shadow: 0 18px 44px rgba(16, 22, 38, 0.18);
+  overflow: hidden;
+  pointer-events: none;
+  animation: wfcPreviewIn 120ms ease-out;
+}
+@keyframes wfcPreviewIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.wfc-mailpreview__subject {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-0, #111524);
+  padding: 12px 14px 2px;
+}
+.wfc-mailpreview__meta {
+  font-size: 11px;
+  color: var(--ink-4, #8a93a6);
+  padding: 0 14px 10px;
+  border-bottom: 1px solid #eef1f6;
+}
+.wfc-mailpreview__body {
+  height: 230px;
+  overflow: hidden;
+  position: relative;
+  background: #fafbfd;
+}
+.wfc-mailpreview__body > div {
+  transform: scale(0.62);
+  transform-origin: top left;
+  width: 161%;
+  padding: 14px;
+  background: #fff;
+}
+.wfc-mailpreview__body::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 46px;
+  background: linear-gradient(to bottom, rgba(250, 251, 253, 0), #fafbfd);
+}

@@ -106,6 +106,7 @@ interface PlanMember {
   userId: string
   name: string
   role: string
+  notes?: string[]
 }
 
 interface PlanRound {
@@ -315,6 +316,17 @@ function StageCard({
           <button className="btn btn--outline btn--sm" onClick={() => setAdding(true)}>+ Interviewer</button>
         )}
       </div>
+      {round.members.some((m) => (m.notes ?? []).length > 0) && (
+        <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--line, #eef1f6)', display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {round.members
+            .filter((m) => (m.notes ?? []).length > 0)
+            .map((m) => (
+              <div key={m.userId} style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>
+                <span style={{ fontWeight: 600, color: 'var(--ink-3)' }}>{m.name}</span> — {(m.notes ?? []).join(' · ')}
+              </div>
+            ))}
+        </div>
+      )}
     </div>
   )
 }

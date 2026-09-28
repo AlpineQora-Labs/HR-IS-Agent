@@ -1,14 +1,21 @@
 package com.taportal.api;
 
 import com.taportal.domain.interview.AvailabilityService;
+import com.taportal.domain.interview.CalendarEvent;
+import com.taportal.domain.interview.CalendarEventRepository;
 import com.taportal.domain.interview.InterviewRound;
 import com.taportal.domain.interview.InterviewRoundMember;
 import com.taportal.domain.interview.InterviewRoundMemberRepository;
 import com.taportal.domain.interview.InterviewRoundRepository;
 import com.taportal.domain.job.Job;
 import com.taportal.domain.job.JobRepository;
+import com.taportal.domain.interview.InterviewerWeeklyRule;
+import com.taportal.domain.interview.InterviewerWeeklyRuleRepository;
 import com.taportal.domain.recruiter.RecruiterUser;
 import com.taportal.domain.recruiter.RecruiterUserRepository;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,7 +43,8 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/v1/interview-plan")
 public class InterviewPlanController {
 
-    public record MemberDto(UUID userId, String name, String role) {}
+    /** {@code notes} = human-readable availability constraints ("No Mon mornings"). */
+    public record MemberDto(UUID userId, String name, String role, List<String> notes) {}
 
     public record RoundDto(UUID id, int roundNo, String name, int durationMin, List<MemberDto> members) {}
 
@@ -56,18 +64,24 @@ public class InterviewPlanController {
     private final JobRepository jobs;
     private final RecruiterUserRepository users;
     private final AvailabilityService availability;
+    private final InterviewerWeeklyRuleRepository weeklyRules;
+    private final CalendarEventRepository calendarEvents;
 
     public InterviewPlanController(
             InterviewRoundRepository rounds,
             InterviewRoundMemberRepository members,
             JobRepository jobs,
             RecruiterUserRepository users,
-            AvailabilityService availability) {
+            AvailabilityService availability,
+            InterviewerWeeklyRuleRepository weeklyRules,
+            CalendarEventRepository calendarEvents) {
         this.rounds = rounds;
         this.members = members;
         this.jobs = jobs;
         this.users = users;
         this.availability = availability;
+        this.weeklyRules = weeklyRules;
+        this.calendarEvents = calendarEvents;
     }
 
     /**
@@ -158,11 +172,59 @@ public class InterviewPlanController {
     private RoundDto toDto(InterviewRound r) {
         List<MemberDto> lineup = members.findByRoundId(r.getId()).stream()
                 .map((m) -> users.findById(m.getUserId())
-                        .map((u) -> new MemberDto(u.getId(), u.getName(), u.getRole()))
+                        .map((u) -> new MemberDto(u.getId(), u.getName(), u.getRole(), notesFor(u.getId())))
                         .orElse(null))
                 .filter((m) -> m != null)
                 .toList();
         return new RoundDto(r.getId(), r.getRoundNo(), r.getName(), r.getDurationMin(), lineup);
+    }
+
+    private static final String[] DAY_SHORT = {"", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+
+    /**
+     * The constraints a coordinator should know while lining up this person:
+     * weekly blackouts, dedicated interview windows, and vacations inside the
+     * scheduling horizon — phrased for humans, not for the engine.
+     */
+    private List<String> notesFor(UUID userId) {
+        List<String> notes = new ArrayList<>();
+        List<String> blocks = new ArrayList<>();
+        for (InterviewerWeeklyRule rule : weeklyRules.findByUserIdOrderByDayOfWeekAscStartTimeAsc(userId)) {
+            String day = DAY_SHORT[rule.getDayOfWeek()];
+            if ("NO_INTERVIEWS".equals(rule.getKind())) {
+                notes.add("No " + day + " " + windowWord(rule.getStartTime(), rule.getEndTime()));
+            } else {
+                blocks.add(day + " " + clock(rule.getStartTime()) + "–" + clock(rule.getEndTime()));
+            }
+        }
+        if (!blocks.isEmpty()) {
+            notes.add("Interviews only " + String.join(", ", blocks));
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        for (CalendarEvent e : calendarEvents
+                .findByUserIdInAndStartsAtLessThanAndEndsAtGreaterThan(List.of(userId), now.plusDays(14), now)) {
+            if ("VACATION".equals(e.getKind())) {
+                notes.add("Vacation " + e.getStartsAt().atZoneSameInstant(java.time.ZoneId.of("America/New_York"))
+                        .format(java.time.format.DateTimeFormatter.ofPattern("MMM d")));
+            }
+        }
+        return notes;
+    }
+
+    private static String windowWord(LocalTime start, LocalTime end) {
+        if (!end.isAfter(LocalTime.of(12, 30))) {
+            return "mornings";
+        }
+        if (!start.isBefore(LocalTime.of(11, 30)) && end.isAfter(LocalTime.of(17, 0))) {
+            return "afternoons";
+        }
+        return clock(start) + "–" + clock(end);
+    }
+
+    private static String clock(LocalTime t) {
+        int h12 = t.getHour() % 12 == 0 ? 12 : t.getHour() % 12;
+        String ampm = t.getHour() < 12 ? "AM" : "PM";
+        return t.getMinute() == 0 ? h12 + " " + ampm : h12 + ":" + String.format("%02d", t.getMinute()) + " " + ampm;
     }
 
     private static String name(Map<UUID, RecruiterUser> byId, UUID id) {
