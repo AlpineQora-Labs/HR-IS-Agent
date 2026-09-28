@@ -785,3 +785,32 @@
   height: 46px;
   background: linear-gradient(to bottom, rgba(250, 251, 253, 0), #fafbfd);
 }
+
+/* SMS phone-bubble hover preview */
+.wfc-smspreview {
+  position: fixed;
+  z-index: 90;
+  width: 280px;
+  background: #fff;
+  border: 1px solid #e3e8f0;
+  border-radius: 14px;
+  box-shadow: 0 18px 44px rgba(16, 22, 38, 0.18);
+  padding: 12px 14px;
+  pointer-events: none;
+  animation: wfcPreviewIn 120ms ease-out;
+}
+.wfc-smspreview__head {
+  font-size: 11px;
+  color: var(--ink-4, #8a93a6);
+  margin-bottom: 8px;
+}
+.wfc-smspreview__bubble {
+  background: #e9ebef;
+  color: var(--ink-1, #23293a);
+  border-radius: 14px 14px 14px 4px;
+  padding: 9px 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

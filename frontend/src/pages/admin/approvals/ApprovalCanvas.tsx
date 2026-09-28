@@ -40,7 +40,19 @@ type WfData = {
   emailTemplateId?: string
   emailTemplateName?: string
   emailTrigger?: string
+  smsTemplateId?: string
+  smsTemplateName?: string
+  smsTrigger?: string
 }
+
+/** When an SMS fires, relative to the point it sits on in the journey. */
+const SMS_TRIGGERS = [
+  'When this point is reached',
+  'When the interview is scheduled',
+  'When the interview is rescheduled',
+  '24 hours before the interview',
+  'When application status changes',
+]
 
 /** When an email notification fires, relative to the step/point it sits on. */
 const EMAIL_TRIGGERS = [
@@ -58,6 +70,8 @@ export const SPEC = {
   condition: { kicker: 'Condition', rail: '#c98a00', iconBg: '#fdf5e3', iconFg: '#b07a00' },
   policy: { kicker: 'Policy', rail: '#0e8a80', iconBg: '#e6f5f3', iconFg: '#0b756d' },
   email: { kicker: 'Email', rail: '#7c3aed', iconBg: '#f3ecfd', iconFg: '#6d28d9' },
+  sms: { kicker: 'SMS', rail: '#0e7490', iconBg: '#e6f3f7', iconFg: '#0b5f78' },
+  step: { kicker: 'Step', rail: '#5b6b86', iconBg: '#eef1f6', iconFg: '#44536e' },
   exception: { kicker: 'Exception', rail: '#e31837', iconBg: '#fdecee', iconFg: '#c31432' },
   end: { kicker: 'Outcome', rail: '#1a9d55', iconBg: '#e9f7ef', iconFg: '#188a4b' },
 } as const
@@ -95,6 +109,20 @@ export const Icons = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="5" width="18" height="14" rx="2" />
       <path d="m3.5 7 8.5 6 8.5-6" />
+    </svg>
+  ),
+  sms: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 11.5a7.5 7.5 0 0 1-7.5 7.5H5l-1.8 2.2.3-4A7.5 7.5 0 1 1 21 11.5Z" />
+      <path d="M8.5 10h7" />
+      <path d="M8.5 13h4.5" />
+    </svg>
+  ),
+  step: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3.5" y="4" width="17" height="6.5" rx="1.8" />
+      <rect x="3.5" y="14" width="17" height="6.5" rx="1.8" />
+      <path d="M12 10.5V14" />
     </svg>
   ),
   exception: (
@@ -297,6 +325,70 @@ function EmailNode({ data }: NodeProps) {
     </MailHover>
   )
 }
+/* Floating phone-bubble preview of an SMS template while hovering the step. */
+function SmsPreview({ templateId, anchor }: { templateId: string; anchor: DOMRect }) {
+  const { data: t } = useQuery({
+    queryKey: ['sms-template', templateId],
+    queryFn: () => commsApi.getSmsTemplate(templateId),
+    staleTime: 60_000,
+  })
+  if (!t) return null
+  const segments = Math.max(1, Math.ceil(t.body.length / 160))
+  return createPortal(
+    <div
+      className="wfc-smspreview"
+      style={{ top: Math.max(12, Math.min(anchor.top, window.innerHeight - 240)), left: Math.min(anchor.right + 14, window.innerWidth - 296) }}
+    >
+      <div className="wfc-smspreview__head">
+        {t.name} · {t.body.length} chars · {segments} segment{segments > 1 ? 's' : ''}
+      </div>
+      <div className="wfc-smspreview__bubble">{t.body}</div>
+    </div>,
+    document.body,
+  )
+}
+
+function SmsHover({ templateId, children }: { templateId?: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [hover, setHover] = useState(false)
+  return (
+    <div ref={ref} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      {children}
+      {hover && templateId && ref.current && (
+        <SmsPreview templateId={templateId} anchor={ref.current.getBoundingClientRect()} />
+      )}
+    </div>
+  )
+}
+
+function SmsNode({ data }: NodeProps) {
+  const d = data as WfData
+  return (
+    <SmsHover templateId={d.smsTemplateId}>
+      <Card type="sms" title={d.smsTemplateName || 'SMS message'} sub={d.smsTrigger || 'Choose a template'} lit={d.lit}>
+        <Handle type="target" position={Position.Top} id="t" />
+        <Handle type="target" position={Position.Left} id="l2" />
+        <Handle type="source" position={Position.Bottom} id="b" />
+        <Handle type="source" position={Position.Left} id="l" />
+        <Handle type="source" position={Position.Right} id="r" />
+      </Card>
+    </SmsHover>
+  )
+}
+
+function StepNode({ data }: NodeProps) {
+  const d = data as WfData
+  return (
+    <Card type="step" title={d.label || 'Journey step'} sub="Candidate action" lit={d.lit}>
+      <Handle type="target" position={Position.Top} id="t" />
+      <Handle type="target" position={Position.Right} id="r2" />
+      <Handle type="source" position={Position.Bottom} id="b" />
+      <Handle type="source" position={Position.Left} id="l" />
+      <Handle type="source" position={Position.Right} id="r" />
+    </Card>
+  )
+}
+
 function ExceptionNode({ data }: NodeProps) {
   const d = data as WfData
   return (
@@ -324,6 +416,8 @@ const nodeTypes = {
   condition: ConditionNode,
   policy: PolicyNode,
   email: EmailNode,
+  sms: SmsNode,
+  step: StepNode,
   exception: ExceptionNode,
   end: EndNode,
 }
@@ -336,6 +430,8 @@ const DIMS: Record<string, { width: number; height: number }> = {
   condition: { width: 184, height: 82 },
   policy: { width: 184, height: 64 },
   email: { width: 184, height: 72 },
+  sms: { width: 184, height: 72 },
+  step: { width: 184, height: 64 },
   exception: { width: 184, height: 64 },
   end: { width: 184, height: 64 },
 }
@@ -461,10 +557,12 @@ const BLOCKS: { type: BlockType; label: string }[] = [
   { type: 'approval', label: 'Approver' },
   { type: 'condition', label: 'Condition' },
   { type: 'email', label: 'Email' },
+  { type: 'sms', label: 'SMS' },
+  { type: 'step', label: 'Journey step' },
   { type: 'exception', label: 'Exception' },
 ]
 
-type BlockType = 'approval' | 'condition' | 'email' | 'exception'
+type BlockType = 'approval' | 'condition' | 'email' | 'sms' | 'step' | 'exception'
 
 const blockDefaults = (type: BlockType, firstRole?: string): WfData =>
   type === 'approval'
@@ -473,7 +571,11 @@ const blockDefaults = (type: BlockType, firstRole?: string): WfData =>
       ? { condition: 'Always' }
       : type === 'email'
         ? { label: 'Email notification', emailTrigger: EMAIL_TRIGGERS[0] }
-        : { label: 'Exception' }
+        : type === 'sms'
+          ? { label: 'SMS message', smsTrigger: SMS_TRIGGERS[0] }
+          : type === 'step'
+            ? { label: 'Journey step' }
+            : { label: 'Exception' }
 
 export default function ApprovalCanvas(props: { workflow: ApprovalWorkflow; onClose: () => void; onSaved: (w: ApprovalWorkflow) => void }) {
   // Portal onto the shell element (not <body>): escapes the content subtree's
@@ -514,6 +616,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
 
   // Email templates for the notification rules (right panel).
   const { data: templates } = useQuery({ queryKey: ['email-templates'], queryFn: commsApi.getEmailTemplates })
+  const { data: smsTemplates } = useQuery({ queryKey: ['sms-templates'], queryFn: commsApi.getSmsTemplates })
 
   // Compute handle bounds after mount so edges render as soon as the canvas opens.
   // Retried on a short schedule: environments without a working ResizeObserver
@@ -626,7 +729,11 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     setSelId(id)
     measureSoon(id)
     setTimeout(() => fitView({ padding: 0.2, maxZoom: 1, duration: 300 }), 90)
-    flash(type === 'email' ? 'Email step added to the flow — pick a template on the right' : 'Step added and aligned with the flow')
+    flash(
+      type === 'email' || type === 'sms'
+        ? `${type === 'sms' ? 'SMS' : 'Email'} step added to the flow — pick a template on the right`
+        : 'Step added and aligned with the flow',
+    )
   }
 
   const onDragOver = (e: React.DragEvent) => {
@@ -853,6 +960,41 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     </>
   )
 
+  const smsRules = (
+    <>
+      <div className="wfc-inspector__label">SMS template</div>
+      <div className="wfc-tpl-list">
+        {(smsTemplates ?? []).map((t) => (
+          <button
+            key={t.id}
+            className={`wfc-tpl${selData.smsTemplateId === t.id ? ' is-on' : ''}`}
+            onClick={() => patchData({ smsTemplateId: t.id, smsTemplateName: t.name })}
+          >
+            <span className={`wfc-tpl__dot${t.status === 'ACTIVE' ? ' is-active' : ''}`} />
+            <span style={{ minWidth: 0 }}>
+              <span className="wfc-tpl__name">{t.name}</span>
+              <span className="wfc-tpl__subject">{t.body}</span>
+            </span>
+          </button>
+        ))}
+        {(smsTemplates ?? []).length === 0 && (
+          <div className="wfc-tpl-empty">No SMS templates yet — create them in Admin → Communications.</div>
+        )}
+      </div>
+      <div className="wfc-inspector__hint">
+        SMS templates come from <b>Communications</b>. Hover the step on the canvas to preview the message.
+      </div>
+      <label>
+        Send when
+        <select className="select" value={selData.smsTrigger ?? SMS_TRIGGERS[0]} onChange={(e) => patchData({ smsTrigger: e.target.value })}>
+          {SMS_TRIGGERS.map((t) => (
+            <option key={t}>{t}</option>
+          ))}
+        </select>
+      </label>
+    </>
+  )
+
   return (
     <div className="wfc wfc--card">
       <div className="wfc-top">
@@ -1017,7 +1159,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                   <div key={k} className="wfc-legend__row">
                     <span className="wfc-legend__dot" style={{ background: SPEC[k].rail }} />
                     {SPEC[k].kicker}
-                    {k === 'condition' ? ' · branches yes / no' : k === 'policy' ? ' · auto-approve fast path' : k === 'email' ? ' · notification step' : k === 'exception' ? ' · terminal · e.g. condition NO' : ''}
+                    {k === 'condition' ? ' · branches yes / no' : k === 'policy' ? ' · auto-approve fast path' : k === 'email' ? ' · notification step' : k === 'sms' ? ' · candidate text message' : k === 'step' ? ' · candidate action (schedule, IDV…)' : k === 'exception' ? ' · terminal · e.g. condition NO' : ''}
                   </div>
                 ))}
               </div>
@@ -1077,6 +1219,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                 )}
 
                 {selected.type === 'email' && emailRules}
+                {selected.type === 'sms' && smsRules}
 
                 {selected.type === 'approval' && (
                   <>

@@ -20,7 +20,7 @@ function IconTrash({ className }: { className?: string }) {
   )
 }
 
-const TRIGGERS = ['Event', 'Offer', 'Requisition', 'Onboarding', 'Compliance']
+const TRIGGERS = ['Event', 'Offer', 'Requisition', 'Onboarding', 'Compliance', 'Candidate journey']
 const CONDITIONS = ['Always', 'In-person event', 'Virtual event', 'Short notice (under 14 days)', 'Flagged critical']
 
 export default function AdminWorkflows() {

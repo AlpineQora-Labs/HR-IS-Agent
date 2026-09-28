@@ -8,6 +8,7 @@ import type { EmailTemplate } from './emailTemplate'
 import '@/styles/tv-comms.css'
 import { EMAIL_CATEGORIES } from './emailTemplate'
 import { AgGridReact } from 'ag-grid-react'
+import SmsTemplates from './SmsTemplates'
 import type { ColDef, SizeColumnsToFitGridStrategy } from 'ag-grid-community'
 import { AllCommunityModule, ModuleRegistry } from 'ag-grid-community'
 
@@ -275,6 +276,7 @@ export default function EmailTemplateList() {
           </div>
         )}
       </div>
+      <SmsTemplates />
     </div>
   )
 }
