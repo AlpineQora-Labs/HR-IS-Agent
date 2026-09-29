@@ -20,7 +20,7 @@ import {
   useInternalNode,
   BaseEdge,
   EdgeLabelRenderer,
-  getBezierPath,
+  getSmoothStepPath,
   type Node,
   type Edge,
   type Connection,
@@ -190,8 +190,18 @@ function WfcEdge(props: EdgeProps) {
     const dx = tcx - scx
     const dy = tcy - scy
     const vertical = Math.abs(dy) >= Math.abs(dx)
+    const loop = !branch && dy < -40 // target sits above: a journey loop-back
 
-    if (!branch) {
+    if (loop) {
+      // Bow around the outer side on its own lane — never through the chain.
+      const right = scx >= tcx
+      sPos = right ? Position.Right : Position.Left
+      sX = right ? sb.x + sb.w : sb.x
+      sY = scy
+      tPos = right ? Position.Right : Position.Left
+      tX = right ? tb.x + tb.w : tb.x
+      tY = tcy
+    } else if (!branch) {
       if (vertical) {
         sPos = dy > 0 ? Position.Bottom : Position.Top
         sX = scx
@@ -202,25 +212,30 @@ function WfcEdge(props: EdgeProps) {
         sY = scy
       }
     }
-    if (vertical) {
-      tPos = dy > 0 ? Position.Top : Position.Bottom
-      tX = tcx
-      tY = dy > 0 ? tb.y : tb.y + tb.h
-    } else {
-      tPos = dx > 0 ? Position.Left : Position.Right
-      tX = dx > 0 ? tb.x : tb.x + tb.w
-      tY = tcy
+    if (!loop) {
+      if (vertical) {
+        tPos = dy > 0 ? Position.Top : Position.Bottom
+        tX = tcx
+        tY = dy > 0 ? tb.y : tb.y + tb.h
+      } else {
+        tPos = dx > 0 ? Position.Left : Position.Right
+        tX = dx > 0 ? tb.x : tb.x + tb.w
+        tY = tcy
+      }
     }
   }
 
-  const [path, labelX, labelY] = getBezierPath({
+  // Make-style routing: straight runs with rounded right-angle turns —
+  // straight when boxes align, a clean cornered route when they don't.
+  const [path, labelX, labelY] = getSmoothStepPath({
     sourceX: sX,
     sourceY: sY,
     sourcePosition: sPos,
     targetX: tX,
     targetY: tY,
     targetPosition: tPos,
-    curvature: 0.35,
+    borderRadius: 14,
+    offset: sPos === tPos ? 46 : 22,
   })
   return (
     <>
@@ -639,11 +654,21 @@ function autoLayout(nodes: Node[], edges: Edge[]): Node[] {
     const d = depth.get(n.id) ?? maxD + 1
     rows.set(d, [...(rows.get(d) ?? []), n])
   }
+  // Branch children align under their port: YES leaves bottom-left, NO
+  // bottom-right — seat them the same way so the lines never cross.
+  const branchRole = new Map<string, number>()
+  for (const e of edges) {
+    if (e.sourceHandle === 'yes') branchRole.set(e.target, -1)
+    else if (e.sourceHandle === 'no') branchRole.set(e.target, 1)
+  }
   const pos = new Map<string, { x: number; y: number }>()
   let widest = 1
-  for (const [d, row] of rows) {
+  for (const [d, row] of [...rows.entries()].sort((a, b) => a[0] - b[0])) {
     widest = Math.max(widest, row.length)
-    row.sort((a, b) => a.position.x - b.position.x)
+    row.sort(
+      (a, b) =>
+        (branchRole.get(a.id) ?? 0) - (branchRole.get(b.id) ?? 0) || a.position.x - b.position.x,
+    )
     row.forEach((n, i) => {
       pos.set(n.id, { x: CX + (i - (row.length - 1) / 2) * SP, y: TOP + d * ROW })
     })
