@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '@/api/client'
 
 /* Interviewer availability — per-person working window + load caps, recurring
@@ -331,9 +332,10 @@ function StageCard({
   )
 }
 
-function InterviewPlans({ users, refreshUsers }: { users: UserRow[]; refreshUsers: () => void }) {
+function InterviewPlans({ users, refreshUsers, openId }: { users: UserRow[]; refreshUsers: () => void; openId: string | null }) {
+  const navigate = useNavigate()
+  const setOpenId = (id: string | null) => navigate(id ? `/availability/${id}` : '/availability')
   const [reqs, setReqs] = useState<Requisition[]>([])
-  const [openId, setOpenId] = useState<string | null>(null)
   const [rounds, setRounds] = useState<PlanRound[]>([])
   const [health, setHealth] = useState<Record<string, RoundHealth>>({})
 
@@ -852,6 +854,7 @@ function InterviewerAvailability({
 }
 
 export default function AvailabilityPage() {
+  const { jobId } = useParams()
   const [users, setUsers] = useState<UserRow[]>([])
 
   const refreshUsers = useCallback(() => {
@@ -871,7 +874,7 @@ export default function AvailabilityPage() {
         </div>
       </div>
 
-      <InterviewPlans users={users} refreshUsers={refreshUsers} />
+      <InterviewPlans users={users} refreshUsers={refreshUsers} openId={jobId ?? null} />
     </div>
   )
 }
