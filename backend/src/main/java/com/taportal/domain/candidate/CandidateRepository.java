@@ -8,4 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface CandidateRepository extends JpaRepository<Candidate, UUID> {
 
     Optional<Candidate> findByEmailIgnoreCase(String email);
+
+    /** Everyone who gave this number. One person who applied twice is two rows. */
+    java.util.List<Candidate> findByPhoneE164(String phoneE164);
 }

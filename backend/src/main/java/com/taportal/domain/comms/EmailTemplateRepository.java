@@ -8,4 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface EmailTemplateRepository extends JpaRepository<EmailTemplate, UUID> {
 
     List<EmailTemplate> findByOrderByUpdatedAtDesc();
+
+    java.util.Optional<EmailTemplate> findByTemplateKey(String templateKey);
 }

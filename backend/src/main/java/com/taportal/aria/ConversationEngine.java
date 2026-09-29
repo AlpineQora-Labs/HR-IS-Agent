@@ -4,10 +4,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.taportal.domain.application.Application;
 import com.taportal.domain.application.ApplicationRepository;
+import com.taportal.domain.application.ApplicationService;
 import com.taportal.domain.application.ScreeningAnswer;
 import com.taportal.domain.application.ScreeningAnswerRepository;
-import com.taportal.domain.candidate.Candidate;
 import com.taportal.domain.candidate.CandidateRepository;
+import com.taportal.domain.events.BookingOrigin;
+import com.taportal.domain.events.InterviewBooked;
 import com.taportal.domain.interview.Interview;
 import com.taportal.domain.interview.InterviewRepository;
 import com.taportal.domain.interview.InterviewService;
@@ -17,11 +19,11 @@ import com.taportal.domain.job.Job;
 import com.taportal.domain.job.JobRepository;
 import com.taportal.domain.job.KnockoutQuestion;
 import com.taportal.domain.job.KnockoutQuestionRepository;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.stereotype.Service;
 
@@ -60,6 +62,8 @@ public class ConversationEngine {
     private final InterviewSlotRepository slots;
     private final InterviewService interviewService;
     private final InterviewRepository interviews;
+    private final ApplicationService applicationService;
+    private final ApplicationEventPublisher events;
 
     public ConversationEngine(
             AssistantBrain brain,
@@ -74,7 +78,9 @@ public class ConversationEngine {
             KnockoutQuestionRepository knockoutQuestions,
             InterviewSlotRepository slots,
             InterviewService interviewService,
-            InterviewRepository interviews) {
+            InterviewRepository interviews,
+            ApplicationService applicationService,
+            ApplicationEventPublisher events) {
         this.brain = brain;
         this.interpreter = interpreter;
         this.objectMapper = objectMapper;
@@ -88,6 +94,8 @@ public class ConversationEngine {
         this.slots = slots;
         this.interviewService = interviewService;
         this.interviews = interviews;
+        this.applicationService = applicationService;
+        this.events = events;
     }
 
     // ---- mutable engine state, serialized to conversation.context ----
@@ -308,10 +316,12 @@ public class ConversationEngine {
         interview.setScheduledAt(chosen.getStartsAt());
         interview.setDurationMin(30);
         interview.setStatus("SCHEDULED");
+        interview.setBookedAt(java.time.OffsetDateTime.now());
         interview = interviews.save(interview);
 
         app.setStage("INTERVIEW");
         applications.save(app);
+        events.publishEvent(new InterviewBooked(interview.getId(), interview.getScheduledAt(), BookingOrigin.CHAT));
 
         emitted.add(record(conversation, STEP_DONE, brain.confirmation(job, interview)));
         state.step = STEP_DONE;
@@ -323,7 +333,7 @@ public class ConversationEngine {
     private void bookProposedSlot(
             Conversation conversation, State state, Job job, InterviewSlot chosen, List<Message> emitted) {
         try {
-            Interview interview = interviewService.selectProposedSlot(chosen.getId());
+            Interview interview = interviewService.selectProposedSlot(chosen.getId(), BookingOrigin.CHAT);
             StringBuilder confirm = new StringBuilder(brain.confirmation(job, interview));
             if (interview.getInterviewers() != null && !interview.getInterviewers().isBlank()) {
                 confirm.append("\n\nYou'll be meeting: ").append(interview.getInterviewers()).append(".");
@@ -350,11 +360,8 @@ public class ConversationEngine {
     }
 
     private void decline(Conversation conversation, State state, Job job, List<Message> emitted) {
-        Application app = applications.findById(conversation.getApplicationId()).orElseThrow();
-        app.setStage("REJECTED");
-        app.setKnockoutPassed(false);
-        app.setRejectionReason("Did not meet knockout screening criteria");
-        applications.save(app);
+        applicationService.failedScreening(
+                conversation.getApplicationId(), "Did not meet knockout screening criteria");
 
         emitted.add(record(conversation, STEP_DECLINED, brain.decline(job)));
         state.step = STEP_DECLINED;
@@ -366,34 +373,23 @@ public class ConversationEngine {
     // Side effects
     // =====================================================================
 
+    /**
+     * The profile is complete: the application is made. What an application
+     * is, and what a phone number given here allows, is the service's to say —
+     * the question just asked named texting, so the number comes with
+     * agreement to be texted.
+     */
     private void createCandidateAndApplication(Conversation conversation, State state, Job job) {
-        Candidate candidate = new Candidate();
-        candidate.setName(state.name != null ? state.name : "Unknown");
-        candidate.setEmail(state.email != null ? state.email : "");
-        candidate.setPhone(state.phone);
-        candidate.setYearsExperience(BigDecimal.ZERO);
-        candidate.setSource("CAREER_SITE");
-        candidate.setPreferredLanguage(conversation.getLanguage());
-        candidate.setLifecycle("ACTIVE");
-        candidate = candidates.save(candidate);
-
-        Application app = new Application();
-        app.setCandidateId(candidate.getId());
-        app.setJobId(job.getId());
-        app.setStage("APPLIED");
-        app.setSource(conversation.getChannel());
-        app = applications.save(app);
-
-        conversation.setCandidateId(candidate.getId());
+        Application app = applicationService.receive(new ApplicationService.NewApplication(
+                job.getId(), state.name, state.email, state.phone, conversation.getLanguage(),
+                conversation.getChannel(), true, true));
+        conversation.setCandidateId(app.getCandidateId());
         conversation.setApplicationId(app.getId());
         conversations.save(conversation);
     }
 
     private void markScreened(Conversation conversation) {
-        Application app = applications.findById(conversation.getApplicationId()).orElseThrow();
-        app.setStage("SCREENED");
-        app.setKnockoutPassed(true);
-        applications.save(app);
+        applicationService.passedScreening(conversation.getApplicationId());
     }
 
     // =====================================================================

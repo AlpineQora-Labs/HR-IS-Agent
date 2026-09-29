@@ -22,15 +22,22 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class EmailTemplateController {
 
+    /**
+     * @param templateKey set when the template words a point of the candidate journey
+     * @param sentWhen    that point, in words; null otherwise
+     */
     public record TemplateDto(
             UUID templateId, String name, String description, String category,
             String subject, String fromName, String bodyHtml, String status,
-            boolean isDefault, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+            boolean isDefault, OffsetDateTime createdAt, OffsetDateTime updatedAt,
+            String templateKey, String sentWhen) {
 
         static TemplateDto of(EmailTemplate t) {
             return new TemplateDto(t.getId(), t.getName(), t.getDescription(), t.getCategory(),
                     t.getSubject(), t.getFromName(), t.getBodyHtml(), t.getStatus(),
-                    t.isDefaultTemplate(), t.getCreatedAt(), t.getUpdatedAt());
+                    t.isDefaultTemplate(), t.getCreatedAt(), t.getUpdatedAt(), t.getTemplateKey(),
+                    com.taportal.domain.journey.JourneyPoint.ofTemplateKey(t.getTemplateKey())
+                            .map(com.taportal.domain.journey.JourneyPoint::label).orElse(null));
         }
     }
 
@@ -40,9 +47,11 @@ public class EmailTemplateController {
     }
 
     private final EmailTemplateRepository templates;
+    private final com.taportal.domain.comms.TemplateRules rules;
 
-    public EmailTemplateController(EmailTemplateRepository templates) {
+    public EmailTemplateController(EmailTemplateRepository templates, com.taportal.domain.comms.TemplateRules rules) {
         this.templates = templates;
+        this.rules = rules;
     }
 
     @GetMapping("/v1/email-templates")
@@ -67,6 +76,8 @@ public class EmailTemplateController {
     @Transactional
     public TemplateDto update(@PathVariable UUID id, @RequestBody TemplateSave req) {
         EmailTemplate t = load(id);
+        rules.mayChange(t.getTemplateKey(), t.getName(), req.status() == null ? "DRAFT" : req.status(),
+                req.bodyHtml(), false);
         apply(t, req);
         return TemplateDto.of(templates.save(t));
     }
@@ -74,7 +85,9 @@ public class EmailTemplateController {
     @DeleteMapping("/v1/email-templates/{id}")
     @Transactional
     public void delete(@PathVariable UUID id) {
-        templates.delete(load(id));
+        EmailTemplate t = load(id);
+        rules.mayDelete(t.getTemplateKey(), t.getName());
+        templates.delete(t);
     }
 
     /** Clone with a "(Copy)" suffix, always starting as DRAFT. */

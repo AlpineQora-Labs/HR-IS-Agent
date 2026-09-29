@@ -14,6 +14,7 @@ public interface SchedulingPolicyRepository extends JpaRepository<SchedulingPoli
             p.setBufferMinutes(15);
             p.setRescheduleLimit(2);
             p.setRescheduleCutoffHours(12);
+            p.setProposalCount(3);
             return p;
         });
     }

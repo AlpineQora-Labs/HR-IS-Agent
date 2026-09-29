@@ -79,6 +79,11 @@ public class Interview {
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
 
+    /** When the current time was booked; null while nothing is booked. */
+    @Setter
+    @Column(name = "booked_at")
+    private OffsetDateTime bookedAt;
+
     /** Candidate-driven reschedules, counted against the policy limit. */
     @Setter
     @Column(name = "reschedule_count", nullable = false)

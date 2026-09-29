@@ -7,6 +7,10 @@ import com.taportal.api.InterviewDtos.SlotResponse;
 import com.taportal.domain.application.Application;
 import com.taportal.domain.application.ApplicationRepository;
 import com.taportal.domain.candidate.CandidateRepository;
+import com.taportal.domain.events.BookingOrigin;
+import com.taportal.domain.events.InterviewBooked;
+import com.taportal.domain.events.InterviewCanceled;
+import com.taportal.domain.events.InterviewTimesOffered;
 import com.taportal.domain.job.Job;
 import com.taportal.domain.job.JobRepository;
 import com.taportal.domain.recruiter.RecruiterUser;
@@ -16,8 +20,10 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,8 +32,6 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 @Transactional(readOnly = true)
 public class InterviewService {
-
-    private static final int PROPOSAL_COUNT = 4;
 
     private final InterviewRepository interviewRepository;
     private final InterviewSlotRepository slotRepository;
@@ -42,6 +46,8 @@ public class InterviewService {
     private final InterviewRoundMemberRepository roundMembers;
     private final SchedulingPolicyRepository policies;
     private final com.taportal.domain.notification.NotificationService notifications;
+    private final ApplicationEventPublisher events;
+    private final jakarta.persistence.EntityManager entityManager;
 
     public InterviewService(
             InterviewRepository interviewRepository,
@@ -56,7 +62,9 @@ public class InterviewService {
             InterviewRoundRepository rounds,
             InterviewRoundMemberRepository roundMembers,
             SchedulingPolicyRepository policies,
-            com.taportal.domain.notification.NotificationService notifications) {
+            com.taportal.domain.notification.NotificationService notifications,
+            ApplicationEventPublisher events,
+            jakarta.persistence.EntityManager entityManager) {
         this.interviewRepository = interviewRepository;
         this.slotRepository = slotRepository;
         this.calendarEvents = calendarEvents;
@@ -70,6 +78,8 @@ public class InterviewService {
         this.roundMembers = roundMembers;
         this.policies = policies;
         this.notifications = notifications;
+        this.events = events;
+        this.entityManager = entityManager;
     }
 
     public List<InterviewResponse> listByApplication(UUID applicationId) {
@@ -94,8 +104,11 @@ public class InterviewService {
         return autoPropose(interviewId);
     }
 
+    /** The times on offer that are still to come. */
     public List<SlotResponse> proposedSlots(UUID interviewId) {
+        OffsetDateTime now = OffsetDateTime.now();
         return slotRepository.findByInterviewIdAndStatusOrderByStartsAt(interviewId, "PROPOSED").stream()
+                .filter(s -> s.getStartsAt().isAfter(now))
                 .map(InterviewService::toSlotResponse)
                 .toList();
     }
@@ -122,7 +135,10 @@ public class InterviewService {
         slot.setBooked(true);
         slot.setStatus("SELECTED");
         slotRepository.save(slot);
-        return toResponse(interviewRepository.save(interview));
+        interview.setBookedAt(OffsetDateTime.now());
+        Interview saved = interviewRepository.save(interview);
+        events.publishEvent(new InterviewBooked(saved.getId(), saved.getScheduledAt(), BookingOrigin.TEAM));
+        return toResponse(saved);
     }
 
     // =====================================================================
@@ -137,6 +153,10 @@ public class InterviewService {
      */
     @Transactional
     public Interview beginSelfSchedule(UUID applicationId, String type, int durationMin) {
+        Interview booked = bookedAhead(applicationId).orElse(null);
+        if (booked != null) {
+            return booked; // already booked: a second interview would be a second invitation
+        }
         Interview interview = interviewRepository.findByApplicationId(applicationId).stream()
                 .filter(i -> "REQUESTED".equals(i.getStatus()) || "SLOTS_PROPOSED".equals(i.getStatus()))
                 .findFirst()
@@ -161,13 +181,21 @@ public class InterviewService {
     public Interview beginRound(UUID applicationId, UUID roundId) {
         InterviewRound round = rounds.findById(roundId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Round not found"));
+        Interview booked = bookedAhead(applicationId).orElse(null);
+        if (booked != null) {
+            return booked;
+        }
         Interview interview = interviewRepository.findByApplicationId(applicationId).stream()
                 .filter(i -> "REQUESTED".equals(i.getStatus()) || "SLOTS_PROPOSED".equals(i.getStatus()))
                 .findFirst()
                 .orElseGet(() -> {
+                    // Everything the row must have is set before it is saved: what is
+                    // saved is what is inserted, and a later change is a second statement.
                     Interview i = new Interview();
                     i.setApplicationId(applicationId);
                     i.setStatus("REQUESTED");
+                    i.setType(round.getName());
+                    i.setDurationMin(round.getDurationMin());
                     return interviewRepository.save(i);
                 });
         interview.setType(round.getName());
@@ -192,7 +220,74 @@ public class InterviewService {
      */
     @Transactional
     public List<SlotResponse> autoPropose(UUID interviewId, List<UUID> panel) {
+        return propose(interviewId, panel, null, List.of());
+    }
+
+    /**
+     * Offer times later than the ones on offer now — for a candidate none of
+     * them suit. The times on offer are retracted; they are not offered again.
+     */
+    @Transactional
+    public List<SlotResponse> proposeLater(UUID interviewId) {
         Interview interview = load(interviewId);
+        if (isBooked(interview)) {
+            return List.of();
+        }
+        List<InterviewSlot> current = slotRepository.findByInterviewIdAndStatusOrderByStartsAt(interviewId, "PROPOSED");
+        OffsetDateTime after = current.isEmpty() ? null : current.get(current.size() - 1).getStartsAt();
+        Application app = applications.findById(interview.getApplicationId()).orElseThrow();
+        List<RecruiterUser> team = participantsFor(interview, app);
+        List<OffsetDateTime[]> windows = availability.openSlots(
+                team.stream().map(RecruiterUser::getId).toList(), interview.getDurationMin(),
+                policies.current().getProposalCount(), after,
+                current.stream().map(InterviewSlot::getStartsAt).toList(), null);
+        if (windows.isEmpty()) {
+            return List.of(); // nothing later: what is on offer stays on offer
+        }
+        return offer(interview, app, team, windows);
+    }
+
+    /** The team asks for times to be offered; the candidate is told (see {@link InterviewTimesOffered}). */
+    @Transactional
+    public List<SlotResponse> proposeByTeam(UUID interviewId, List<UUID> panel) {
+        List<SlotResponse> slots = autoPropose(interviewId, panel);
+        events.publishEvent(new InterviewTimesOffered(interviewId, InterviewTimesOffered.Why.PROPOSED));
+        return slots;
+    }
+
+    /** The team starts scheduling for an application; the candidate is told the times. */
+    @Transactional
+    public Interview beginByTeam(UUID applicationId, String type, int durationMin, UUID roundId) {
+        boolean alreadyBooked = bookedAhead(applicationId).isPresent();
+        Interview interview = roundId != null
+                ? beginRound(applicationId, roundId)
+                : beginSelfSchedule(applicationId, type, durationMin);
+        if (!alreadyBooked) {
+            events.publishEvent(new InterviewTimesOffered(interview.getId(), InterviewTimesOffered.Why.PROPOSED));
+        }
+        return interview;
+    }
+
+    /** True when the interview has a time that is still to come. */
+    public static boolean isBooked(Interview interview) {
+        return "SCHEDULED".equals(interview.getStatus())
+                && interview.getScheduledAt() != null
+                && interview.getScheduledAt().isAfter(OffsetDateTime.now());
+    }
+
+    /** The application's interview that is booked for a time still to come, if it has one. */
+    public Optional<Interview> bookedAhead(UUID applicationId) {
+        return interviewRepository.findByApplicationId(applicationId).stream()
+                .filter(InterviewService::isBooked)
+                .min(java.util.Comparator.comparing(Interview::getScheduledAt));
+    }
+
+    private List<SlotResponse> propose(UUID interviewId, List<UUID> panel, OffsetDateTime after, List<OffsetDateTime> avoid) {
+        Interview interview = load(interviewId);
+        if (isBooked(interview)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This interview is booked — reschedule it to offer other times.");
+        }
         Application app = applications.findById(interview.getApplicationId()).orElseThrow();
         if (panel != null && !panel.isEmpty()) {
             panelists.deleteByInterviewId(interviewId);
@@ -201,12 +296,16 @@ public class InterviewService {
             }
         }
         List<RecruiterUser> team = participantsFor(interview, app);
-
-        // Retract any previous offer before making a new one.
-        expireSlots(interviewId);
-
         List<UUID> ids = team.stream().map(RecruiterUser::getId).toList();
-        List<OffsetDateTime[]> windows = availability.openSlots(ids, interview.getDurationMin(), PROPOSAL_COUNT);
+        List<OffsetDateTime[]> windows = availability.openSlots(
+                ids, interview.getDurationMin(), policies.current().getProposalCount(), after, avoid, null);
+        return offer(interview, app, team, windows);
+    }
+
+    /** Put these times on offer, retracting whatever was on offer before. */
+    private List<SlotResponse> offer(Interview interview, Application app, List<RecruiterUser> team, List<OffsetDateTime[]> windows) {
+        UUID interviewId = interview.getId();
+        expireSlots(interviewId);
 
         List<InterviewSlot> proposed = new ArrayList<>();
         for (OffsetDateTime[] w : windows) {
@@ -253,15 +352,42 @@ public class InterviewService {
      */
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public Interview selectProposedSlot(UUID slotId) {
+        return selectProposedSlot(slotId, BookingOrigin.WEB_PAGE);
+    }
+
+    /**
+     * Book a proposed time. One booking runs at a time for an interview and for
+     * each of its interviewers: the interview and the panel are held first, and
+     * only then is the time checked — so two people picking the same hour for
+     * the same interviewer cannot both be told it is theirs.
+     */
+    @Transactional(noRollbackFor = ResponseStatusException.class)
+    public Interview selectProposedSlot(UUID slotId, BookingOrigin origin) {
         InterviewSlot slot = slotRepository.findById(slotId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Slot not found"));
+        if (slot.getInterviewId() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This time is no longer available");
+        }
+        Interview interview = interviewRepository.lockById(slot.getInterviewId())
+                .orElseThrow(() -> new EntityNotFoundException("Interview not found: " + slot.getInterviewId()));
+        Application app = applications.findById(interview.getApplicationId()).orElseThrow();
+        List<UUID> ids = participantsFor(interview, app).stream().map(RecruiterUser::getId).toList();
+        List<RecruiterUser> team = ids.isEmpty() ? List.of() : recruiterUsers.lockAllByIdIn(ids);
+        // What was read before the wait may have changed while waiting.
+        entityManager.refresh(slot);
+        entityManager.refresh(interview);
+
         if (!"PROPOSED".equals(slot.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This time is no longer available");
         }
-        Interview interview = load(slot.getInterviewId());
-        Application app = applications.findById(interview.getApplicationId()).orElseThrow();
-        List<RecruiterUser> team = participantsFor(interview, app);
-        List<UUID> ids = team.stream().map(RecruiterUser::getId).toList();
+        if (isBooked(interview)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This interview is already booked");
+        }
+        if (!slot.getStartsAt().isAfter(OffsetDateTime.now())) {
+            slot.setStatus("EXPIRED");
+            slotRepository.save(slot);
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This time has passed");
+        }
 
         if (!ids.isEmpty() && availability.hasConflict(ids, slot.getStartsAt(), slot.getEndsAt(), interview.getId())) {
             slot.setStatus("EXPIRED");
@@ -283,7 +409,9 @@ public class InterviewService {
         interview.setScheduledAt(slot.getStartsAt());
         interview.setStatus("SCHEDULED");
         interview.setMeetingLink("https://teams.microsoft.com/l/meetup-join/19%3Ameeting_" + UUID.randomUUID());
+        interview.setBookedAt(OffsetDateTime.now());
         interviewRepository.save(interview);
+        events.publishEvent(new InterviewBooked(interview.getId(), interview.getScheduledAt(), origin));
 
         // Invites double as availability blockers for every other candidate.
         String candidateName = candidates.findById(app.getCandidateId()).map(c -> c.getName()).orElse("Candidate");
@@ -314,25 +442,95 @@ public class InterviewService {
      */
     @Transactional
     public List<SlotResponse> candidateReschedule(UUID interviewId) {
-        Interview interview = load(interviewId);
-        SchedulingPolicy policy = policies.current();
-        if (interview.getRescheduleCount() >= policy.getRescheduleLimit()) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    "Reschedule limit reached — a recruiter will reach out to help.");
+        RescheduleAttempt attempt = tryCandidateReschedule(interviewId);
+        return switch (attempt.result()) {
+            case MOVED -> attempt.slots();
+            case REFUSED -> throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, attempt.refusal().message());
+            case NO_OTHER_TIMES -> throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "No other times are open right now — your interview stays as booked.");
+            // Nothing booked to give up: offering times again costs nothing.
+            case NOT_BOOKED -> proposedSlotsOrPropose(interviewId);
+        };
+    }
+
+    public enum RescheduleResult { MOVED, NO_OTHER_TIMES, REFUSED, NOT_BOOKED }
+
+    /**
+     * @param refusal set when the result is {@link RescheduleResult#REFUSED}
+     * @param was     the time that was booked
+     * @param slots   the times now on offer, when the result is {@link RescheduleResult#MOVED}
+     */
+    public record RescheduleAttempt(
+            RescheduleResult result, RescheduleRefusal refusal, OffsetDateTime was, List<SlotResponse> slots) {
+    }
+
+    /**
+     * A candidate asks to move a booked interview. The policy is asked first;
+     * then other times are looked for while the booking still stands. Only
+     * when there is something to move to is the booking given up and the
+     * change counted — a candidate is never left with no interview and one
+     * change fewer. Never throws for a reason the candidate should be told.
+     */
+    @Transactional
+    public RescheduleAttempt tryCandidateReschedule(UUID interviewId) {
+        Interview interview = interviewRepository.lockById(interviewId)
+                .orElseThrow(() -> new EntityNotFoundException("Interview not found: " + interviewId));
+        entityManager.refresh(interview);
+        OffsetDateTime was = interview.getScheduledAt();
+        if (!isBooked(interview)) {
+            return new RescheduleAttempt(RescheduleResult.NOT_BOOKED, null, was, List.of());
         }
-        if (interview.getScheduledAt() != null && interview.getScheduledAt()
-                .isBefore(OffsetDateTime.now().plusHours(policy.getRescheduleCutoffHours()))) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    "The interview is less than " + policy.getRescheduleCutoffHours()
-                            + " hours away — please contact your recruiter to change it.");
+        RescheduleRefusal refusal = rescheduleRefusal(interviewId).orElse(null);
+        if (refusal != null) {
+            return new RescheduleAttempt(RescheduleResult.REFUSED, refusal, was, List.of());
+        }
+        Application app = applications.findById(interview.getApplicationId()).orElseThrow();
+        List<RecruiterUser> team = participantsFor(interview, app);
+        List<OffsetDateTime[]> windows = availability.openSlots(
+                team.stream().map(RecruiterUser::getId).toList(), interview.getDurationMin(),
+                policies.current().getProposalCount(), null, List.of(was), interviewId);
+        if (windows.isEmpty()) {
+            return new RescheduleAttempt(RescheduleResult.NO_OTHER_TIMES, null, was, List.of());
         }
         interview.setRescheduleCount(interview.getRescheduleCount() + 1);
-        interviewRepository.save(interview);
-        List<SlotResponse> slots = reschedule(interviewId);
+        giveUpTime(interview);
+        List<SlotResponse> slots = offer(interview, app, team, windows);
         notifications.notifyRole("RECRUITER", "RESCHEDULE",
                 "Candidate rescheduled: " + candidateName(interview),
                 typeLabel(interview) + " — new times proposed", "/interviews");
-        return slots;
+        return new RescheduleAttempt(RescheduleResult.MOVED, null, was, slots);
+    }
+
+    /** Why a candidate may not move an interview. */
+    public enum RescheduleRefusalReason { LIMIT_REACHED, TOO_CLOSE }
+
+    /**
+     * @param message what the self-schedule page shows
+     * @param hours   the cutoff, for {@link RescheduleRefusalReason#TOO_CLOSE}
+     */
+    public record RescheduleRefusal(RescheduleRefusalReason reason, String message, int hours) {
+    }
+
+    /**
+     * The policy's answer to "may this candidate move this interview?", without
+     * changing anything — so a caller can tell the candidate why not, instead
+     * of catching a refusal that has already spoiled its transaction.
+     */
+    public Optional<RescheduleRefusal> rescheduleRefusal(UUID interviewId) {
+        Interview interview = load(interviewId);
+        SchedulingPolicy policy = policies.current();
+        if (interview.getRescheduleCount() >= policy.getRescheduleLimit()) {
+            return Optional.of(new RescheduleRefusal(RescheduleRefusalReason.LIMIT_REACHED,
+                    "Reschedule limit reached — a recruiter will reach out to help.", 0));
+        }
+        if (interview.getScheduledAt() != null && interview.getScheduledAt()
+                .isBefore(OffsetDateTime.now().plusHours(policy.getRescheduleCutoffHours()))) {
+            return Optional.of(new RescheduleRefusal(RescheduleRefusalReason.TOO_CLOSE,
+                    "The interview is less than " + policy.getRescheduleCutoffHours()
+                            + " hours away — please contact your recruiter to change it.",
+                    policy.getRescheduleCutoffHours()));
+        }
+        return Optional.empty();
     }
 
     /**
@@ -362,13 +560,65 @@ public class InterviewService {
     /** Free the booked time and immediately re-offer fresh calendar options. */
     @Transactional
     public List<SlotResponse> reschedule(UUID interviewId) {
+        return release(interviewId);
+    }
+
+    /**
+     * The hiring team moves an interview: the time is freed, fresh options are
+     * offered, and the candidate is told (see {@link InterviewReleasedByTeam}).
+     */
+    @Transactional
+    public List<SlotResponse> rescheduleByTeam(UUID interviewId) {
+        List<SlotResponse> slots = release(interviewId);
+        events.publishEvent(new InterviewTimesOffered(interviewId, InterviewTimesOffered.Why.MOVED));
+        return slots;
+    }
+
+    /** The hiring team cancels an interview; a candidate who was booked is told. */
+    @Transactional
+    public InterviewResponse cancelByTeam(UUID interviewId) {
         Interview interview = load(interviewId);
-        calendarEvents.deleteByInterviewId(interviewId);
+        OffsetDateTime was = isBooked(interview) ? interview.getScheduledAt() : null;
+        InterviewResponse response = transition(interviewId, "CANCELED");
+        if (was != null) {
+            events.publishEvent(new InterviewCanceled(interviewId, interview.getApplicationId(), was));
+        }
+        return response;
+    }
+
+    /**
+     * An application was closed: whatever interview it was waiting for or
+     * booked for is cancelled with it, so nobody is reminded of, or can book,
+     * an interview for an application that is no longer running.
+     */
+    @Transactional
+    public void cancelForApplication(UUID applicationId) {
+        for (Interview interview : interviewRepository.findByApplicationId(applicationId)) {
+            if (List.of("REQUESTED", "SLOTS_PROPOSED", "SCHEDULED").contains(interview.getStatus())
+                    && (interview.getScheduledAt() == null || interview.getScheduledAt().isAfter(OffsetDateTime.now()))) {
+                cancelByTeam(interview.getId());
+            }
+        }
+    }
+
+    /** Free the booked time and offer others — never the time just given up. */
+    private List<SlotResponse> release(UUID interviewId) {
+        Interview interview = load(interviewId);
+        OffsetDateTime was = interview.getScheduledAt();
+        giveUpTime(interview);
+        return propose(interviewId, null, null, was == null ? List.of() : List.of(was));
+    }
+
+    private void giveUpTime(Interview interview) {
+        calendarEvents.deleteByInterviewId(interview.getId());
         interview.setSlotId(null);
         interview.setScheduledAt(null);
         interview.setMeetingLink(null);
+        interview.setBookedAt(null);
+        if ("SCHEDULED".equals(interview.getStatus())) {
+            interview.setStatus("REQUESTED");
+        }
         interviewRepository.save(interview);
-        return autoPropose(interviewId);
     }
 
     /** COMPLETED | CANCELED | NO_SHOW. Cancel/no-show free the calendars immediately. */

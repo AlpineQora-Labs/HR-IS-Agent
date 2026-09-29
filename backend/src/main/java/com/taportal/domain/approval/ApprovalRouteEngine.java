@@ -51,6 +51,15 @@ public final class ApprovalRouteEngine {
             SHORT_NOTICE,
             "Flagged critical");
 
+    /**
+     * Rules a candidate journey is drawn with. They are events in a candidate's
+     * journey, not facts about a request: a journey is not routed, so they are
+     * never evaluated here — but in a journey's drawing they are not unknown.
+     */
+    public static final Set<String> JOURNEY_RULES = Set.of(
+            "Candidate asks for status",
+            "Candidate asks to reschedule");
+
     /** Stored graphs name their start step this; the walk has always begun here. */
     private static final String LEGACY_START = "trigger";
 
@@ -280,6 +289,11 @@ public final class ApprovalRouteEngine {
      * because it can't affect where a request goes.
      */
     public static List<Issue> validate(JsonNode graph, JsonNode levels) {
+        return validate(graph, levels, false);
+    }
+
+    /** @param journey true for the drawing of a candidate journey, where the journey's rules are known */
+    public static List<Issue> validate(JsonNode graph, JsonNode levels, boolean journey) {
         List<Issue> issues = new ArrayList<>();
         if (!hasNodes(graph)) {
             int i = 0;
@@ -324,7 +338,7 @@ public final class ApprovalRouteEngine {
 
             List<Issue> own = new ArrayList<>();
             if ("condition".equals(type)) {
-                validateRule(n, out.getOrDefault(id, List.of()), own);
+                validateRule(n, out.getOrDefault(id, List.of()), own, journey);
             } else if ("approval".equals(type)) {
                 if (text(n, "approverRole").isBlank()) {
                     own.add(Issue.blocking("APPROVER_NO_ROLE", id,
@@ -443,14 +457,14 @@ public final class ApprovalRouteEngine {
         return n == null ? "a step" : named(n);
     }
 
-    private static void validateRule(JsonNode n, List<JsonNode> outgoing, List<Issue> issues) {
+    private static void validateRule(JsonNode n, List<JsonNode> outgoing, List<Issue> issues, boolean journey) {
         String id = n.path("id").asText();
         String rule = ruleText(n);
         String named = named(n);
         String Named = capital(named);
         if (rule.isBlank()) {
             issues.add(Issue.blocking("RULE_EMPTY", id, NOTHING_TO_CHECK));
-        } else if (!KNOWN_RULES.contains(rule)) {
+        } else if (!KNOWN_RULES.contains(rule) && !(journey && JOURNEY_RULES.contains(rule))) {
             issues.add(Issue.blocking("RULE_UNKNOWN", id, Named + " isn't one the system can check."));
         }
         int yes = 0;

@@ -42,6 +42,14 @@ public class SmsTemplate {
     @Column(nullable = false, length = 20)
     private String status;
 
+    /**
+     * Set on the templates that word a point of the candidate journey, for
+     * example {@code journey.interview_invite}. Such a template can be edited
+     * but not deleted.
+     */
+    @Column(name = "template_key", length = 80)
+    private String templateKey;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;

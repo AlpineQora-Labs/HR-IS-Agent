@@ -91,7 +91,7 @@ public class SelfScheduleController {
     /** Book a proposed slot — race-protected; a taken slot returns 409. */
     @PostMapping("/{interviewId}/select")
     public SelfScheduleInfo select(@PathVariable UUID interviewId, @RequestBody SelectRequest request) {
-        interviewService.selectProposedSlot(request.slotId());
+        interviewService.selectProposedSlot(request.slotId(), com.taportal.domain.events.BookingOrigin.WEB_PAGE);
         return info(interviewId);
     }
 

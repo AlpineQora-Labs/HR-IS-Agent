@@ -59,6 +59,11 @@ public class EmailTemplate {
     @Column(name = "is_default", nullable = false)
     private boolean defaultTemplate;
 
+    /** Set on the templates that word a point of the candidate journey; see SmsTemplate. */
+    @Setter
+    @Column(name = "template_key", length = 80)
+    private String templateKey;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;

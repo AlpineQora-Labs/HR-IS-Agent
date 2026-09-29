@@ -24,6 +24,15 @@ server:
 app:
   cors:
     allowed-origin: ${FRONTEND_ORIGIN:http://localhost:5177}
+  # Where candidate-facing links point, and the name messages are sent under.
+  public-base-url: ${PUBLIC_BASE_URL:http://localhost:5177}
+  company-name: ${COMPANY_NAME:Bank of America Careers}
+  messaging:
+    # 'simulated' records every text and email and delivers none. A real
+    # provider is a class implementing SmsGateway / EmailGateway; its
+    # credentials come from the environment, set by the owner of the account.
+    sms-provider: ${SMS_PROVIDER:simulated}
+    email-provider: ${EMAIL_PROVIDER:simulated}
   aria:
     # LLM-powered Aria activates only when enabled AND ANTHROPIC_API_KEY is set;
     # otherwise the conversation runs fully offline on the scripted brain.

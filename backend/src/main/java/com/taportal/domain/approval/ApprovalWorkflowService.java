@@ -6,6 +6,7 @@ import com.taportal.api.ApprovalDtos.CheckIssue;
 import com.taportal.api.ApprovalDtos.SimulateRequest;
 import com.taportal.api.ApprovalDtos.SimulateResponse;
 import com.taportal.api.ApprovalDtos.WorkflowDto;
+import com.taportal.domain.journey.JourneyPlan;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -154,10 +155,18 @@ public class ApprovalWorkflowService {
      */
     public List<CheckIssue> check(JsonNode graph, JsonNode levels, String trigger) {
         boolean held = routed(trigger);
-        return ApprovalRouteEngine.validate(graph, levels).stream()
+        boolean journey = trigger != null && JourneyPlan.TRIGGER.equalsIgnoreCase(trigger.trim());
+        List<CheckIssue> found = new ArrayList<>(ApprovalRouteEngine.validate(graph, levels, journey).stream()
                 .filter(i -> held || !ApprovalRouteEngine.LOOP_BACK.equals(i.code()))
                 .map(i -> new CheckIssue(i.code(), held && i.blocks(), i.nodeId(), i.message()))
-                .toList();
+                .toList());
+        if (journey) {
+            // What a journey's message steps will not do as drawn. The journey itself says; this only passes it on.
+            for (JourneyPlan.Advice a : JourneyPlan.advise(graph)) {
+                found.add(new CheckIssue(a.code(), false, a.nodeId(), a.message()));
+            }
+        }
+        return found;
     }
 
     /** Matched the way live routing finds a workflow: by name, whatever the case. */

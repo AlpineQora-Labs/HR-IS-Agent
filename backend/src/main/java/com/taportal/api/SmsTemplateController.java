@@ -2,6 +2,8 @@ package com.taportal.api;
 
 import com.taportal.domain.comms.SmsTemplate;
 import com.taportal.domain.comms.SmsTemplateRepository;
+import com.taportal.domain.comms.TemplateRules;
+import com.taportal.domain.journey.JourneyPoint;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -20,15 +22,22 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/v1/sms-templates")
 public class SmsTemplateController {
 
+    /**
+     * @param templateKey set when the template words a point of the candidate journey
+     * @param sentWhen    that point, in words; null otherwise
+     */
     public record SmsDto(UUID id, String name, String category, String body, String status,
-            java.time.OffsetDateTime createdAt, java.time.OffsetDateTime updatedAt) {}
+            java.time.OffsetDateTime createdAt, java.time.OffsetDateTime updatedAt,
+            String templateKey, String sentWhen) {}
 
     public record SmsSave(String name, String category, String body, String status) {}
 
     private final SmsTemplateRepository repository;
+    private final TemplateRules rules;
 
-    public SmsTemplateController(SmsTemplateRepository repository) {
+    public SmsTemplateController(SmsTemplateRepository repository, TemplateRules rules) {
         this.repository = repository;
+        this.rules = rules;
     }
 
     @GetMapping
@@ -51,13 +60,16 @@ public class SmsTemplateController {
     @PutMapping("/{id}")
     public SmsDto update(@PathVariable UUID id, @RequestBody SmsSave req) {
         SmsTemplate t = load(id);
+        rules.mayChange(t.getTemplateKey(), t.getName(), req.status() == null ? "ACTIVE" : req.status(), req.body(), true);
         apply(t, req);
         return toDto(repository.save(t));
     }
 
     @DeleteMapping("/{id}")
     public void delete(@PathVariable UUID id) {
-        repository.deleteById(id);
+        SmsTemplate t = load(id);
+        rules.mayDelete(t.getTemplateKey(), t.getName());
+        repository.delete(t);
     }
 
     private SmsTemplate load(UUID id) {
@@ -80,6 +92,7 @@ public class SmsTemplateController {
 
     private static SmsDto toDto(SmsTemplate t) {
         return new SmsDto(t.getId(), t.getName(), t.getCategory(), t.getBody(), t.getStatus(),
-                t.getCreatedAt(), t.getUpdatedAt());
+                t.getCreatedAt(), t.getUpdatedAt(), t.getTemplateKey(),
+                JourneyPoint.ofTemplateKey(t.getTemplateKey()).map(JourneyPoint::label).orElse(null));
     }
 }

@@ -57,12 +57,11 @@ public class InterviewController {
     /** Start (or reuse) candidate self-scheduling; the returned id backs /schedule/:id. */
     @PostMapping("/v1/interviews/self-schedule")
     public InterviewDtos.InterviewResponse beginSelfSchedule(@RequestBody BeginSelfScheduleRequest request) {
-        var interview = request.roundId() != null
-                ? interviewService.beginRound(request.applicationId(), request.roundId())
-                : interviewService.beginSelfSchedule(
-                        request.applicationId(),
-                        request.type() == null ? "RECRUITER_SCREEN" : request.type(),
-                        request.durationMin() == null ? 45 : request.durationMin());
+        var interview = interviewService.beginByTeam(
+                request.applicationId(),
+                request.type() == null ? "RECRUITER_SCREEN" : request.type(),
+                request.durationMin() == null ? 45 : request.durationMin(),
+                request.roundId());
         return InterviewService.toResponse(interview);
     }
 
@@ -70,7 +69,7 @@ public class InterviewController {
     public List<SlotResponse> propose(
             @PathVariable UUID id,
             @RequestBody(required = false) SchedulingDtos.ProposeRequest request) {
-        return interviewService.autoPropose(id, request == null ? null : request.interviewerUserIds());
+        return interviewService.proposeByTeam(id, request == null ? null : request.interviewerUserIds());
     }
 
     /** The options currently awaiting the candidate. */
@@ -82,18 +81,21 @@ public class InterviewController {
     /** Candidate (or Aria on their behalf) books a proposed time. 409 if just taken. */
     @PostMapping("/v1/interview-slots/{id}/select")
     public InterviewResponse select(@PathVariable UUID id) {
-        return InterviewService.toResponse(interviewService.selectProposedSlot(id));
+        return InterviewService.toResponse(
+                interviewService.selectProposedSlot(id, com.taportal.domain.events.BookingOrigin.TEAM));
     }
 
     /** Free the time and immediately re-offer fresh calendar options. */
     @PostMapping("/v1/interviews/{id}/reschedule")
     public List<SlotResponse> reschedule(@PathVariable UUID id) {
-        return interviewService.reschedule(id);
+        return interviewService.rescheduleByTeam(id);
     }
 
     /** COMPLETED | CANCELED | NO_SHOW (cancel/no-show free the calendars). */
     @PostMapping("/v1/interviews/{id}/transition")
     public InterviewResponse transition(@PathVariable UUID id, @Valid @RequestBody InterviewDtos.TransitionRequest request) {
-        return interviewService.transition(id, request.status());
+        return "CANCELED".equals(request.status())
+                ? interviewService.cancelByTeam(id)
+                : interviewService.transition(id, request.status());
     }
 }

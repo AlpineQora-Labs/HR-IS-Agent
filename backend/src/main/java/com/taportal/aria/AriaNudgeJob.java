@@ -19,14 +19,18 @@ import org.springframework.transaction.annotation.Transactional;
  * Aria's proactive scheduling nudges (ported from the VMS engine):
  *
  * <ul>
- *   <li><b>24h reminders</b> — interviews starting within a day get a reminder in the
- *       candidate's thread with time, interviewers and the Teams link.
+ *   <li><b>Unbooked for 48 hours</b> — a nudge in the candidate's thread, and an alert
+ *       to recruiting.
  *   <li><b>No-show recovery</b> — a missed interview is never a dead end: Aria frees the
  *       time, proposes fresh options and reopens the conversation so the candidate can
  *       simply pick a new slot.
  * </ul>
  *
- * Each nudge is deduped by a message intent key ({@code remind:<id>} / {@code noshow:<id>}).
+ * Each nudge is deduped by a message intent key ({@code sla:<id>} / {@code noshow:<id>}).
+ *
+ * <p>Interview reminders are not sent from here. They belong to the candidate
+ * journey (JourneyReminderJob), which sends them by text and email, once for
+ * each time an interview is booked for.
  */
 @Component
 public class AriaNudgeJob {
@@ -58,33 +62,8 @@ public class AriaNudgeJob {
     @Scheduled(fixedDelayString = "${app.aria.nudge-sweep-ms:60000}")
     @Transactional
     public void sweep() {
-        remindUpcoming();
-        remindFinalHour();
         recoverNoShows();
         nudgeUnbooked();
-    }
-
-    private void remindUpcoming() {
-        OffsetDateTime now = OffsetDateTime.now();
-        for (Interview iv : interviews.findByStatusAndScheduledAtBetween("SCHEDULED", now, now.plusHours(24))) {
-            String key = "remind:" + iv.getId();
-            appendOnce(iv, key, reminderText(iv));
-        }
-    }
-
-    /** 1-hour reminder with the join link — the last-mile nudge. */
-    private void remindFinalHour() {
-        OffsetDateTime now = OffsetDateTime.now();
-        for (Interview iv : interviews.findByStatusAndScheduledAtBetween("SCHEDULED", now, now.plusHours(1))) {
-            String key = "remind1h:" + iv.getId();
-            StringBuilder sb = new StringBuilder("Starting soon — your interview is at ")
-                    .append(FMT.format(iv.getScheduledAt())).append(".");
-            if (iv.getMeetingLink() != null) {
-                sb.append("\nJoin here: ").append(iv.getMeetingLink());
-            }
-            sb.append("\nRunning late? Just reply here and we'll let the team know.");
-            appendOnce(iv, key, sb.toString());
-        }
     }
 
     /**
@@ -137,19 +116,6 @@ public class AriaNudgeJob {
             append(thread, key, body.toString());
             log.info("Aria no-show recovery sent for interview {}", iv.getId());
         }
-    }
-
-    private String reminderText(Interview iv) {
-        StringBuilder sb = new StringBuilder("Friendly reminder! 📅 Your interview is coming up on ")
-                .append(FMT.format(iv.getScheduledAt())).append(".");
-        if (iv.getInterviewers() != null && !iv.getInterviewers().isBlank()) {
-            sb.append(" You'll be meeting: ").append(iv.getInterviewers()).append(".");
-        }
-        if (iv.getMeetingLink() != null) {
-            sb.append("\nJoin on Teams: ").append(iv.getMeetingLink());
-        }
-        sb.append("\nNeed to move it? Just reply \"reschedule\".");
-        return sb.toString();
     }
 
     private void appendOnce(Interview iv, String intentKey, String body) {

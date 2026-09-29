@@ -38,7 +38,8 @@ public class ScriptedBrain implements AssistantBrain {
             case ConversationEngine.STEP_COLLECT_EMAIL:
                 return "Thanks! What's the best email to reach you at?";
             case ConversationEngine.STEP_COLLECT_PHONE:
-                return "Great. And a phone number where we can text or call you?";
+                return "Great. What mobile number can we text updates to? "
+                        + "Message and data rates may apply, and you can reply STOP at any time to opt out.";
             case ConversationEngine.STEP_KNOCKOUT:
                 return question != null ? question.getPrompt() : "Just a couple of quick questions.";
             default:

@@ -5,6 +5,9 @@ import com.taportal.api.ApplicationDtos.PipelineColumn;
 import com.taportal.api.ApplicationDtos.UpdateApplicationRequest;
 import com.taportal.domain.candidate.Candidate;
 import com.taportal.domain.candidate.CandidateRepository;
+import com.taportal.domain.events.ApplicationReceived;
+import com.taportal.domain.events.ApplicationStageChanged;
+import com.taportal.domain.interview.InterviewService;
 import com.taportal.domain.job.Job;
 import com.taportal.domain.job.JobRepository;
 import com.taportal.domain.job.JobService;
@@ -12,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,14 +28,88 @@ public class ApplicationService {
     private final ApplicationRepository applicationRepository;
     private final CandidateRepository candidateRepository;
     private final JobRepository jobRepository;
+    private final InterviewService interviewService;
+    private final ApplicationEventPublisher events;
 
     public ApplicationService(
             ApplicationRepository applicationRepository,
             CandidateRepository candidateRepository,
-            JobRepository jobRepository) {
+            JobRepository jobRepository,
+            InterviewService interviewService,
+            ApplicationEventPublisher events) {
         this.applicationRepository = applicationRepository;
         this.candidateRepository = candidateRepository;
         this.jobRepository = jobRepository;
+        this.interviewService = interviewService;
+        this.events = events;
+    }
+
+    /**
+     * What a candidate gave when applying.
+     *
+     * @param phoneAsTyped     whatever was typed; it is kept as typed and, when it is a number a
+     *                         text can reach, in one standard form as well
+     * @param agreedToTexts    the candidate gave the number in answer to a question that said it
+     *                         would be used to text them
+     * @param screeningFollows screening questions come next; the application is announced as
+     *                         received once they are passed, not before
+     */
+    public record NewApplication(
+            UUID jobId, String name, String email, String phoneAsTyped, String language,
+            String source, boolean agreedToTexts, boolean screeningFollows) {
+    }
+
+    /**
+     * A candidate applies. This is the one place an application comes into
+     * being, whatever surface it came through.
+     */
+    @Transactional
+    public Application receive(NewApplication in) {
+        Candidate candidate = new Candidate();
+        candidate.setName(in.name() == null || in.name().isBlank() ? "Unknown" : in.name().trim());
+        candidate.setEmail(in.email() == null ? "" : in.email().trim());
+        candidate.setPhone(in.phoneAsTyped());
+        // Agreement counts only with a number it can apply to.
+        if (in.agreedToTexts() && candidate.getPhoneE164() != null) {
+            candidate.setSmsConsentAt(java.time.OffsetDateTime.now());
+        }
+        candidate.setYearsExperience(java.math.BigDecimal.ZERO);
+        candidate.setSource("CAREER_SITE");
+        candidate.setPreferredLanguage(in.language() == null || in.language().isBlank() ? "en" : in.language());
+        candidate.setLifecycle("ACTIVE");
+        candidate = candidateRepository.save(candidate);
+
+        Application app = new Application();
+        app.setCandidateId(candidate.getId());
+        app.setJobId(in.jobId());
+        app.setStage("APPLIED");
+        app.setSource(in.source());
+        app = applicationRepository.save(app);
+        if (!in.screeningFollows()) {
+            events.publishEvent(new ApplicationReceived(app.getId()));
+        }
+        return app;
+    }
+
+    /** The candidate passed screening: the application is in, and they are told so. */
+    @Transactional
+    public void passedScreening(UUID applicationId) {
+        Application app = applicationRepository.findById(applicationId).orElseThrow();
+        app.setStage("SCREENED");
+        app.setKnockoutPassed(true);
+        applicationRepository.save(app);
+        events.publishEvent(new ApplicationReceived(applicationId));
+    }
+
+    /** The candidate did not pass screening. The conversation told them; nothing else is sent. */
+    @Transactional
+    public void failedScreening(UUID applicationId, String reason) {
+        Application app = applicationRepository.findById(applicationId).orElseThrow();
+        app.setStage("REJECTED");
+        app.setKnockoutPassed(false);
+        app.setRejectionReason(reason);
+        applicationRepository.save(app);
+        interviewService.cancelForApplication(applicationId);
     }
 
     public List<ApplicationRow> list(UUID jobId, String stage) {
@@ -68,11 +146,24 @@ public class ApplicationService {
             if (!JobService.STAGES.contains(req.stage())) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown stage: " + req.stage());
             }
+        }
+        String before = app.getStage();
+        boolean moved = req.stage() != null && !req.stage().equals(before);
+        if (moved) {
             app.setStage(req.stage());
         }
         if (req.fitScore() != null) app.setFitScore(req.fitScore());
         if (req.rejectionReason() != null) app.setRejectionReason(req.rejectionReason());
-        return toRow(applicationRepository.save(app));
+        Application saved = applicationRepository.save(app);
+        if (moved) {
+            // An application that is closed takes its interview with it: nobody is
+            // reminded of, or can book, an interview for an application no longer running.
+            if ("REJECTED".equals(req.stage()) || "WITHDRAWN".equals(req.stage())) {
+                interviewService.cancelForApplication(id);
+            }
+            events.publishEvent(new ApplicationStageChanged(id, before, req.stage()));
+        }
+        return toRow(saved);
     }
 
     public List<PipelineColumn> pipeline(UUID jobId) {

@@ -39,6 +39,8 @@ public class AvailabilityService {
     private static final int DEFAULT_MAX_PER_DAY = 2;
     private static final int DEFAULT_MAX_PER_WEEK = 8;
     private static final int MAX_PROPOSALS_PER_DAY = 2;
+    /** Two times offered on one day are this far apart at least, so they are a real choice. */
+    private static final Duration SAME_DAY_SPACING = Duration.ofHours(2);
     private static final WeekFields WEEK = WeekFields.of(Locale.US);
 
     /** Calendar kinds that do NOT block scheduling (soft/informational). */
@@ -62,6 +64,31 @@ public class AvailabilityService {
 
     /** Up to {@code count} open [start,end) windows that fit every participant. */
     public List<OffsetDateTime[]> openSlots(List<UUID> participantIds, int durationMin, int count) {
+        return openSlots(participantIds, durationMin, count, null, List.of(), null);
+    }
+
+    /**
+     * Up to {@code count} open [start,end) windows that fit every participant.
+     * Times offered on the same day never overlap and sit at least
+     * {@link #SAME_DAY_SPACING} apart.
+     *
+     * @param after           only times starting after this; null for the earliest allowed
+     * @param avoid           starts not to offer: times offered before, or the time being given up
+     * @param movingInterview an interview whose own booking is to be ignored, because it is
+     *                        the one being moved; null otherwise
+     */
+    public List<OffsetDateTime[]> openSlots(
+            List<UUID> participantIds, int durationMin, int count,
+            OffsetDateTime after, List<OffsetDateTime> avoid, UUID movingInterview) {
+        if (count <= 0) {
+            return List.of();
+        }
+        java.util.Set<java.time.Instant> skip = new java.util.HashSet<>();
+        for (OffsetDateTime a : avoid == null ? List.<OffsetDateTime>of() : avoid) {
+            if (a != null) {
+                skip.add(a.toInstant());
+            }
+        }
         SchedulingPolicy policy = policies.current();
         Duration minNotice = Duration.ofHours(policy.getMinNoticeHours());
         Duration buffer = Duration.ofMinutes(policy.getBufferMinutes());
@@ -75,19 +102,30 @@ public class AvailabilityService {
         Map<UUID, List<InterviewerWeeklyRule>> rules = rulesFor(participantIds);
 
         Map<LocalDate, Integer> perDay = new HashMap<>();
+        Map<LocalDate, ZonedDateTime> freeFrom = new HashMap<>();
         List<OffsetDateTime[]> out = new ArrayList<>();
 
         for (LocalDate day = earliest.toLocalDate(); !day.isAfter(windowEnd.toLocalDate()); day = day.plusDays(1)) {
             if (day.getDayOfWeek().getValue() >= 6) {
                 continue; // weekend
             }
-            if (overCap(day, participantIds, settings, busy)) {
+            if (overCap(day, participantIds, settings, busy, movingInterview)) {
                 continue; // a participant is at their daily or weekly cap
             }
             for (LocalTime t = DEFAULT_START; !t.plusMinutes(durationMin).isAfter(LocalTime.of(20, 0)); t = t.plusMinutes(30)) {
                 ZonedDateTime start = day.atTime(t).atZone(ZONE);
                 if (start.isBefore(earliest)) {
                     continue;
+                }
+                if (after != null && !start.toInstant().isAfter(after.toInstant())) {
+                    continue;
+                }
+                if (skip.contains(start.toInstant())) {
+                    continue;
+                }
+                ZonedDateTime notBefore = freeFrom.get(day);
+                if (notBefore != null && start.isBefore(notBefore)) {
+                    continue; // too close to a time already offered that day
                 }
                 ZonedDateTime end = start.plusMinutes(durationMin);
                 if (!withinEveryWorkWindow(participantIds, settings, start, end)) {
@@ -96,7 +134,7 @@ public class AvailabilityService {
                 if (!weeklyRulesAllow(participantIds, settings, rules, start, end)) {
                     continue;
                 }
-                if (conflicts(busy, start.toOffsetDateTime(), end.toOffsetDateTime(), null, buffer)) {
+                if (conflicts(busy, start.toOffsetDateTime(), end.toOffsetDateTime(), movingInterview, buffer)) {
                     continue;
                 }
                 int used = perDay.getOrDefault(day, 0);
@@ -104,6 +142,7 @@ public class AvailabilityService {
                     break;
                 }
                 perDay.put(day, used + 1);
+                freeFrom.put(day, end.plus(SAME_DAY_SPACING));
                 out.add(new OffsetDateTime[] {start.toOffsetDateTime(), end.toOffsetDateTime()});
                 if (out.size() >= count) {
                     return out;
@@ -227,7 +266,7 @@ public class AvailabilityService {
     /** Daily AND weekly interview caps, per participant, from their settings. */
     private static boolean overCap(
             LocalDate day, List<UUID> participantIds,
-            Map<UUID, InterviewerSettings> settings, List<CalendarEvent> busy) {
+            Map<UUID, InterviewerSettings> settings, List<CalendarEvent> busy, UUID movingInterview) {
         int week = day.get(WEEK.weekOfWeekBasedYear());
         for (UUID user : participantIds) {
             InterviewerSettings s = settings.get(user);
@@ -237,6 +276,9 @@ public class AvailabilityService {
             int inWeek = 0;
             for (CalendarEvent e : busy) {
                 if (!"INTERVIEW".equals(e.getKind()) || !user.equals(e.getUserId())) {
+                    continue;
+                }
+                if (movingInterview != null && movingInterview.equals(e.getInterviewId())) {
                     continue;
                 }
                 LocalDate d = e.getStartsAt().atZoneSameInstant(ZONE).toLocalDate();

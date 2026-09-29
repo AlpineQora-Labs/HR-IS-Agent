@@ -33,4 +33,8 @@ public class SchedulingPolicy {
 
     @Column(name = "reschedule_cutoff_hours", nullable = false)
     private int rescheduleCutoffHours;
+
+    /** How many times a candidate is offered to choose from. */
+    @Column(name = "proposal_count", nullable = false)
+    private int proposalCount;
 }

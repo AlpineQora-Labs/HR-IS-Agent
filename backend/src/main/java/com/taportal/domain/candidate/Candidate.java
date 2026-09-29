@@ -1,5 +1,6 @@
 package com.taportal.domain.candidate;
 
+import com.taportal.domain.messaging.PhoneNumbers;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -35,9 +36,21 @@ public class Candidate {
     @Column(nullable = false)
     private String email;
 
-    @Setter
+    /** As the candidate gave it. Set through {@link #setPhone}. */
     @Column
     private String phone;
+
+    /**
+     * The same number in E.164, or null when {@link #phone} is not a number a
+     * text can reach. Kept in step by {@link #setPhone}; never set on its own.
+     */
+    @Column(name = "phone_e164")
+    private String phoneE164;
+
+    /** When the candidate agreed to be texted; null when they have not. */
+    @Setter
+    @Column(name = "sms_consent_at")
+    private OffsetDateTime smsConsentAt;
 
     @Setter
     @Column
@@ -72,4 +85,9 @@ public class Candidate {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+        this.phoneE164 = PhoneNumbers.normalise(phone);
+    }
 }
