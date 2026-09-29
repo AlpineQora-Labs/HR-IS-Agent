@@ -192,6 +192,13 @@ function WfcEdge(props: EdgeProps) {
     const vertical = Math.abs(dy) >= Math.abs(dx)
     const loop = !branch && dy < -40 // target sits above: a journey loop-back
 
+    if (branch) {
+      // Anchor on the box itself (under the YES / NO footer), flush with the
+      // border — handle visuals are offset and would leave a gap.
+      sPos = Position.Bottom
+      sX = sb.x + sb.w * (props.sourceHandleId === 'yes' ? 0.25 : 0.75)
+      sY = sb.y + sb.h
+    }
     if (loop) {
       // Bow around the outer side on its own lane — never through the chain.
       const right = scx >= tcx
@@ -531,15 +538,15 @@ const nodeTypes = {
 // Explicit dimensions so nodes are "measured" even where ResizeObserver is flaky;
 // updateNodeInternals (below) computes handle bounds so edges render on mount.
 const DIMS: Record<string, { width: number; height: number }> = {
-  trigger: { width: 156, height: 100 },
-  approval: { width: 156, height: 128 },
-  condition: { width: 156, height: 122 },
-  policy: { width: 156, height: 100 },
-  email: { width: 156, height: 112 },
-  sms: { width: 156, height: 112 },
-  step: { width: 156, height: 100 },
-  exception: { width: 156, height: 100 },
-  end: { width: 156, height: 100 },
+  trigger: { width: 156, height: 108 },
+  approval: { width: 156, height: 136 },
+  condition: { width: 156, height: 132 },
+  policy: { width: 156, height: 108 },
+  email: { width: 156, height: 120 },
+  sms: { width: 156, height: 120 },
+  step: { width: 156, height: 116 },
+  exception: { width: 156, height: 108 },
+  end: { width: 156, height: 108 },
 }
 const sized = (n: Node): Node => ({ ...n, ...DIMS[n.type as string] })
 

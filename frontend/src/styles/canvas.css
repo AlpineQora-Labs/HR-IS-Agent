@@ -888,3 +888,35 @@
   border-color: rgba(227, 24, 55, 0.5);
   color: #c31432;
 }
+
+/* The card must EXACTLY fill the react-flow node box — anchors sit on the
+   card's edges, and edges attach to the box's edges, so any size drift shows
+   as lines stopping short of the anchors. */
+.wfc .react-flow__node > div {
+  width: 100%;
+  height: 100%;
+}
+.wfc .react-flow__node .wfc-node {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.wfc .react-flow__node .wfc-node .wfc-node__inner {
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+}
+.wfc-node__title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.wfc-node__sub {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
