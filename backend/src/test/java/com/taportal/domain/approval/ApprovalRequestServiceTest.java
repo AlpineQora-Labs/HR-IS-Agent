@@ -53,7 +53,7 @@ class ApprovalRequestServiceTest {
 
     private void engineAnswers(boolean autoApproved, List<RequiredApproval> approvals, List<String> problems) {
         when(engine.simulate(eq("e1"), any()))
-                .thenReturn(new SimulateResponse(autoApproved, List.of("trigger"), approvals, List.of(), problems));
+                .thenReturn(new SimulateResponse(autoApproved, List.of("trigger"), approvals, List.of(), problems, List.of()));
     }
 
     private static final RequiredApproval LEVEL_1 = new RequiredApproval("lvl", "Level 1", "Hiring Manager");

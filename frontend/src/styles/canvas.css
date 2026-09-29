@@ -942,3 +942,437 @@
   padding: 2px 0 2px 9px;
   margin-top: 8px;
 }
+
+/* ── Adding from the canvas ──────────────────────────────────────────────
+   The connector on every line is the add button; an answer or step with
+   nothing after it shows a dashed stub; one menu asks "What happens next?". */
+
+.wfc-edgedot {
+  pointer-events: all;
+  cursor: pointer;
+  font: inherit;
+  min-width: 24px;
+  height: 24px;
+  width: auto;
+  padding: 0 5px;
+  gap: 3px;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+.wfc-edgedot--yes,
+.wfc-edgedot--no {
+  height: 22px;
+  padding: 0 6px 0 8px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+/* on the auto-approve bypass the dot is only a mark: nothing is added there */
+.wfc-edgedot--still {
+  pointer-events: none;
+  cursor: default;
+  min-width: 10px;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  box-shadow: none;
+}
+.wfc-edgedot__plus {
+  display: inline-flex;
+  width: 11px;
+  height: 11px;
+}
+.wfc-edgedot__plus svg {
+  width: 11px;
+  height: 11px;
+}
+.wfc-edgedot:hover {
+  border-color: var(--wfc-navy, #012169);
+  color: var(--wfc-navy, #012169);
+  background: #f4f7fd;
+}
+.wfc-edgedot:focus-visible,
+.wfc-stub__pill:focus-visible,
+.wfc-addmenu__row:focus-visible,
+.wfc-addmenu__remove:focus-visible,
+.wfc-addmenu__back:focus-visible,
+.wfc-guard__choice:focus-visible,
+.wfc-rule__step:focus-visible,
+.wfc-words__list button:focus-visible,
+.wfc-todo button:focus-visible {
+  outline: 2px solid var(--wfc-navy, #012169);
+  outline-offset: 2px;
+}
+
+/* dashed stub under an unanswered side / a step with nothing after it.
+   It starts below the port and lets the pointer through, so a line can still
+   be drawn from the port; only the pill is a control. */
+.wfc-stub {
+  position: absolute;
+  top: calc(100% + 8px);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  z-index: 2;
+}
+.wfc-stub__line {
+  width: 0;
+  height: 14px;
+  border-left: 1.5px dashed #aab4c4;
+}
+.wfc-stub__pill {
+  pointer-events: auto;
+  cursor: pointer;
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-size: 10.5px;
+  font-weight: 650;
+  color: var(--ink-3, #566074);
+  background: #fff;
+  border: 1.5px dashed #aab4c4;
+  border-radius: 999px;
+  padding: 3px 8px 3px 10px;
+}
+.wfc-stub--yes .wfc-stub__pill { color: #147a44; border-color: rgba(26, 157, 85, 0.6); }
+.wfc-stub--no .wfc-stub__pill { color: #c31432; border-color: rgba(227, 24, 55, 0.55); }
+.wfc-stub__pill:hover {
+  border-style: solid;
+  background: #f4f7fd;
+}
+
+/* rule card footer carries both words for each answer */
+.wfc-node__branches span {
+  font-size: 9.5px;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+/* the menu */
+.wfc-addmenu {
+  position: fixed;
+  z-index: 210;
+  width: 286px;
+  background: #fff;
+  border: 1px solid #e3e8f0;
+  border-radius: 14px;
+  box-shadow: 0 18px 44px rgba(16, 22, 38, 0.18);
+  padding: 6px;
+  animation: wfcPreviewIn 120ms ease-out;
+}
+.wfc-addmenu__title {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--ink-4, #8a93a6);
+  padding: 7px 10px 6px;
+}
+.wfc-addmenu__back {
+  font: inherit;
+  font-weight: 650;
+  color: var(--ink-2, #3c4557);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.wfc-addmenu__backic {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  transform: rotate(180deg);
+}
+.wfc-addmenu__row {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.wfc-addmenu__row:hover {
+  background: #f2f5fa;
+}
+.wfc-addmenu__ic {
+  display: inline-flex;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  color: var(--ink-2, #3c4557);
+  flex-shrink: 0;
+}
+.wfc-addmenu__name {
+  display: block;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-1, #23293a);
+}
+.wfc-addmenu__hint {
+  display: block;
+  font-size: 11.5px;
+  color: var(--ink-4, #8a93a6);
+  line-height: 1.4;
+}
+.wfc-addmenu__more {
+  display: inline-flex;
+  width: 13px;
+  height: 13px;
+  margin: 3px 0 0 auto;
+  color: var(--ink-4, #8a93a6);
+}
+.wfc-addmenu__remove {
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  color: var(--ink-3, #566074);
+  background: none;
+  border: none;
+  border-top: 1px solid #eef1f6;
+  margin-top: 4px;
+  padding: 9px 10px 6px;
+  cursor: pointer;
+}
+.wfc-addmenu__remove:hover {
+  color: #c31432;
+}
+
+/* exception guard */
+.wfc-guard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 22px 6px;
+}
+.wfc-guard__choice {
+  font: inherit;
+  text-align: left;
+  padding: 11px 13px;
+  background: #fff;
+  border: 1px solid #dfe4ec;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.wfc-guard__choice:hover {
+  border-color: var(--wfc-navy, #012169);
+}
+.wfc-guard__name {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ink-1, #23293a);
+}
+.wfc-guard__hint {
+  display: block;
+  font-size: 12.5px;
+  color: var(--ink-3, #566074);
+  line-height: 1.5;
+  margin-top: 2px;
+}
+
+/* ── The rule, as a sentence ─────────────────────────────────────────── */
+.wfc-rule {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.wfc-rule__sidehead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wfc-rule__word {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-4, #8a93a6);
+}
+.wfc-rule__pill {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1.5px solid;
+  background: #fff;
+}
+.wfc-rule__pill--yes { color: #147a44; border-color: rgba(26, 157, 85, 0.55); }
+.wfc-rule__pill--no { color: #c31432; border-color: rgba(227, 24, 55, 0.5); }
+.wfc-rule__side {
+  border-top: 1px solid #eef1f6;
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wfc-rule__says {
+  font-size: 12.5px;
+  color: var(--ink-2, #3c4557);
+  line-height: 1.5;
+}
+.wfc-rule__open {
+  font-size: 12.5px;
+  color: #8a5a00;
+}
+.wfc-rule__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.wfc-rule__step {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-1, #23293a);
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  background: #fff;
+  border: 1px solid #e3e8f0;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.wfc-rule__step:hover {
+  border-color: #c6cfdd;
+}
+.wfc-rule__stepic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+.wfc-rule__stepic svg {
+  width: 12px;
+  height: 12px;
+}
+.wfc-rule__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* where an answer carries on to */
+.wfc-rule__goto {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--ink-2, #3c4557);
+}
+.wfc-rule__pick {
+  width: 100%;
+}
+.wfc-rule__readback {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-1, #23293a);
+  background: #f7f8fb;
+  border: 1px solid #eceff4;
+  border-radius: 10px;
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wfc-choice__row--warn.is-on {
+  border-color: #d9a441;
+  box-shadow: 0 0 0 2.5px rgba(217, 164, 65, 0.16);
+}
+.wfc-choice__row[aria-disabled] {
+  cursor: default;
+}
+
+/* ── The workflow, in words ──────────────────────────────────────────── */
+.wfc-words {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+}
+.wfc-words__list {
+  margin: 0;
+  padding: 0 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wfc-words__list li {
+  font-size: 12.5px;
+  color: var(--ink-4, #8a93a6);
+}
+.wfc-words__list button,
+.wfc-todo button {
+  display: block;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: left;
+  color: var(--ink-1, #23293a);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 2px 4px;
+  cursor: pointer;
+  width: 100%;
+}
+.wfc-words__list button:hover,
+.wfc-todo button:not(:disabled):hover {
+  background: #f2f5fa;
+}
+.wfc-todo {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wfc-todo li {
+  border-left: 2px solid #d9a441;
+  padding-left: 6px;
+}
+.wfc-todo li.is-blocking {
+  border-left-color: var(--wfc-red, #e31837);
+}
+.wfc-todo button:disabled {
+  cursor: default;
+}
+.wfc-todo__tag {
+  display: block;
+  font-size: 11px;
+  color: #8f1d2c;
+}
+.wfc-todo__clear {
+  font-size: 12.5px;
+  color: #147a44;
+}
+.wfc-todo__unknown {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #8a5a00;
+  border-left: 2px solid #d9a441;
+  padding-left: 8px;
+}
+.wfc-toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

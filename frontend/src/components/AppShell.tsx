@@ -6,13 +6,13 @@ import { useStore } from '@/state/store'
 import { MODULES, useConfig } from '@/state/config'
 import {
   IconAdmin,
+  IconAlert,
   IconChevronLeft,
   IconChevronRight,
   IconAnalytics,
   IconArrowRight,
   IconAssessments,
   IconAudit,
-  IconBell,
   IconCampaigns,
   IconCandidates,
   IconCheck,
@@ -42,7 +42,6 @@ const ICONS: Record<string, IconC> = {
   jobs: IconJobs,
   pipeline: IconPipeline,
   approvals: IconCheck,
-  approvals: IconCheck,
   candidates: IconCandidates,
   interviews: IconInterviews,
   availability: IconEvents,
@@ -69,7 +68,6 @@ const ROUTES: Record<string, string> = {
   overview: '/',
   jobs: '/jobs',
   pipeline: '/pipeline',
-  approvals: '/approvals',
   approvals: '/approvals',
   candidates: '/candidates',
   interviews: '/interviews',
@@ -236,7 +234,7 @@ function Brand({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => vo
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { toast } = useStore()
+  const { toast, toastTone } = useStore()
   const { isModuleOn, currentUser } = useConfig()
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(readCollapsed)
@@ -339,8 +337,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {toast && (
         <div style={{ position: 'fixed', right: 24, bottom: 24, zIndex: 60 }}>
-          <div className="toast toast--ok">
-            <IconCheck className="toast__ic" style={{ color: 'var(--c-green)' }} />
+          <div className={`toast toast--${toastTone}`} role={toastTone === 'danger' ? 'alert' : 'status'}>
+            {toastTone === 'danger' ? (
+              <IconAlert className="toast__ic" style={{ color: '#ff8a9b' }} />
+            ) : (
+              <IconCheck className="toast__ic" style={{ color: 'var(--c-green)' }} />
+            )}
             <div>
               <div className="toast__title">{toast}</div>
             </div>

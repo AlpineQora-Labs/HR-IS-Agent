@@ -148,7 +148,7 @@ export default function AdminWorkflows() {
       saveServer.mutate(payload, {
         onError: (e) => {
           const res = (e as { response?: { data?: { message?: string } } })?.response
-          flash(res?.data?.message ?? 'Could not save workflows')
+          flash(res?.data?.message ?? 'Could not save workflows', 'danger')
           if (!res) {
             // No answer at all (offline): keep the edits and allow a retry.
             lastPushed.current = ''
@@ -255,7 +255,7 @@ export default function AdminWorkflows() {
                     },
                     onError: (e) => {
                       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-                      flash(msg ?? 'Could not delete the workflow')
+                      flash(msg ?? 'Could not delete the workflow', 'danger')
                     },
                   })
                 }}
@@ -278,7 +278,7 @@ export default function AdminWorkflows() {
             if (!w.enabled) {
               const owner = triggerTakenBy(w.id, w.trigger)
               if (owner) {
-                flash(`“${owner}” already handles the ${w.trigger} trigger — disable it first`)
+                flash(`“${owner}” already handles the ${w.trigger} trigger — disable it first`, 'danger')
                 return
               }
             }
@@ -289,7 +289,7 @@ export default function AdminWorkflows() {
             if (w.enabled) {
               const owner = triggerTakenBy(w.id, v)
               if (owner) {
-                flash(`“${owner}” already handles the ${v} trigger — disable it first`)
+                flash(`“${owner}” already handles the ${v} trigger — disable it first`, 'danger')
                 return
               }
             }

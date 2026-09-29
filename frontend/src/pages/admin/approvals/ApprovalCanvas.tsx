@@ -18,12 +18,14 @@ import {
   useReactFlow,
   useUpdateNodeInternals,
   useInternalNode,
+  useStore as useFlowStore,
   BaseEdge,
   EdgeLabelRenderer,
   getSmoothStepPath,
   type Node,
   type Edge,
   type Connection,
+  type FinalConnectionState,
   type NodeProps,
   type EdgeProps,
 } from '@xyflow/react'
@@ -33,22 +35,22 @@ import '@/styles/canvas.css'
 import { useConfig } from '@/state/config'
 import type { ApprovalWorkflow, Role, WorkflowGraph, WorkflowNode } from './approvals'
 import { useStore } from '@/state/store'
-import { useSaveServerWorkflows, useSimulateWorkflow, toServerDto, type SimulateResult } from './approvals'
+import {
+  checkWorkflow, useSaveServerWorkflows, useSimulateWorkflow, toServerDto,
+  type CheckIssue, type SimulateResult,
+} from './approvals'
 import { commsApi } from '../communications/commsApi'
+import { SPEC, Icons } from './canvasTheme'
+import { CanvasCtx, useCanvas, type AddTarget, type OpenEnds, type StepKind } from './canvasContext'
+import AddMenu from './AddMenu'
+import RulePanel, { type SideChoice } from './RulePanel'
+import WorkflowInWords from './WorkflowInWords'
+import {
+  afterRule, continueChoices, cutOff, describe, isOutcome, lanes, rows, ruleTitle, sideOf, startOf, stepName,
+  type Answer, type GEdge, type GNode, type WfData,
+} from './graphModel'
 
-type WfData = {
-  label?: string
-  approverRole?: string
-  condition?: string
-  lit?: boolean
-  emailAttached?: boolean
-  emailTemplateId?: string
-  emailTemplateName?: string
-  emailTrigger?: string
-  smsTemplateId?: string
-  smsTemplateName?: string
-  smsTrigger?: string
-}
+export { SPEC, Icons }
 
 /** When an SMS fires, relative to the point it sits on in the journey. */
 const SMS_TRIGGERS = [
@@ -67,105 +69,35 @@ const EMAIL_TRIGGERS = [
   'When the request is fully approved',
 ]
 
-/* ---------- node visual spec ---------- */
-
-export const SPEC = {
-  trigger: { kicker: 'Trigger', rail: '#012169', iconBg: '#eef2fb', iconFg: '#012169' },
-  approval: { kicker: 'Approval', rail: '#3b6fd4', iconBg: '#eaf1fd', iconFg: '#2f5fc0' },
-  condition: { kicker: 'Condition', rail: '#c98a00', iconBg: '#fdf5e3', iconFg: '#b07a00' },
-  policy: { kicker: 'Policy', rail: '#0e8a80', iconBg: '#e6f5f3', iconFg: '#0b756d' },
-  email: { kicker: 'Email', rail: '#7c3aed', iconBg: '#f3ecfd', iconFg: '#6d28d9' },
-  sms: { kicker: 'SMS', rail: '#0e7490', iconBg: '#e6f3f7', iconFg: '#0b5f78' },
-  step: { kicker: 'Step', rail: '#5b6b86', iconBg: '#eef1f6', iconFg: '#44536e' },
-  exception: { kicker: 'Exception', rail: '#e31837', iconBg: '#fdecee', iconFg: '#c31432' },
-  end: { kicker: 'Outcome', rail: '#1a9d55', iconBg: '#e9f7ef', iconFg: '#188a4b' },
-} as const
-
-export const Icons = {
-  trigger: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M13 2 4.5 13.5H11L9.5 22 19 10h-6.5L13 2Z" />
-    </svg>
-  ),
-  approval: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="9" cy="8" r="3.5" />
-      <path d="M3.5 20c.6-3.4 2.8-5 5.5-5s4.9 1.6 5.5 5" />
-      <path d="m15 10 2 2 4-4.5" />
-    </svg>
-  ),
-  condition: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3v5" />
-      <path d="M12 8c-4 0-6 2.5-6 6" />
-      <path d="M12 8c4 0 6 2.5 6 6" />
-      <path d="m4 12 2 2 2-2" />
-      <path d="m16 12 2 2 2-2" />
-      <circle cx="12" cy="5" r="0.5" />
-    </svg>
-  ),
-  policy: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2.5 5 5v6c0 4.6 3 8.4 7 9.5 4-1.1 7-4.9 7-9.5V5l-7-2.5Z" />
-      <path d="m8.8 12 2.2 2.2 4.2-4.6" />
-    </svg>
-  ),
-  email: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <path d="m3.5 7 8.5 6 8.5-6" />
-    </svg>
-  ),
-  sms: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 11.5a7.5 7.5 0 0 1-7.5 7.5H5l-1.8 2.2.3-4A7.5 7.5 0 1 1 21 11.5Z" />
-      <path d="M8.5 10h7" />
-      <path d="M8.5 13h4.5" />
-    </svg>
-  ),
-  step: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3.5" y="4" width="17" height="6.5" rx="1.8" />
-      <rect x="3.5" y="14" width="17" height="6.5" rx="1.8" />
-      <path d="M12 10.5V14" />
-    </svg>
-  ),
-  exception: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3 2.5 20h19L12 3Z" />
-      <path d="M12 10v4" />
-      <circle cx="12" cy="17" r="0.5" />
-    </svg>
-  ),
-  end: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="m8.5 12.2 2.4 2.4 4.6-5" />
-    </svg>
-  ),
-  arrange: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <rect x="4" y="3" width="16" height="5" rx="1.5" />
-      <rect x="4" y="10" width="7" height="5" rx="1.5" />
-      <rect x="13" y="10" width="7" height="5" rx="1.5" />
-      <rect x="8.5" y="17" width="7" height="5" rx="1.5" />
-    </svg>
-  ),
-  play: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M7 4.5 19 12 7 19.5V4.5Z" />
-    </svg>
-  ),
-}
-
 /* Make-style FLOATING edge: attaches to whichever side of each box gives the
    cleanest line (recomputed live as nodes move), drawn as a soft bezier with
    a circular connector on the line — a link dot on plain edges, a YES / NO
    pill on condition branches. Branches keep their labeled bottom ports. */
 function WfcEdge(props: EdgeProps) {
+  const canvas = useCanvas()
   const sourceNode = useInternalNode(props.source)
   const targetNode = useInternalNode(props.target)
   const branch = props.sourceHandleId === 'yes' ? 'YES' : props.sourceHandleId === 'no' ? 'NO' : null
+  // A line of the auto-approve bypass: is a step sitting between the card's lane and the step it returns to?
+  const blocked = useFlowStore((st) => {
+    const from = st.nodeLookup.get(props.source)
+    const to = st.nodeLookup.get(props.target)
+    if (!from || !to || from.type !== 'policy') return false
+    const y = to.internals.positionAbsolute.y + (to.measured.height ?? 100) / 2
+    const a = to.internals.positionAbsolute.x + (to.measured.width ?? 156) / 2
+    const b = from.internals.positionAbsolute.x + (from.measured.width ?? 156) / 2
+    for (const n of st.nodeLookup.values()) {
+      if (n.id === from.id || n.id === to.id) continue
+      const x = n.internals.positionAbsolute.x
+      const top = n.internals.positionAbsolute.y
+      const w = n.measured.width ?? 156
+      const h = n.measured.height ?? 100
+      if (top - 12 < y && y < top + h + 12 && x < Math.max(a, b) && x + w > Math.min(a, b)) return true
+    }
+    return false
+  })
+  /** The bypass is not part of the flow a request walks, so nothing is added on it. */
+  const onBypass = sourceNode?.type === 'policy' || targetNode?.type === 'policy'
 
   let sX = props.sourceX
   let sY = props.sourceY
@@ -191,6 +123,11 @@ function WfcEdge(props: EdgeProps) {
     const dy = tcy - scy
     const vertical = Math.abs(dy) >= Math.abs(dx)
     const loop = !branch && dy < -40 // target sits above: a journey loop-back
+    // The auto-approve bypass runs down a lane of its own. It leaves the flow
+    // sideways along the start's row and drops into the card from above; it
+    // comes back into the outcome from the side — or from underneath when a
+    // step sits in the way — so it never crosses the steps it skips.
+    const bypass = !branch && !loop && Math.abs(dx) > 40 && (sourceNode.type === 'policy' ? 'out' : targetNode.type === 'policy' ? 'in' : null)
 
     if (branch) {
       // Anchor on the box itself (under the YES / NO footer), flush with the
@@ -208,6 +145,14 @@ function WfcEdge(props: EdgeProps) {
       tPos = right ? Position.Right : Position.Left
       tX = right ? tb.x + tb.w : tb.x
       tY = tcy
+    } else if (bypass === 'in') {
+      sPos = dx > 0 ? Position.Right : Position.Left
+      sX = dx > 0 ? sb.x + sb.w : sb.x
+      sY = scy
+    } else if (bypass === 'out') {
+      sPos = Position.Bottom
+      sX = scx
+      sY = sb.y + sb.h
     } else if (!branch) {
       if (vertical) {
         sPos = dy > 0 ? Position.Bottom : Position.Top
@@ -219,7 +164,19 @@ function WfcEdge(props: EdgeProps) {
         sY = scy
       }
     }
-    if (!loop) {
+    if (bypass === 'in') {
+      tPos = Position.Top
+      tX = tcx
+      tY = tb.y
+    } else if (bypass === 'out' && blocked) {
+      tPos = Position.Bottom
+      tX = tcx
+      tY = tb.y + tb.h
+    } else if (bypass === 'out') {
+      tPos = dx > 0 ? Position.Left : Position.Right
+      tX = dx > 0 ? tb.x : tb.x + tb.w
+      tY = tcy
+    } else if (!loop) {
       if (vertical) {
         tPos = dy > 0 ? Position.Top : Position.Bottom
         tX = tcx
@@ -244,21 +201,37 @@ function WfcEdge(props: EdgeProps) {
     borderRadius: 14,
     offset: sPos === tPos ? 46 : 22,
   })
+  // A rule's two lines often share their middle, so each answer's control
+  // sits just under its own port; other lines carry theirs at the midpoint.
+  const at = branch ? { x: sX, y: sY + 24 } : { x: labelX, y: labelY }
   return (
     <>
       <BaseEdge id={props.id} path={path} markerEnd={props.markerEnd as string | undefined} style={props.style} />
       <EdgeLabelRenderer>
-        <div
-          className={`wfc-edgedot${branch ? ` wfc-edgedot--${branch.toLowerCase()}` : ''}`}
-          style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+        {onBypass ? (
+          <span
+            className="wfc-edgedot wfc-edgedot--still nodrag nopan"
+            style={{ transform: `translate(-50%, -50%) translate(${at.x}px, ${at.y}px)` }}
+            title="Auto-approve: requests within policy skip the steps"
+          />
+        ) : (
+        <button
+          type="button"
+          className={`wfc-edgedot nodrag nopan${branch ? ` wfc-edgedot--${branch.toLowerCase()}` : ''}`}
+          data-line={props.id}
+          style={{ transform: `translate(-50%, -50%) translate(${at.x}px, ${at.y}px)` }}
+          aria-label={branch ? `Add a step on the ${branch} side` : 'Add a step on this line'}
+          title="Add a step here"
+          onClick={(e) => {
+            e.stopPropagation()
+            const r = e.currentTarget.getBoundingClientRect()
+            canvas?.openMenu({ x: r.left + r.width / 2, y: r.bottom + 6 }, { kind: 'edge', edgeId: props.id })
+          }}
         >
-          {branch ?? (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
-              <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
-            </svg>
-          )}
-        </div>
+          {branch}
+          <span className="wfc-edgedot__plus">{Icons.plus}</span>
+        </button>
+        )}
       </EdgeLabelRenderer>
     </>
   )
@@ -307,11 +280,16 @@ function MailHover({ templateId, children }: { templateId?: string; children: Re
 }
 
 /* Make-style floating canvas toolbar: zoom, fit, arrange. */
-function CanvasToolbar({ onArrange }: { onArrange: () => void }) {
+function CanvasToolbar({ onArrange, onUndo, canUndo }: { onArrange: () => void; onUndo: () => void; canUndo: boolean }) {
   const { zoomIn, zoomOut, fitView } = useReactFlow()
   const { zoom } = useViewport()
   return (
     <Panel position="bottom-center" className="wfc-toolbar">
+      <button onClick={onUndo} disabled={!canUndo} title="Undo the last change">
+        <span style={{ display: 'inline-flex', width: 13, height: 13 }}>{Icons.undo}</span>
+        Undo
+      </button>
+      <span className="wfc-toolbar__sep" />
       <button onClick={() => zoomOut()} aria-label="Zoom out">−</button>
       <span className="wfc-toolbar__zoom">{Math.round(zoom * 100)}%</span>
       <button onClick={() => zoomIn()} aria-label="Zoom in">+</button>
@@ -325,7 +303,42 @@ function CanvasToolbar({ onArrange }: { onArrange: () => void }) {
   )
 }
 
+/** A dashed stub under an answer (or a step) that has nothing leaving it yet.
+ *  Only the pill takes the pointer, so the port above it stays free to draw a line from. */
+function OpenEnd({ id, answer }: { id: string; answer: Answer | null }) {
+  const canvas = useCanvas()
+  return (
+    <div
+      className={`wfc-stub nodrag nopan${answer ? ` wfc-stub--${answer}` : ''}`}
+      style={{ left: answer === 'yes' ? '25%' : answer === 'no' ? '75%' : '50%' }}
+    >
+      <span className="wfc-stub__line" />
+      <button
+        type="button"
+        className="wfc-stub__pill"
+        data-step={id}
+        data-answer={answer ?? 'next'}
+        aria-label={
+          answer ? `Choose what happens on the ${answer === 'yes' ? 'YES' : 'NO (otherwise)'} side` : 'Add the next step'
+        }
+        title={answer ? 'Choose what happens on this side' : 'Add the next step'}
+        // The card is a keyboard target of its own: keys meant for this button stop here.
+        onKeyDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation()
+          const r = e.currentTarget.getBoundingClientRect()
+          canvas?.openMenu({ x: r.left + r.width / 2, y: r.bottom + 6 }, { kind: 'open', nodeId: id, answer })
+        }}
+      >
+        {answer === 'yes' ? 'YES' : answer === 'no' ? 'NO' : 'Next'}
+        <span className="wfc-edgedot__plus">{Icons.plus}</span>
+      </button>
+    </div>
+  )
+}
+
 function Card({
+  id,
   type,
   title,
   sub,
@@ -334,6 +347,7 @@ function Card({
   lit,
   children,
 }: {
+  id: string
   type: keyof typeof SPEC
   title: string
   sub?: string
@@ -343,8 +357,12 @@ function Card({
   children?: React.ReactNode
 }) {
   const s = SPEC[type]
+  const open = useCanvas()?.openEnds.get(id)
   return (
     <div className={`wfc-node${lit ? ' wfc-node--lit' : ''}`}>
+      {open?.yes && <OpenEnd id={id} answer="yes" />}
+      {open?.no && <OpenEnd id={id} answer="no" />}
+      {open?.next && <OpenEnd id={id} answer={null} />}
       <span className="wfc-node__rail" style={{ background: s.rail }} />
       <div className="wfc-node__inner">
         <span className="wfc-node__icon" style={{ background: s.iconBg, color: s.iconFg }}>
@@ -361,8 +379,8 @@ function Card({
       </div>
       {branches && (
         <div className="wfc-node__branches">
-          <span className="yes">Yes</span>
-          <span className="no">No</span>
+          <span className="yes">Yes · then</span>
+          <span className="no">No · otherwise</span>
         </div>
       )}
       {children}
@@ -370,17 +388,17 @@ function Card({
   )
 }
 
-function TriggerNode({ data }: NodeProps) {
+function TriggerNode({ id, data }: NodeProps) {
   const d = data as WfData
   return (
-    <Card type="trigger" title={d.label || 'Request'} sub="Starts the approval flow" lit={d.lit}>
+    <Card id={id} type="trigger" title={d.label || 'Request'} sub="Starts the approval flow" lit={d.lit}>
       <Handle type="source" position={Position.Bottom} id="b" />
       <Handle type="source" position={Position.Left} id="l" />
       <Handle type="source" position={Position.Right} id="r" />
     </Card>
   )
 }
-function ApprovalNode({ data }: NodeProps) {
+function ApprovalNode({ id, data }: NodeProps) {
   const d = data as WfData
   const { roles, users } = useConfig()
   const role = roles.find((r) => r.name === d.approverRole)
@@ -388,7 +406,7 @@ function ApprovalNode({ data }: NodeProps) {
   const who = names.length ? names.slice(0, 2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '') : 'No users in role'
   return (
     <MailHover templateId={d.emailAttached ? d.emailTemplateId : undefined}>
-    <Card type="approval" title={d.label || 'Approval step'} sub={who} chip={d.approverRole || 'Any approver'} lit={d.lit}>
+    <Card id={id} type="approval" title={d.label || 'Approval step'} sub={who} chip={d.approverRole || 'Any approver'} lit={d.lit}>
       {d.emailAttached && (
         <span className="wfc-node__mail" title={`Email: ${d.emailTemplateName || 'choose a template'} · ${d.emailTrigger || ''}`}>
           {Icons.email}
@@ -402,10 +420,10 @@ function ApprovalNode({ data }: NodeProps) {
     </MailHover>
   )
 }
-function ConditionNode({ data }: NodeProps) {
+function ConditionNode({ id, data }: NodeProps) {
   const d = data as WfData
   return (
-    <Card type="condition" title={d.condition || 'Always'} sub="Routes the request down a branch" branches lit={d.lit}>
+    <Card id={id} type="condition" title={ruleTitle(d.condition)} branches lit={d.lit}>
       <Handle type="target" position={Position.Top} id="t" />
       <Handle type="target" position={Position.Left} id="l" />
       <Handle type="target" position={Position.Right} id="r" />
@@ -414,10 +432,10 @@ function ConditionNode({ data }: NodeProps) {
     </Card>
   )
 }
-function PolicyNode({ data }: NodeProps) {
+function PolicyNode({ id, data }: NodeProps) {
   const d = data as WfData
   return (
-    <Card type="policy" title="Auto-approve" sub={d.label || 'Within policy'} lit={d.lit}>
+    <Card id={id} type="policy" title="Auto-approve" sub={d.label || 'Within policy'} lit={d.lit}>
       <Handle type="target" position={Position.Top} id="t" />
       <Handle type="source" position={Position.Bottom} id="b" />
       <Handle type="source" position={Position.Left} id="l" />
@@ -425,11 +443,11 @@ function PolicyNode({ data }: NodeProps) {
     </Card>
   )
 }
-function EmailNode({ data }: NodeProps) {
+function EmailNode({ id, data }: NodeProps) {
   const d = data as WfData
   return (
     <MailHover templateId={d.emailTemplateId}>
-      <Card type="email" title={d.emailTemplateName || 'Email notification'} sub={d.emailTrigger || 'Choose a template'} lit={d.lit}>
+      <Card id={id} type="email" title={d.emailTemplateName || 'Email notification'} sub={d.emailTrigger || 'Choose a template'} lit={d.lit}>
         <Handle type="target" position={Position.Top} id="t" />
         <Handle type="source" position={Position.Bottom} id="b" />
         <Handle type="source" position={Position.Left} id="l" />
@@ -474,11 +492,11 @@ function SmsHover({ templateId, children }: { templateId?: string; children: Rea
   )
 }
 
-function SmsNode({ data }: NodeProps) {
+function SmsNode({ id, data }: NodeProps) {
   const d = data as WfData
   return (
     <SmsHover templateId={d.smsTemplateId}>
-      <Card type="sms" title={d.smsTemplateName || 'SMS message'} sub={d.smsTrigger || 'Choose a template'} lit={d.lit}>
+      <Card id={id} type="sms" title={d.smsTemplateName || 'SMS message'} sub={d.smsTrigger || 'Choose a template'} lit={d.lit}>
         <Handle type="target" position={Position.Top} id="t" />
         <Handle type="target" position={Position.Left} id="l2" />
         <Handle type="source" position={Position.Bottom} id="b" />
@@ -489,10 +507,10 @@ function SmsNode({ data }: NodeProps) {
   )
 }
 
-function StepNode({ data }: NodeProps) {
+function StepNode({ id, data }: NodeProps) {
   const d = data as WfData
   return (
-    <Card type="step" title={d.label || 'Journey step'} sub="Candidate action" lit={d.lit}>
+    <Card id={id} type="step" title={d.label || 'Journey step'} sub="Candidate action" lit={d.lit}>
       <Handle type="target" position={Position.Top} id="t" />
       <Handle type="target" position={Position.Right} id="r2" />
       <Handle type="source" position={Position.Bottom} id="b" />
@@ -502,20 +520,20 @@ function StepNode({ data }: NodeProps) {
   )
 }
 
-function ExceptionNode({ data }: NodeProps) {
+function ExceptionNode({ id, data }: NodeProps) {
   const d = data as WfData
   return (
-    <Card type="exception" title={d.label || 'Exception'} sub="Routed out for review" lit={d.lit}>
+    <Card id={id} type="exception" title={d.label || 'Exception'} sub="Routed out for review" lit={d.lit}>
       <Handle type="target" position={Position.Top} id="t" />
       <Handle type="target" position={Position.Left} id="l" />
       <Handle type="target" position={Position.Right} id="r" />
     </Card>
   )
 }
-function EndNode({ data }: NodeProps) {
+function EndNode({ id, data }: NodeProps) {
   const d = data as WfData
   return (
-    <Card type="end" title={d.label || 'Approved'} sub="Flow complete" lit={d.lit}>
+    <Card id={id} type="end" title={d.label || 'Approved'} sub="Flow complete" lit={d.lit}>
       <Handle type="target" position={Position.Top} id="t" />
       <Handle type="target" position={Position.Left} id="l" />
       <Handle type="target" position={Position.Right} id="r" />
@@ -601,91 +619,80 @@ function seedGraph(w: ApprovalWorkflow, roleName: (k: string) => string): { node
     edges.push(decorateEdge({ id: 'e-trigger-policy', source: 'trigger', target: 'policy' }))
     edges.push(decorateEdge({ id: 'e-policy-end', source: 'policy', target: 'end' }))
   }
-  return { nodes, edges }
+  return { nodes: autoLayout(nodes, edges), edges }
 }
 
 /**
  * Layered auto-layout, tuned so nothing overlaps and every arrow stays visible:
- * - longest-path layering from the trigger (converging branches sit below both parents)
- * - generous row/column spacing relative to the card size
+ * - rows by longest path from the start (converging branches sit below both parents)
+ * - columns by lane: the main flow keeps one column from top to bottom, a
+ *   rule's own sides sit in columns of their own to its left and right
  * - policy (auto-approve bypass) nodes get their own side lane to the right of the
  *   widest row, so their long trigger→policy→end edge routes through empty space
  *   instead of under the chain's boxes
  */
 function autoLayout(nodes: Node[], edges: Edge[]): Node[] {
-  const CX = 320 // main-column center
-  const SP = 240 // horizontal pitch (cards are 156 wide → ≥84px clear gap)
-  const ROW = 200 // vertical pitch (tallest card is 128 → ≥72px clear gap for arrows)
+  const CX = 320 // main-flow column
+  const LANE = 196 // column pitch: a card (156) and 40 clear, so neighbouring lanes never touch
+  const GAP = 196 // two cards in a row are never closer than this
+  const ROW = 210 // vertical pitch (tallest card is 136 → ≥74px clear for lines and their controls)
   const TOP = 30
 
-  // Journeys may loop (reschedule -> back to scheduling); find the cycle
-  // back-edges with a DFS from the trigger and layer WITHOUT them, or the
-  // longest-path relaxation below never settles.
-  const out = new Map<string, Edge[]>()
-  for (const e of edges) out.set(e.source, [...(out.get(e.source) ?? []), e])
-  const back = new Set<string>()
-  const state = new Map<string, number>() // 0 unvisited · 1 on stack · 2 done
-  const dfs = (id: string) => {
-    state.set(id, 1)
-    for (const e of out.get(id) ?? []) {
-      const st = state.get(e.target) ?? 0
-      if (st === 1) back.add(e.id)
-      else if (st === 0) dfs(e.target)
-    }
-    state.set(id, 2)
-  }
-  dfs('trigger')
-  const layerEdges = edges.filter((e) => !back.has(e.id))
+  const depth = rows(nodes as GNode[], edges as GEdge[])
+  const start = startOf(nodes as GNode[]) ?? 'trigger'
 
-  // Longest-path depth from the trigger (relaxation; graphs are tiny).
-  const depth = new Map<string, number>([['trigger', 0]])
-  for (let pass = 0; pass <= nodes.length; pass++) {
-    let changed = false
-    for (const e of layerEdges) {
-      const ds = depth.get(e.source)
-      if (ds == null) continue
-      if ((depth.get(e.target) ?? -1) < ds + 1) {
-        depth.set(e.target, ds + 1)
-        changed = true
-      }
-    }
-    if (!changed) break
-  }
-
-  const lane = nodes.filter((n) => n.type === 'policy')
+  const policy = nodes.filter((n) => n.type === 'policy')
   const main = nodes.filter((n) => n.type !== 'policy')
   const maxD = Math.max(0, ...main.map((n) => depth.get(n.id) ?? 0))
 
-  const rows = new Map<number, Node[]>()
+  const byRow = new Map<number, Node[]>()
   for (const n of main) {
     const d = depth.get(n.id) ?? maxD + 1
-    rows.set(d, [...(rows.get(d) ?? []), n])
-  }
-  // Branch children align under their port: YES leaves bottom-left, NO
-  // bottom-right — seat them the same way so the lines never cross.
-  const branchRole = new Map<string, number>()
-  for (const e of edges) {
-    if (e.sourceHandle === 'yes') branchRole.set(e.target, -1)
-    else if (e.sourceHandle === 'no') branchRole.set(e.target, 1)
-  }
-  const pos = new Map<string, { x: number; y: number }>()
-  let widest = 1
-  for (const [d, row] of [...rows.entries()].sort((a, b) => a[0] - b[0])) {
-    widest = Math.max(widest, row.length)
-    row.sort(
-      (a, b) =>
-        (branchRole.get(a.id) ?? 0) - (branchRole.get(b.id) ?? 0) || a.position.x - b.position.x,
-    )
-    row.forEach((n, i) => {
-      pos.set(n.id, { x: CX + (i - (row.length - 1) / 2) * SP, y: TOP + d * ROW })
-    })
+    byRow.set(d, [...(byRow.get(d) ?? []), n])
   }
 
-  // Side lane: one pitch beyond the widest row, vertically midway between the
-  // bypass's source and target rows.
-  const laneX = CX + ((widest - 1) / 2) * SP + SP
-  for (const n of lane) {
-    const srcD = depth.get(edges.find((e) => e.target === n.id)?.source ?? 'trigger') ?? 0
+  const laneOf = lanes(nodes as GNode[], edges as GEdge[])
+  // Where steps share a lane on a row, an exception gives way: it ends a path, so it is never the main flow.
+  const sideLast = (a: Node, b: Node) => Number(a.type === 'exception') - Number(b.type === 'exception')
+  const pos = new Map<string, { x: number; y: number }>()
+  let rightmost = CX
+  for (const [d, row] of byRow) {
+    const byLane = new Map<number, Node[]>()
+    for (const n of row) {
+      const l = laneOf.get(n.id) ?? 0
+      byLane.set(l, [...(byLane.get(l) ?? []), n])
+    }
+    const order = [...byLane.keys()].sort((a, b) => a - b)
+    const put = (n: Node, x: number) => {
+      pos.set(n.id, { x, y: TOP + d * ROW })
+      rightmost = Math.max(rightmost, x)
+    }
+    // The main flow keeps its column. Whatever shares its row is placed
+    // outward from it — never on top of it, and never pushing it aside.
+    let right = -Infinity
+    let left = Infinity
+    for (const l of order.filter((l) => l >= 0)) {
+      for (const n of [...byLane.get(l)!].sort((a, b) => sideLast(a, b) || a.position.x - b.position.x)) {
+        const x = Math.max(CX + l * LANE, right + GAP)
+        put(n, x)
+        right = x
+        left = Math.min(left, x)
+      }
+    }
+    for (const l of order.filter((l) => l < 0).reverse()) {
+      for (const n of [...byLane.get(l)!].sort((a, b) => sideLast(a, b) || b.position.x - a.position.x)) {
+        const x = Math.min(CX + l * LANE, left - GAP)
+        put(n, x)
+        left = x
+      }
+    }
+  }
+
+  // Auto-approve side lane: one column beyond the widest row, vertically
+  // midway between the bypass's source and target rows.
+  const laneX = rightmost + GAP + 44
+  for (const n of policy) {
+    const srcD = depth.get(edges.find((e) => e.target === n.id)?.source ?? start) ?? 0
     const tgtD = depth.get(edges.find((e) => e.source === n.id)?.target ?? 'end') ?? maxD
     pos.set(n.id, { x: laneX, y: TOP + Math.round(((srcD + tgtD) / 2) * ROW) })
   }
@@ -697,7 +704,7 @@ function autoLayout(nodes: Node[], edges: Edge[]): Node[] {
 /** Blocks the left palette offers — drag onto the canvas (or click to add). */
 const BLOCKS: { type: BlockType; label: string }[] = [
   { type: 'approval', label: 'Approver' },
-  { type: 'condition', label: 'Condition' },
+  { type: 'condition', label: 'Rule' },
   { type: 'email', label: 'Email' },
   { type: 'sms', label: 'SMS' },
   { type: 'step', label: 'Journey step' },
@@ -710,14 +717,122 @@ const blockDefaults = (type: BlockType, firstRole?: string): WfData =>
   type === 'approval'
     ? { label: 'New approval', approverRole: firstRole }
     : type === 'condition'
-      ? { condition: 'Always' }
+      ? { condition: '' } // nothing chosen yet: the panel asks what to check
       : type === 'email'
         ? { label: 'Email notification', emailTrigger: EMAIL_TRIGGERS[0] }
         : type === 'sms'
           ? { label: 'SMS message', smsTrigger: SMS_TRIGGERS[0] }
           : type === 'step'
             ? { label: 'Journey step' }
-            : { label: 'Exception' }
+            : { label: 'Sent for review' }
+
+/** Always listened for — taking the keys away while one is held down would miss its release. */
+const DELETE_KEYS = ['Backspace', 'Delete']
+
+/** The start and the outcome are part of every workflow: they are never removed. */
+const fixed = (n: Node | undefined) => !n || n.type === 'trigger' || n.type === 'end' || n.id === 'end'
+
+/** An id no line in `among` uses. */
+const freshLineId = (among: Edge[], source: string, target: string, handle?: string | null) => {
+  const base = `e-${source}-${handle ?? 'x'}-${target}`
+  let id = base
+  let k = 2
+  while (among.some((e) => e.id === id)) id = `${base}-${k++}`
+  return id
+}
+
+/**
+ * Put lines where another line was. A step with several lines out follows the
+ * first of them, so the order of the lines is part of the workflow: a line
+ * that replaces another must take its place, not go to the back.
+ */
+const swapLine = (edges: Edge[], id: string, ...put: Edge[]): Edge[] => {
+  const at = edges.findIndex((e) => e.id === id)
+  if (at < 0) return [...edges, ...put]
+  return [...edges.slice(0, at), ...put, ...edges.slice(at + 1)]
+}
+
+/**
+ * The drawing without one step. Lines that led to it carry on to where it
+ * led, each in the place of the line it replaces, so the flow is joined back
+ * together as it was.
+ */
+function withoutStep(nodes: Node[], edges: Edge[], id: string): { nodes: Node[]; edges: Edge[]; healed: boolean } {
+  const step = nodes.find((n) => n.id === id)
+  const isBypass = (target: string) => nodes.find((n) => n.id === target)?.type === 'policy'
+  // Where the step led: the line a request follows out of it. The auto-approve
+  // card is a bypass, not a step on the way — joining the flow around it would
+  // draw a line from the start straight to the outcome.
+  const followed = step?.type === 'policy' ? undefined : edges.find((e) => e.source === id && e.target !== id && !isBypass(e.target))
+  const onward = followed?.target ?? null
+  const put: Edge[] = []
+  let healed = false
+  for (const e of edges) {
+    if (e.source === id) continue
+    if (e.target !== id) {
+      put.push(e)
+      continue
+    }
+    if (!onward || e.source === onward) continue
+    put.push(
+      decorateEdge({
+        id: freshLineId([...edges, ...put], e.source, onward, e.sourceHandle),
+        source: e.source,
+        target: onward,
+        sourceHandle: e.sourceHandle,
+      }),
+    )
+    healed = true
+  }
+  // Two lines between the same steps are one line: the first keeps its place.
+  const met = new Set<string>()
+  const next = put.filter((e) => {
+    const key = `${e.source}|${e.sourceHandle ?? ''}|${e.target}`
+    if (met.has(key)) return false
+    met.add(key)
+    return true
+  })
+  return { nodes: nodes.filter((n) => n.id !== id), edges: next, healed }
+}
+
+/** A question asked over the canvas. Takes the keyboard while it is open and hands it back after. */
+function CanvasDialog({ label, onClose, children }: { label: string; onClose: () => void; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const close = useRef(onClose)
+  close.current = onClose
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null
+    const stops = () => [...(ref.current?.querySelectorAll<HTMLElement>('button:not(:disabled)') ?? [])]
+    stops()[0]?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        close.current()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const all = stops()
+      if (all.length === 0) return
+      const at = all.indexOf(document.activeElement as HTMLElement)
+      const to = e.shiftKey ? (at <= 0 ? all.length - 1 : at - 1) : at === all.length - 1 || at < 0 ? 0 : at + 1
+      e.preventDefault()
+      all[to].focus()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      if (opener && document.contains(opener)) opener.focus()
+    }
+  }, [])
+  return createPortal(
+    <div className="scrim" style={{ zIndex: 200 }} onClick={onClose}>
+      <div ref={ref} className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={label}>
+        {children}
+      </div>
+    </div>,
+    document.body,
+  )
+}
 
 export default function ApprovalCanvas(props: { workflow: ApprovalWorkflow; onClose: () => void; onSaved: (w: ApprovalWorkflow) => void }) {
   // Portal onto the shell element (not <body>): escapes the content subtree's
@@ -736,6 +851,8 @@ export default function ApprovalCanvas(props: { workflow: ApprovalWorkflow; onCl
 function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: ApprovalWorkflow; onClose: () => void; onSaved: (w: ApprovalWorkflow) => void }) {
   const { roles } = useConfig()
   const { toastMsg: flash } = useStore()
+  const flashRef = useRef(flash)
+  flashRef.current = flash
   const roleName = useCallback((k: string) => roles.find((r: Role) => r.key === k)?.name ?? k, [roles])
 
   const seed = useMemo(() => seedGraph(workflow, roleName), [workflow, roleName])
@@ -791,46 +908,80 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   const selected = nodes.find((n) => n.id === selId) ?? null
 
   const onConnect = useCallback(
-    (c: Connection) =>
-      setEdges((eds) => addEdge(decorateEdge({ ...c, id: `e-${c.source}-${c.target}-${Date.now()}` } as Edge), eds)),
+    (c: Connection) => {
+      rememberRef.current()
+      setEdges((eds) => addEdge(decorateEdge({ ...c, id: `e-${c.source}-${c.target}-${Date.now()}` } as Edge), eds))
+    },
     [setEdges],
   )
 
-  /** Lines the engine could never follow are refused as they are drawn: nothing
-   *  leaves an outcome (exception / end), and a rule gets one line per answer. */
-  const isValidConnection = useCallback(
-    (c: Connection | Edge) => {
-      const src = nodesRef.current.find((n) => n.id === c.source)
-      if (!src || c.source === c.target) return false
-      if (src.type === 'exception' || src.type === 'end') return false
-      if (src.type === 'condition') {
-        // A line may only leave a rule from its YES or NO port. In loose mode a
-        // drag that ENDS on one of the rule's other ports would otherwise make
-        // the rule the source of an unmarked line: never followed, not drawn.
-        if (c.sourceHandle !== 'yes' && c.sourceHandle !== 'no') return false
-        return !edgesRef.current.some((e) => e.source === c.source && e.sourceHandle === c.sourceHandle)
-      }
-      return true
+  /**
+   * Why a line can't be drawn, or null when it can. Lines a request could
+   * never follow are refused as they are drawn: nothing leaves an outcome, a
+   * rule has one line per answer, and any other step leads to one next step.
+   */
+  const whyNot = useCallback((c: { source: string | null; target: string | null; sourceHandle?: string | null }) => {
+    const src = nodesRef.current.find((n) => n.id === c.source)
+    const tgt = nodesRef.current.find((n) => n.id === c.target)
+    if (!src || !tgt || c.source === c.target) return 'A line joins two different steps'
+    if (src.type === 'exception' || src.type === 'end') return 'Nothing follows an outcome'
+    if (src.type === 'policy' || tgt.type === 'policy') return 'The auto-approve card is set by the workflow’s policy, not drawn'
+    if (tgt.type === 'trigger') return 'Nothing leads back to the start'
+    if (src.type === 'condition') {
+      // A line may only leave a rule from its YES or NO port. In loose mode a
+      // drag that ENDS on one of the rule's other ports would otherwise make
+      // the rule the source of an unmarked line: never followed, not drawn.
+      if (c.sourceHandle !== 'yes' && c.sourceHandle !== 'no') return 'A rule’s lines leave from YES or NO'
+      return edgesRef.current.some((e) => e.source === c.source && e.sourceHandle === c.sourceHandle)
+        ? `This rule already has a line for ${c.sourceHandle === 'yes' ? 'YES' : 'NO'} — remove it first, or use the rule’s panel`
+        : null
+    }
+    const leads = edgesRef.current.some(
+      (e) => e.source === c.source && nodesRef.current.find((n) => n.id === e.target)?.type !== 'policy',
+    )
+    return leads ? 'A step leads to one next step — add a rule to go two ways' : null
+  }, [])
+
+  const isValidConnection = useCallback((c: Connection | Edge) => whyNot(c) === null, [whyNot])
+
+  /** A line that was refused says why, so the refusal is not a mystery. */
+  const onConnectEnd = useCallback(
+    (_: MouseEvent | TouchEvent, state: FinalConnectionState) => {
+      if (state.isValid || !state.fromNode || !state.toNode || !state.fromHandle) return
+      // In loose mode a line can be dragged from either end.
+      const forward = state.fromHandle.type === 'source'
+      const why = whyNot({
+        source: forward ? state.fromNode.id : state.toNode.id,
+        target: forward ? state.toNode.id : state.fromNode.id,
+        sourceHandle: forward ? state.fromHandle.id : state.toHandle?.id,
+      })
+      if (why) flashRef.current(why, 'danger')
     },
-    [],
+    [whyNot],
   )
 
-  /** The keyboard must not remove what the Delete button refuses to: the start
-   *  of the flow and its final outcome. */
+  /** Steps are removed one way only — healed, confirmed and undoable — so the
+   *  keyboard hands them to that path instead of cutting them out itself. */
+  const removeStepsRef = useRef<(ids: string[], lineIds?: string[]) => void>(() => {})
+  const rememberRef = useRef<() => void>(() => {})
+  /** True while a menu or a question is open: the keyboard belongs to it. */
+  const busyRef = useRef(false)
   const onBeforeDelete = useCallback(
     async ({ nodes: doomed, edges: cut }: { nodes: Node[]; edges: Edge[] }) => {
-      const kept = doomed.filter((n) => n.type !== 'trigger' && n.id !== 'end')
-      if (kept.length === doomed.length) return { nodes: doomed, edges: cut }
-      const keptIds = new Set(kept.map((n) => n.id))
-      const removedIds = new Set(doomed.map((n) => n.id))
-      return {
-        nodes: kept,
-        // Lines are only cut when they touch a step that is really going, or
-        // were selected on their own.
-        edges: cut.filter(
-          (e) => keptIds.has(e.source) || keptIds.has(e.target) || (!removedIds.has(e.source) && !removedIds.has(e.target)),
-        ),
+      if (busyRef.current) return false
+      if (doomed.length === 0) {
+        if (cut.length) rememberRef.current()
+        return { nodes: [], edges: cut }
       }
+      // `cut` also lists the lines of the doomed steps, and a selection box
+      // marks those lines selected too. Only a line chosen on its own is the
+      // user's to remove — the lines of a removed step are joined back together.
+      const touches = (e: Edge) => doomed.some((n) => n.id === e.source || n.id === e.target)
+      removeStepsRef.current(
+        doomed.map((n) => n.id),
+        cut.filter((e) => e.selected && !touches(e)).map((e) => e.id),
+      )
+      return false
     },
     [],
   )
@@ -844,6 +995,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   )
 
   const addNode = (type: BlockType, position?: { x: number; y: number }) => {
+    rememberRef.current()
     const id = nextId(type)
     const data: WfData = blockDefaults(type, roles[0]?.name)
     setNodes((ns) => [...ns, sized({ id, type, position: position ?? { x: 560, y: 120 + ns.length * 40 }, data })])
@@ -854,7 +1006,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
 
   /* ---------- drag & drop from the blocks palette ---------- */
 
-  const { screenToFlowPosition, fitView } = useReactFlow()
+  const { screenToFlowPosition, fitView, setCenter, getZoom } = useReactFlow()
 
   /** Is a flow-space point inside a node's box? */
   const hitNode = (p: { x: number; y: number }, n: Node) => {
@@ -865,18 +1017,27 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
 
   /** Nearest edge whose segment passes within ~55px of the point (drop "between two boxes"). */
   const nearestEdge = (p: { x: number; y: number }): Edge | null => {
-    const center = (id: string) => {
+    const box = (id: string) => {
       const n = nodes.find((n) => n.id === id)
       if (!n) return null
       const w = (n.width as number) ?? DIMS[n.type as string]?.width ?? 184
       const h = (n.height as number) ?? DIMS[n.type as string]?.height ?? 80
-      return { x: n.position.x + w / 2, y: n.position.y + h / 2 }
+      return { x: n.position.x, y: n.position.y, w, h }
     }
+    const bypass = new Set(nodes.filter((n) => n.type === 'policy').map((n) => n.id))
     let best: { e: Edge; d: number } | null = null
     for (const e of edges) {
-      const a = center(e.source)
-      const b = center(e.target)
-      if (!a || !b) continue
+      if (bypass.has(e.source) || bypass.has(e.target)) continue
+      const from = box(e.source)
+      const to = box(e.target)
+      if (!from || !to) continue
+      // A rule's lines leave by their own ports, so YES and NO can be told
+      // apart even when both lead to the same step.
+      const a =
+        e.sourceHandle === 'yes' || e.sourceHandle === 'no'
+          ? { x: from.x + from.w * (e.sourceHandle === 'yes' ? 0.25 : 0.75), y: from.y + from.h }
+          : { x: from.x + from.w / 2, y: from.y + from.h / 2 }
+      const b = { x: to.x + to.w / 2, y: to.y + to.h / 2 }
       const l2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2
       const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2))
       const d = Math.hypot(p.x - (a.x + t * (b.x - a.x)), p.y - (a.y + t * (b.y - a.y)))
@@ -887,6 +1048,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
 
   /** Attach an email notification to an approval step (envelope badge on the box). */
   const attachEmail = (nodeId: string) => {
+    rememberRef.current()
     setNodes((ns) =>
       ns.map((n) =>
         n.id === nodeId
@@ -898,31 +1060,227 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     flash('Email notification attached — pick a template on the right')
   }
 
-  /** Splice a block into an existing edge (the snap drop), then auto-arrange so
-   *  the new step falls in line with the flow. */
-  const spliceIntoEdge = (type: BlockType, edge: Edge, p: { x: number; y: number }) => {
-    const id = nextId(type)
-    const data: WfData = blockDefaults(type, roles[0]?.name)
-    const node = sized({ id, type, position: { x: p.x - 92, y: p.y - 36 }, data })
-    const newEdges = [
-      ...edges.filter((e) => e.id !== edge.id),
-      decorateEdge({ id: `e-${edge.source}-${id}`, source: edge.source, target: id, sourceHandle: edge.sourceHandle }),
-      // A spliced condition continues down its YES branch; NO stays free to wire.
-      // An exception is terminal — it takes the incoming edge and goes no further.
-      ...(type === 'exception'
-        ? []
-        : [decorateEdge({ id: `e-${id}-${edge.target}`, source: id, target: edge.target, sourceHandle: type === 'condition' ? 'yes' : undefined })]),
-    ]
-    setNodes(autoLayout([...nodes, node], newEdges))
-    setEdges(newEdges)
-    setSelId(id)
-    measureSoon(id)
-    setTimeout(() => fitView({ padding: 0.2, maxZoom: 1, duration: 300 }), 90)
-    flash(
-      type === 'email' || type === 'sms'
-        ? `${type === 'sms' ? 'SMS' : 'Email'} step added to the flow — pick a template on the right`
-        : 'Step added and aligned with the flow',
+  /* ---------- history: every change to the drawing can be undone ---------- */
+
+  /** Timers lighting a test's path, step by step. */
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
+  const history = useRef<{ nodes: Node[]; edges: Edge[] }[]>([])
+  const [canUndo, setCanUndo] = useState(false)
+  /** The field last typed into, so a burst of typing is one step back — not one per letter. */
+  const typing = useRef<{ key: string; at: number } | null>(null)
+  const remember = () => {
+    history.current.push({ nodes: nodesRef.current, edges: edgesRef.current })
+    if (history.current.length > 40) history.current.shift()
+    typing.current = null
+    setCanUndo(true)
+  }
+  rememberRef.current = remember
+  const undo = () => {
+    const last = history.current.pop()
+    if (!last) return
+    typing.current = null
+    // Anything being asked about the drawing as it was is no longer a question.
+    setMenu(null)
+    setGuard(null)
+    setDoomedRule(null)
+    // The drawing comes back; what was selected or lit by a test at the time does not.
+    timersRef.current.forEach(clearTimeout)
+    timersRef.current = []
+    setNodes(
+      last.nodes.map((n) =>
+        n.selected || (n.data as WfData).lit ? { ...n, selected: false, data: { ...n.data, lit: false } } : n,
+      ),
     )
+    setEdges(
+      last.edges.map((e) =>
+        e.selected || e.className?.includes('wfc-edge--lit')
+          ? { ...e, selected: false, className: e.className?.replace(/\s*wfc-edge--lit/, '') || undefined }
+          : e,
+      ),
+    )
+    setSelId(null)
+    setCanUndo(history.current.length > 0)
+    last.nodes.forEach((n) => measureSoon(n.id))
+    flash('Undone')
+  }
+  const undoRef = useRef(undo)
+  undoRef.current = undo
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return
+      if (busyRef.current) return
+      const el = e.target as HTMLElement | null
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return
+      e.preventDefault()
+      undoRef.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  /* ---------- adding steps ---------- */
+
+  /** An id no line in this drawing uses. */
+  const lineId = (source: string, target: string, handle?: string | null) =>
+    freshLineId(edgesRef.current, source, target, handle)
+
+  /** Put the drawing in its new shape, tidy it, and bring it into view. */
+  const redraw = (nextNodes: Node[], nextEdges: Edge[], select?: string) => {
+    setNodes(autoLayout(nextNodes, nextEdges).map((n) => (select ? { ...n, selected: n.id === select } : n)))
+    setEdges(nextEdges)
+    if (select) setSelId(select)
+    nextNodes.forEach((n) => measureSoon(n.id))
+    setTimeout(() => fitView({ padding: 0.2, maxZoom: 1, duration: 300 }), 90)
+  }
+
+  /**
+   * Put a new step on a line. A rule arrives complete: both of its answers
+   * lead on to the step that followed the line, so "otherwise" is never left
+   * undrawn — the panel then asks what should be different on each side.
+   */
+  const insertOnEdge = (type: BlockType, edge: Edge, p?: { x: number; y: number }) => {
+    remember()
+    const id = nextId(type)
+    const src = nodes.find((n) => n.id === edge.source)
+    const tgt = nodes.find((n) => n.id === edge.target)
+    const at = p ?? {
+      x: ((src?.position.x ?? 0) + (tgt?.position.x ?? 0)) / 2 + 78,
+      y: ((src?.position.y ?? 0) + (tgt?.position.y ?? 0)) / 2 + 50,
+    }
+    const node = sized({ id, type, position: { x: at.x - 78, y: at.y - 50 }, data: blockDefaults(type, roles[0]?.name) })
+    const onward =
+      type === 'condition'
+        ? (['yes', 'no'] as const).map((answer) =>
+            decorateEdge({ id: lineId(id, edge.target, answer), source: id, target: edge.target, sourceHandle: answer }),
+          )
+        : [decorateEdge({ id: lineId(id, edge.target), source: id, target: edge.target })]
+    const next = swapLine(
+      edges,
+      edge.id,
+      decorateEdge({ id: lineId(edge.source, id, edge.sourceHandle), source: edge.source, target: id, sourceHandle: edge.sourceHandle }),
+      ...onward,
+    )
+    redraw([...nodes, node], next, id)
+    flash(
+      type === 'condition'
+        ? 'Rule added — choose what it checks'
+        : type === 'email' || type === 'sms'
+          ? `${type === 'sms' ? 'Text message' : 'Email'} added — pick a template on the right`
+          : 'Step added to the flow',
+    )
+  }
+
+  /** Dropping a block from the palette onto a line. */
+  const spliceIntoEdge = (type: BlockType, edge: Edge, p: { x: number; y: number }) => insertOnEdge(type, edge, p)
+
+  /** Add a step after one that has nothing following it (or on an unanswered side of a rule). */
+  const appendFrom = (nodeId: string, answer: Answer | null, type: BlockType) => {
+    const src = nodes.find((n) => n.id === nodeId)
+    if (!src) return
+    remember()
+    const id = nextId(type)
+    const node = sized({
+      id,
+      type,
+      position: { x: src.position.x + (answer === 'yes' ? -120 : answer === 'no' ? 120 : 0), y: src.position.y + 210 },
+      data: blockDefaults(type, roles[0]?.name),
+    })
+    const next = [
+      ...edges,
+      decorateEdge({ id: lineId(nodeId, id, answer), source: nodeId, target: id, sourceHandle: answer ?? undefined }),
+    ]
+    redraw([...nodes, node], next, id)
+  }
+
+  /* ---------- the "what happens next?" menu ---------- */
+
+  const [menu, setMenu] = useState<{ at: { x: number; y: number }; target: AddTarget } | null>(null)
+  const openMenu = useCallback((at: { x: number; y: number }, target: AddTarget) => setMenu({ at, target }), [])
+  /** A line an exception is about to be placed on: ask whether it always stops there. */
+  const [guard, setGuard] = useState<Edge | null>(null)
+
+  const pick = (kind: StepKind) => {
+    const target = menu?.target
+    setMenu(null)
+    if (!target) return
+    if (target.kind === 'open') {
+      appendFrom(target.nodeId, target.answer, kind)
+      return
+    }
+    const edge = edges.find((e) => e.id === target.edgeId)
+    if (!edge) return
+    const onBypass = [edge.source, edge.target].some((id) => nodes.find((n) => n.id === id)?.type === 'policy')
+    if (onBypass) return
+    if (kind === 'exception') setGuard(edge)
+    else insertOnEdge(kind, edge)
+  }
+
+  const removeLine = () => {
+    const target = menu?.target
+    setMenu(null)
+    if (target?.kind !== 'edge') return
+    remember()
+    setEdges((es) => es.filter((e) => e.id !== target.edgeId))
+    flash('Connection removed')
+  }
+
+  /** What stopping the flow on the guarded line would cut off. */
+  const guardCut = useMemo(() => {
+    if (!guard) return []
+    const next = [
+      ...edges.filter((e) => e.id !== guard.id),
+      { id: '__stop__', source: guard.source, target: '__stop__', sourceHandle: guard.sourceHandle },
+    ]
+    return cutOff(nodes as GNode[], edges as GEdge[], next as GEdge[])
+  }, [guard, nodes, edges])
+
+  /** Exception "only in some cases": a rule decides, and the flow carries on otherwise. */
+  const stopSometimes = () => {
+    const edge = guard
+    setGuard(null)
+    if (!edge) return
+    remember()
+    const rule = nextId('condition')
+    const exc = nextId('exception')
+    const src = nodes.find((n) => n.id === edge.source)
+    const at = { x: src?.position.x ?? 320, y: (src?.position.y ?? 0) + 210 }
+    const added = [
+      sized({ id: rule, type: 'condition', position: at, data: blockDefaults('condition') }),
+      sized({ id: exc, type: 'exception', position: { x: at.x - 120, y: at.y + 210 }, data: blockDefaults('exception') }),
+    ]
+    const next = swapLine(
+      edges,
+      edge.id,
+      decorateEdge({ id: lineId(edge.source, rule, edge.sourceHandle), source: edge.source, target: rule, sourceHandle: edge.sourceHandle }),
+      decorateEdge({ id: lineId(rule, exc, 'yes'), source: rule, target: exc, sourceHandle: 'yes' }),
+      decorateEdge({ id: lineId(rule, edge.target, 'no'), source: rule, target: edge.target, sourceHandle: 'no' }),
+    )
+    redraw([...nodes, ...added], next, rule)
+    flash('Rule added — choose when a request should stop for review')
+  }
+
+  /** Exception "always": everything after this point is no longer reached. */
+  const stopAlways = () => {
+    const edge = guard
+    setGuard(null)
+    if (!edge) return
+    remember()
+    const exc = nextId('exception')
+    const src = nodes.find((n) => n.id === edge.source)
+    const gone = new Set(guardCut.filter((n) => n.type !== 'trigger' && n.type !== 'end').map((n) => n.id))
+    const kept = nodes.filter((n) => !gone.has(n.id))
+    const next = swapLine(
+      edges,
+      edge.id,
+      decorateEdge({ id: lineId(edge.source, exc, edge.sourceHandle), source: edge.source, target: exc, sourceHandle: edge.sourceHandle }),
+    ).filter((e) => !gone.has(e.source) && !gone.has(e.target))
+    const node = sized({
+      id: exc,
+      type: 'exception',
+      position: { x: src?.position.x ?? 320, y: (src?.position.y ?? 0) + 210 },
+      data: blockDefaults('exception'),
+    })
+    redraw([...kept, node], next, exc)
   }
 
   const onDragOver = (e: React.DragEvent) => {
@@ -972,20 +1330,185 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   }
 
   const arrange = () => {
+    remember()
     setNodes((ns) => autoLayout(ns, edges))
     // Re-frame once the new positions have applied.
     setTimeout(() => fitView({ padding: 0.2, maxZoom: 1, duration: 300 }), 60)
     flash('Auto-arranged')
   }
 
-  const patchData = (patch: Partial<WfData>) =>
+  const patchData = (patch: Partial<WfData>) => {
+    const key = `${selId}:${Object.keys(patch).sort().join(',')}`
+    const now = Date.now()
+    const sameBurst = typing.current?.key === key && now - typing.current.at < 1500
+    if (!sameBurst) remember()
+    typing.current = { key, at: now }
     setNodes((ns) => ns.map((n) => (n.id === selId ? { ...n, data: { ...n.data, ...patch } } : n)))
+  }
+
+  /* ---------- removing steps ---------- */
+
+  /** A rule about to be removed: confirmed first, because its sides go with it. */
+  const [doomedRule, setDoomedRule] = useState<string | null>(null)
+  busyRef.current = !!(menu || guard || doomedRule)
+
+  /**
+   * The drawing once a rule is taken out. Requests go on to where its answers
+   * rejoined — or, when only one answer carried on, to the first step of that
+   * answer, so the flow after the rule is kept whole.
+   */
+  const withoutRule = (id: string) => {
+    const onward = afterRule(nodes as GNode[], edges as GEdge[], id)
+    const next: Edge[] = []
+    for (const e of edges) {
+      if (e.source === id) continue
+      if (e.target !== id) {
+        next.push(e)
+        continue
+      }
+      if (!onward || e.source === onward.id) continue
+      next.push(
+        decorateEdge({
+          id: freshLineId([...edges, ...next], e.source, onward.id, e.sourceHandle),
+          source: e.source,
+          target: onward.id,
+          sourceHandle: e.sourceHandle,
+        }),
+      )
+    }
+    // Steps that only existed on the rule's sides are no longer reached.
+    const gone = cutOff(nodes as GNode[], edges as GEdge[], next as GEdge[]).filter(
+      (n) => n.id !== id && !fixed(n as Node),
+    )
+    return { onward, gone, next }
+  }
+
+  const removeRule = () => {
+    const id = doomedRule
+    setDoomedRule(null)
+    if (!id) return
+    remember()
+    const { gone, next } = withoutRule(id)
+    const out = new Set([id, ...gone.map((n) => n.id)])
+    redraw(
+      nodes.filter((n) => !out.has(n.id)),
+      next.filter((e) => !out.has(e.source) && !out.has(e.target)),
+    )
+    setSelId(null)
+    flash('Rule removed')
+  }
+
+  /**
+   * Remove steps (and any lines selected with them), joining the flow back
+   * together around each. A rule is only ever removed alone, after the
+   * question about its sides has been answered.
+   */
+  const removeSteps = (ids: string[], lineIds: string[] = []) => {
+    const doomed = ids.map((id) => nodes.find((n) => n.id === id)).filter((n): n is Node => !fixed(n))
+    const rules = doomed.filter((n) => n.type === 'condition')
+    const steps = doomed.filter((n) => n.type !== 'condition')
+    if (steps.length === 0 && lineIds.length === 0) {
+      if (rules.length === 1) setDoomedRule(rules[0].id)
+      else if (rules.length > 1) flash('Rules are removed one at a time — select one and choose Remove rule')
+      return
+    }
+    remember()
+    let next = { nodes: nodes as Node[], edges: edges.filter((e) => !lineIds.includes(e.id)), healed: false }
+    let healed = false
+    for (const step of steps) {
+      next = withoutStep(next.nodes, next.edges, step.id)
+      healed = healed || next.healed
+    }
+    redraw(next.nodes, next.edges)
+    setSelId(null)
+    const what =
+      steps.length === 0
+        ? 'Connection removed'
+        : steps.length === 1
+          ? healed
+            ? 'Step removed — the flow was joined back together'
+            : 'Step removed'
+          : `${steps.length} steps removed`
+    flash(rules.length ? `${what}. Rules are removed one at a time` : what)
+  }
+  removeStepsRef.current = removeSteps
 
   const deleteSelected = () => {
-    if (!selId || selId === 'trigger' || selId === 'end') return
-    setNodes((ns) => ns.filter((n) => n.id !== selId))
-    setEdges((es) => es.filter((e) => e.source !== selId && e.target !== selId))
-    setSelId(null)
+    if (selId) removeSteps([selId])
+  }
+
+  /* ---------- a rule's two sides ---------- */
+
+  const chooseSide = (
+    ruleId: string,
+    answer: Answer,
+    choice: SideChoice,
+    anchor: { x: number; y: number },
+    destId?: string,
+  ) => {
+    const side = sideOf(nodes as GNode[], edges as GEdge[], ruleId, answer)
+    if (choice === 'addFirst') {
+      openMenu(anchor, side.edge ? { kind: 'edge', edgeId: side.edge.id } : { kind: 'open', nodeId: ruleId, answer })
+      return
+    }
+    if (choice === 'add') {
+      if (side.state === 'steps') {
+        const last = side.steps[side.steps.length - 1]
+        if (last.type === 'condition') {
+          selectStep(last.id) // a rule inside this side: its own panel continues the story
+          return
+        }
+        const onward = edges.find((e) => e.source === last.id)
+        openMenu(anchor, onward ? { kind: 'edge', edgeId: onward.id } : { kind: 'open', nodeId: last.id, answer: null })
+      } else if (side.edge) openMenu(anchor, { kind: 'edge', edgeId: side.edge.id })
+      else openMenu(anchor, { kind: 'open', nodeId: ruleId, answer })
+      return
+    }
+    const rule = nodes.find((n) => n.id === ruleId)
+    if (!rule) return
+    /** This answer's line, replaced in the place it held. */
+    const lineTo = (target: string) => {
+      const line = decorateEdge({ id: lineId(ruleId, target, answer), source: ruleId, target, sourceHandle: answer })
+      return side.edge ? swapLine(edges, side.edge.id, line) : [...edges, line]
+    }
+    if (choice === 'stop') {
+      remember()
+      const exc = nextId('exception')
+      const node = sized({
+        id: exc,
+        type: 'exception',
+        position: { x: rule.position.x + (answer === 'yes' ? -196 : 196), y: rule.position.y + 210 },
+        data: blockDefaults('exception'),
+      })
+      const next = lineTo(exc)
+      const left = cutOff(nodes as GNode[], edges as GEdge[], next as GEdge[]).filter((n) => !fixed(n as Node))
+      redraw([...nodes, node], next, ruleId)
+      if (left.length) {
+        flash(
+          `${left.length} step${left.length === 1 ? ' is' : 's are'} no longer reached: ${left.map((n) => stepName(n)).join(', ')}. Undo brings ${left.length === 1 ? 'it' : 'them'} back`,
+          'danger',
+        )
+      }
+      return
+    }
+    // Carry on: to the step that was chosen, else the nearest one there is.
+    const choices = continueChoices(nodes as GNode[], edges as GEdge[], ruleId, answer)
+    const dest = choices.find((n) => n.id === destId) ?? (destId ? undefined : choices[0])
+    if (!dest) {
+      flash('There is nowhere to continue to yet — add an outcome first', 'danger')
+      return
+    }
+    if (side.edge?.target === dest.id) return
+    remember()
+    const next = lineTo(dest.id)
+    // An exception nothing else leads to goes with the line that led to it.
+    const orphan =
+      side.state === 'stop' && side.target && !next.some((e) => e.target === side.target!.id) ? side.target.id : null
+    redraw(
+      nodes.filter((n) => n.id !== orphan),
+      next.filter((e) => e.source !== orphan),
+      ruleId,
+    )
   }
 
   /** Current canvas → the persisted shape (graph + derived chain levels). */
@@ -1045,7 +1568,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
       // The server refused (e.g. a rule with no NO path on a live workflow).
       // Keep the canvas open with the work intact and say why.
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-      flash(msg ?? 'Could not save the workflow')
+      flash(msg ?? 'Could not save the workflow', 'danger')
       return
     }
     onSaved(updated)
@@ -1053,13 +1576,78 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     onClose()
   }
 
+  /* ---------- reading the drawing ---------- */
+
+  /** Select a step and bring it into view (from the read-back, the to-do list, a rule's side). */
+  const selectStep = (id: string) => {
+    const n = nodes.find((x) => x.id === id)
+    if (!n) return
+    setSelId(id)
+    setNodes((ns) => ns.map((x) => ({ ...x, selected: x.id === id })))
+    setCenter(n.position.x + 78, n.position.y + 60, { zoom: Math.max(getZoom(), 0.8), duration: 300 })
+  }
+
+  /** Answers and steps with nothing leaving them: shown on the canvas as dashed stubs. */
+  const openEnds = useMemo(() => {
+    const ends = new Map<string, OpenEnds>()
+    for (const n of nodes) {
+      const leaving = edges.filter((e) => e.source === n.id)
+      if (n.type === 'condition') {
+        const yes = !leaving.some((e) => e.sourceHandle === 'yes')
+        const no = !leaving.some((e) => e.sourceHandle === 'no')
+        if (yes || no) ends.set(n.id, { yes, no, next: false })
+      } else if (!isOutcome(n as GNode) && n.type !== 'policy' && leaving.length === 0) {
+        ends.set(n.id, { yes: false, no: false, next: true })
+      }
+    }
+    return ends
+  }, [nodes, edges])
+
+  const canvasActions = useMemo(() => ({ openMenu, openEnds }), [openMenu, openEnds])
+
+  /** The drawing minus where things sit: dragging a card changes nothing that needs re-reading. */
+  const structure = useMemo(
+    () =>
+      JSON.stringify({
+        n: nodes.map((n) => [n.id, n.type, (({ lit: _lit, ...rest }) => rest)(n.data as WfData)]),
+        e: edges.map((e) => [e.source, e.target, e.sourceHandle ?? null]),
+      }),
+    [nodes, edges],
+  )
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const sentences = useMemo(() => describe(nodes as GNode[], edges as GEdge[]), [structure])
+
+  // What is left to finish is the server's call; the canvas only asks.
+  const [issues, setIssues] = useState<CheckIssue[]>([])
+  const [checkState, setCheckState] = useState<'checking' | 'done' | 'failed'>('checking')
+  const buildPatchRef = useRef(buildPatch)
+  buildPatchRef.current = buildPatch
+  useEffect(() => {
+    let live = true
+    const timer = setTimeout(() => {
+      const { graph, levels } = buildPatchRef.current()
+      checkWorkflow(graph, levels, workflow.trigger)
+        .then((found) => {
+          if (!live) return
+          setIssues(found)
+          setCheckState('done')
+        })
+        // No answer is not the same as nothing to finish: say it could not be checked.
+        .catch(() => live && setCheckState('failed'))
+    }, 450)
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+  }, [structure, workflow.trigger])
+
   /* ---------- test / simulation ---------- */
 
   const [simOpen, setSimOpen] = useState(false)
   const [sim, setSim] = useState({ format: 'IN_PERSON', notice: '', flagged: false })
   const [simResult, setSimResult] = useState<SimulateResult | null>(null)
   const simulate = useSimulateWorkflow(workflow.id)
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
 
   const clearLit = useCallback(() => {
     timersRef.current.forEach(clearTimeout)
@@ -1096,13 +1684,16 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
             setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, data: { ...n.data, lit: true } } : n)))
             if (i > 0) {
               const prev = res.path[i - 1]
-              setEdges((es) =>
-                es.map((e) =>
-                  e.source === prev && e.target === id
-                    ? { ...e, className: e.className ? `${e.className} wfc-edge--lit` : 'wfc-edge--lit' }
-                    : e,
-                ),
-              )
+              const followed = res.lines?.[i - 1]
+              setEdges((es) => {
+                // The engine names the line it followed. Two lines can join the
+                // same pair of steps (a rule's YES and NO), so never match by ends alone.
+                const line = (followed && es.find((e) => e.id === followed)) || es.find((e) => e.source === prev && e.target === id)
+                if (!line) return es
+                return es.map((e) =>
+                  e.id === line.id ? { ...e, className: e.className ? `${e.className} wfc-edge--lit` : 'wfc-edge--lit' } : e,
+                )
+              })
             }
           }, 350 * i),
         )
@@ -1110,7 +1701,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     } catch (e) {
       // Only blame the connection when there was no answer at all.
       const res = (e as { response?: { data?: { message?: string } } })?.response
-      flash(res ? (res.data?.message ?? 'The test could not be run') : 'Simulation failed — is the backend running?')
+      flash(res ? (res.data?.message ?? 'The test could not be run') : 'Simulation failed — is the backend running?', 'danger')
     }
   }
 
@@ -1199,10 +1790,91 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   )
 
   return (
+    <CanvasCtx.Provider value={canvasActions}>
     <div className="wfc wfc--card">
+      {menu && (
+        <AddMenu at={menu.at} target={menu.target} onPick={pick} onRemoveLine={removeLine} onClose={() => setMenu(null)} />
+      )}
+
+      {guard && (
+        <CanvasDialog label="Add an exception" onClose={() => setGuard(null)}>
+          <div className="modal__head">
+            <h3>When should requests stop here?</h3>
+            <p>An exception ends the path: the request stops and is sent for review.</p>
+          </div>
+          <div className="wfc-guard">
+            <button className="wfc-guard__choice" onClick={stopSometimes}>
+              <span className="wfc-guard__name">Only in some cases</span>
+              <span className="wfc-guard__hint">
+                Adds a rule. Requests that match it stop for review; all others carry on to{' '}
+                <b>{stepName(nodes.find((n) => n.id === guard.target) as GNode | undefined)}</b>.
+              </span>
+            </button>
+            <button className="wfc-guard__choice" onClick={stopAlways}>
+              <span className="wfc-guard__name">Always stop here</span>
+              <span className="wfc-guard__hint">
+                Every request stops for review at this point.{' '}
+                {guardCut.length > 0 && (
+                  <>
+                    {guardCut.length} step{guardCut.length === 1 ? '' : 's'} after it will no longer be reached:{' '}
+                    <b>{guardCut.map((n) => stepName(n)).join(', ')}</b>.
+                  </>
+                )}
+              </span>
+            </button>
+          </div>
+          <div className="modal__foot">
+            <button className="btn btn--outline" onClick={() => setGuard(null)}>
+              Cancel
+            </button>
+          </div>
+        </CanvasDialog>
+      )}
+
+      {doomedRule &&
+        (() => {
+          const rule = nodes.find((n) => n.id === doomedRule)
+          const { onward, gone } = withoutRule(doomedRule)
+          return (
+            <CanvasDialog label="Remove rule" onClose={() => setDoomedRule(null)}>
+              <div className="modal__head">
+                <h3>Remove this rule?</h3>
+                <p>
+                  {((rule?.data ?? {}) as WfData).condition?.trim() === ''
+                    ? 'This rule'
+                    : `“${stepName(rule as GNode | undefined)}”`}{' '}
+                  will be removed.{' '}
+                  {onward ? (
+                    <>
+                      Every request will go straight on to <b>{stepName(onward)}</b>.
+                    </>
+                  ) : (
+                    'Nothing will follow the step before it until you add the next one.'
+                  )}{' '}
+                  {gone.length > 0 && (
+                    <>
+                      {gone.length} step{gone.length === 1 ? '' : 's'} that {gone.length === 1 ? 'is' : 'are'} no longer reached
+                      will be removed too: <b>{gone.map((n) => stepName(n)).join(', ')}</b>.
+                    </>
+                  )}{' '}
+                  You can undo this.
+                </p>
+              </div>
+              <div className="modal__foot">
+                <button className="btn btn--outline" onClick={() => setDoomedRule(null)}>
+                  Cancel
+                </button>
+                <button className="btn btn--danger" onClick={removeRule}>
+                  Remove rule
+                </button>
+              </div>
+            </CanvasDialog>
+          )
+        })()}
+
       <div className="wfc-top">
         <div className="wfc-top__meta">
-          <div className="wfc-top__kicker">Approval canvas</div>
+          <div className="wfc-top__kicker">Workflow canvas</div>
           <div className="wfc-top__title">{workflow.name}</div>
         </div>
 
@@ -1268,6 +1940,9 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
             onConnect={onConnect}
             isValidConnection={isValidConnection}
             onBeforeDelete={onBeforeDelete}
+            deleteKeyCode={DELETE_KEYS}
+            onConnectEnd={onConnectEnd}
+            onNodeDragStart={() => rememberRef.current()}
             onNodeClick={(_, n) => setSelId(n.id)}
             onPaneClick={() => setSelId(null)}
             nodeTypes={nodeTypes}
@@ -1286,7 +1961,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
               nodeColor={(n) => SPEC[n.type as keyof typeof SPEC]?.rail ?? '#93a1b8'}
               maskColor="rgba(242, 244, 248, 0.7)"
             />
-            <CanvasToolbar onArrange={arrange} />
+            <CanvasToolbar onArrange={arrange} onUndo={undo} canUndo={canUndo} />
           </ReactFlow>
         </div>
 
@@ -1362,22 +2037,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
             </>
           ) : !selected ? (
             <>
-              <div className="wfc-inspector__empty">
-                Select a node to edit its rules.
-                <br />
-                <br />
-                Drag blocks from the <b>left panel</b> onto the canvas. Drag from a <b>handle</b> (the dot on a node’s edge) to
-                another node to connect steps, then <b>Test</b> a sample request to watch the route light up.
-              </div>
-              <div className="wfc-legend">
-                {(Object.keys(SPEC) as (keyof typeof SPEC)[]).map((k) => (
-                  <div key={k} className="wfc-legend__row">
-                    <span className="wfc-legend__dot" style={{ background: SPEC[k].rail }} />
-                    {SPEC[k].kicker}
-                    {k === 'condition' ? ' · branches yes / no' : k === 'policy' ? ' · auto-approve fast path' : k === 'email' ? ' · notification step' : k === 'sms' ? ' · candidate text message' : k === 'step' ? ' · candidate action (schedule, IDV…)' : k === 'exception' ? ' · terminal · e.g. condition NO' : ''}
-                  </div>
-                ))}
-              </div>
+              <WorkflowInWords sentences={sentences} issues={issues} state={checkState} onSelect={selectStep} />
             </>
           ) : (
             <>
@@ -1387,18 +2047,61 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                 </span>
                 <div>
                   <div className="wfc-node__kicker" style={{ color: selSpec!.rail }}>
-                    {selSpec!.kicker} rules
+                    {selected.type === 'condition' ? 'Rule' : selSpec!.kicker}
                   </div>
                   <div style={{ fontSize: 13.5, fontWeight: 650, color: 'var(--ink-0)' }}>
-                    {selData.label || selData.condition || '—'}
+                    {stepName(selected as GNode)}
                   </div>
                 </div>
               </div>
+              {selected.type === 'condition' ? (
+                <div className="wfc-inspector__body">
+                  <RulePanel
+                    rule={selected as GNode}
+                    nodes={nodes as GNode[]}
+                    edges={edges as GEdge[]}
+                    onCondition={(value) => patchData({ condition: value })}
+                    onSide={(answer, choice, anchor, destId) => chooseSide(selected.id, answer, choice, anchor, destId)}
+                    onSelect={selectStep}
+                    onRemove={() => removeSteps([selected.id])}
+                  />
+                </div>
+              ) : (
               <div className="wfc-inspector__body">
                 <label>
-                  Label
+                  {selected.type === 'exception' ? 'Name' : 'Label'}
                   <input className="input" value={selData.label ?? ''} onChange={(e) => patchData({ label: e.target.value })} />
                 </label>
+                {selected.type === 'exception' && (
+                  <>
+                    <label>
+                      Who reviews it
+                      <select className="select" value={selData.reviewerRole ?? ''} onChange={(e) => patchData({ reviewerRole: e.target.value })}>
+                        <option value="">Choose a role…</option>
+                        {roles.map((r: Role) => (
+                          <option key={r.key}>{r.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Reason
+                      <input
+                        className="input"
+                        value={selData.reason ?? ''}
+                        placeholder="Flagged critical — needs compliance review"
+                        onChange={(e) => patchData({ reason: e.target.value })}
+                      />
+                    </label>
+                    <div className="wfc-rule__readback">
+                      <div className="wfc-inspector__label">Reads as</div>
+                      Stop and send to {selData.reviewerRole || 'a reviewer'} for review
+                      {selData.reason ? `. Reason: ${selData.reason}` : ''}.
+                    </div>
+                    <div className="wfc-inspector__hint">
+                      Recorded with the workflow. Sending stopped requests to the reviewer arrives in a later release.
+                    </div>
+                  </>
+                )}
                 {selected.type === 'approval' && (
                   <label>
                     Approver role
@@ -1409,30 +2112,6 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                     </select>
                   </label>
                 )}
-                {selected.type === 'condition' && (
-                  <>
-                    <div className="wfc-inspector__label">Route to YES when</div>
-                    <div className="wfc-choice">
-                      {[
-                        { v: 'Always', d: 'Every request takes the YES branch.' },
-                        { v: 'In-person event', d: 'The event happens in person.' },
-                        { v: 'Virtual event', d: 'The event is virtual.' },
-                        { v: 'Short notice (under 14 days)', d: 'Less than 14 days of lead time.' },
-                        { v: 'Flagged critical', d: 'The requester flagged it critical.' },
-                      ].map((c) => (
-                        <button
-                          key={c.v}
-                          className={`wfc-choice__row${(selData.condition ?? 'Always') === c.v ? ' is-on' : ''}`}
-                          onClick={() => patchData({ condition: c.v })}
-                        >
-                          <span className="wfc-choice__name">{c.v}</span>
-                          <span className="wfc-choice__desc">{c.d}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-
                 {selected.type === 'email' && emailRules}
                 {selected.type === 'sms' && smsRules}
 
@@ -1467,16 +2146,18 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                   </>
                 )}
 
-                {selected.id !== 'trigger' && selected.id !== 'end' && (
+                {!fixed(selected) && (
                   <button className="btn btn--danger btn--sm" onClick={deleteSelected}>
-                    Delete node
+                    Remove step
                   </button>
                 )}
               </div>
+              )}
             </>
           )}
         </div>
       </div>
     </div>
+    </CanvasCtx.Provider>
   )
 }

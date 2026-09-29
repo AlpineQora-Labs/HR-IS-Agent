@@ -188,7 +188,7 @@ export default function EmailTemplateEditor() {
   // When editor becomes available, apply any pending content from API load
   useEffect(() => {
     if (editor && pendingContent.current !== null) {
-      editor.commands.setContent(pendingContent.current, false)
+      editor.commands.setContent(pendingContent.current, { emitUpdate: false })
       pendingContent.current = null
     }
   }, [editor])
@@ -208,7 +208,7 @@ export default function EmailTemplateEditor() {
         setStatus(t.status === 'ACTIVE' ? 'ACTIVE' : 'DRAFT')
         // Push content to editor — if editor isn't ready yet, pendingContent ref handles it
         if (editor) {
-          editor.commands.setContent(t.bodyHtml, false)
+          editor.commands.setContent(t.bodyHtml, { emitUpdate: false })
         } else {
           pendingContent.current = t.bodyHtml
         }

@@ -250,16 +250,6 @@ function Configuration() {
 }
 
 // Count of items in a localStorage-persisted builder store (POC persistence).
-function storedCount(key: string): number {
-  try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return 0
-    const v = JSON.parse(raw)
-    return Array.isArray(v) ? v.length : 0
-  } catch {
-    return 0
-  }
-}
 
 // The intake form persists as { rows: [{ slots: [...] }] } (older: { fields }).
 function intakeFieldCount(): number {

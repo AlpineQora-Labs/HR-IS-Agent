@@ -2,6 +2,7 @@ package com.taportal.domain.approval;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.taportal.api.ApprovalDtos.CheckIssue;
 import com.taportal.api.ApprovalDtos.SimulateRequest;
 import com.taportal.api.ApprovalDtos.SimulateResponse;
 import com.taportal.api.ApprovalDtos.WorkflowDto;
@@ -110,8 +111,7 @@ public class ApprovalWorkflowService {
 
     /** "off" unless the workflow routes live requests; otherwise its normalised definition. */
     private String liveSignature(ApprovalWorkflowRecord r) {
-        boolean live = r.isEnabled() && r.getTriggerType() != null
-                && ROUTED_TRIGGERS.contains(r.getTriggerType().toLowerCase());
+        boolean live = r.isEnabled() && routed(r.getTriggerType());
         return live ? readJson(r.getGraphJson()) + "|" + readJson(r.getLevelsJson()) : "off";
     }
 
@@ -139,7 +139,30 @@ public class ApprovalWorkflowService {
                 autoApprove,
                 new ApprovalRouteEngine.Facts(req.eventFormat(), req.daysNotice(), req.flaggedCritical()));
         return new SimulateResponse(
-                route.autoApproved(), route.path(), route.approvals(), route.notes(), route.problems());
+                route.autoApproved(), route.path(), route.approvals(), route.notes(), route.problems(), route.lines());
+    }
+
+    /**
+     * What is wrong or unfinished about a drawing, for the canvas to show as it
+     * is edited. Nothing is stored. The canvas never decides this itself.
+     *
+     * <p>An issue is only reported as holding the workflow back when a save
+     * would really be refused for it — that is, when the workflow's trigger is
+     * one that routes live requests (see {@link #requireSound}). Likewise a
+     * line that leads back only matters where a request is routed: in a
+     * design, going back to an earlier step is simply part of the journey.
+     */
+    public List<CheckIssue> check(JsonNode graph, JsonNode levels, String trigger) {
+        boolean held = routed(trigger);
+        return ApprovalRouteEngine.validate(graph, levels).stream()
+                .filter(i -> held || !ApprovalRouteEngine.LOOP_BACK.equals(i.code()))
+                .map(i -> new CheckIssue(i.code(), held && i.blocks(), i.nodeId(), i.message()))
+                .toList();
+    }
+
+    /** Matched the way live routing finds a workflow: by name, whatever the case. */
+    private static boolean routed(String trigger) {
+        return trigger != null && ROUTED_TRIGGERS.contains(trigger.toLowerCase());
     }
 
     /**
@@ -154,12 +177,13 @@ public class ApprovalWorkflowService {
      * while a rule in it is unanswerable. Drafts (disabled) always save.
      */
     private void requireSound(ApprovalWorkflowRecord rec) {
-        if (!rec.isEnabled() || rec.getTriggerType() == null
-                || !ROUTED_TRIGGERS.contains(rec.getTriggerType().toLowerCase())) {
+        if (!rec.isEnabled() || !routed(rec.getTriggerType())) {
             return;
         }
         List<ApprovalRouteEngine.Issue> issues =
-                ApprovalRouteEngine.validate(readGraph(rec), readJson(rec.getLevelsJson()));
+                ApprovalRouteEngine.validate(readGraph(rec), readJson(rec.getLevelsJson())).stream()
+                        .filter(ApprovalRouteEngine.Issue::blocks)
+                        .toList();
         if (issues.isEmpty()) {
             return;
         }

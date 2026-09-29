@@ -181,8 +181,8 @@ export default function SmsTemplatesView() {
     [templates],
   )
 
-  const columnDefs = useMemo<ColDef[]>(
-    () => [
+  const columnDefs = useMemo(
+    (): ColDef[] => [
       {
         field: 'name',
         headerName: 'Template Name',

@@ -1,5 +1,7 @@
 package com.taportal.api;
 
+import com.taportal.api.ApprovalDtos.CheckIssue;
+import com.taportal.api.ApprovalDtos.CheckRequest;
 import com.taportal.api.ApprovalDtos.SimulateRequest;
 import com.taportal.api.ApprovalDtos.SimulateResponse;
 import com.taportal.api.ApprovalDtos.WorkflowDto;
@@ -37,6 +39,12 @@ public class ApprovalWorkflowController {
     @DeleteMapping("/{key}")
     public void delete(@PathVariable String key) {
         service.delete(key);
+    }
+
+    /** What is left to finish on a drawing, as the canvas is edited. Stores nothing. */
+    @PostMapping("/check")
+    public List<CheckIssue> check(@RequestBody CheckRequest request) {
+        return service.check(request.graph(), request.levels(), request.trigger());
     }
 
     /** Evaluate a sample request against the workflow — the config-driven approval engine. */

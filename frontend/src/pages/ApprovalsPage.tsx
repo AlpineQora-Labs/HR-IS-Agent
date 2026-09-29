@@ -67,7 +67,7 @@ export default function ApprovalsPage() {
                 ? 'Fully approved'
                 : 'Step approved — moved to the next level',
           ),
-        onError: () => toastMsg('Could not update the request'),
+        onError: () => toastMsg('Could not update the request', 'danger'),
       },
     )
 

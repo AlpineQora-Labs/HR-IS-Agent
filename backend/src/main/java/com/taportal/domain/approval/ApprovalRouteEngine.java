@@ -3,6 +3,7 @@ package com.taportal.domain.approval;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.taportal.api.ApprovalDtos.RequiredApproval;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -61,18 +62,40 @@ public final class ApprovalRouteEngine {
      * @param problems plain-English reasons the route cannot be trusted as
      *                 drawn; when non-empty the caller must not treat the
      *                 approvals as the whole route
+     * @param lines    the line followed into each step of {@code path} after
+     *                 the first ("" when no line is drawn for it). Two lines
+     *                 can join the same two steps — a rule's YES and NO — so
+     *                 the path alone does not say which way a request went
      */
     public record Route(
             boolean autoApproved,
             List<String> path,
             List<RequiredApproval> approvals,
             List<String> notes,
-            List<String> problems) {
+            List<String> problems,
+            List<String> lines) {
     }
 
-    /** One reason a definition must not be switched on. */
-    public record Issue(String code, String nodeId, String message) {
+    /** BLOCKING issues stop a workflow being switched on; ADVICE is what is left to finish. */
+    public enum Severity { BLOCKING, ADVICE }
+
+    /** One thing about a definition that is wrong or unfinished. */
+    public record Issue(String code, Severity severity, String nodeId, String message) {
+
+        static Issue blocking(String code, String nodeId, String message) {
+            return new Issue(code, Severity.BLOCKING, nodeId, message);
+        }
+
+        static Issue advice(String code, String nodeId, String message) {
+            return new Issue(code, Severity.ADVICE, nodeId, message);
+        }
+
+        public boolean blocks() {
+            return severity == Severity.BLOCKING;
+        }
     }
+
+    static final String NOTHING_TO_CHECK = "A rule has nothing to check yet — choose what it checks.";
 
     private ApprovalRouteEngine() {
     }
@@ -100,12 +123,13 @@ public final class ApprovalRouteEngine {
 
         String start = startId(nodes, out);
         List<String> path = new ArrayList<>();
+        List<String> lines = new ArrayList<>();
         List<RequiredApproval> approvals = new ArrayList<>();
         // Auto-approve is a property of the request and the policy, not of the
         // drawing, so it is decided before the drawing is consulted.
         if (!autoApproved && start == null) {
             problems.add("This workflow has no starting point.");
-            return new Route(false, path, approvals, notes, problems);
+            return new Route(false, path, approvals, notes, problems, lines);
         }
         path.add(start != null ? start : LEGACY_START);
 
@@ -113,11 +137,13 @@ public final class ApprovalRouteEngine {
             notes.add("Request falls within the auto-approve policy — chain skipped.");
             String policy = firstOfType(nodes, "policy", "policy");
             if (policy != null) {
+                lines.add(lineBetween(out, path.get(path.size() - 1), policy));
                 path.add(policy);
             }
             String end = firstOfType(nodes, "end", "end");
+            lines.add(lineBetween(out, path.get(path.size() - 1), end != null ? end : "end"));
             path.add(end != null ? end : "end");
-            return new Route(true, path, approvals, notes, problems);
+            return new Route(true, path, approvals, notes, problems, lines);
         }
 
         String cur = start;
@@ -132,7 +158,9 @@ public final class ApprovalRouteEngine {
                 String rule = ruleText(curNode);
                 Boolean answer = evalRule(rule, facts);
                 if (answer == null) {
-                    problems.add("The rule “" + rule + "” can't be checked — it isn't a rule the system knows.");
+                    problems.add(rule.isBlank()
+                            ? NOTHING_TO_CHECK
+                            : "The rule “" + rule + "” can't be checked — it isn't a rule the system knows.");
                     break;
                 }
                 String want = answer ? "yes" : "no";
@@ -163,6 +191,7 @@ public final class ApprovalRouteEngine {
                 break; // cycle guard
             }
             path.add(target);
+            lines.add(next.path("id").asText(""));
             JsonNode tn = nodes.get(target);
             String targetType = tn == null ? "" : tn.path("type").asText();
             if ("approval".equals(targetType)) {
@@ -189,7 +218,7 @@ public final class ApprovalRouteEngine {
             problems.add("The route stops before reaching an outcome and asks nobody to approve"
                     + " \u2014 check the lines leaving the last step.");
         }
-        return new Route(false, path, approvals, notes, problems);
+        return new Route(false, path, approvals, notes, problems, lines);
     }
 
     /** Linear fallback when the canvas has never been saved: evaluate the level chain. */
@@ -200,7 +229,7 @@ public final class ApprovalRouteEngine {
         if (autoApproved) {
             notes.add("Request falls within the auto-approve policy — chain skipped.");
             path.add("end");
-            return new Route(true, path, approvals, notes, problems);
+            return new Route(true, path, approvals, notes, problems, noLines(path));
         }
         int i = 0;
         if (levels != null) {
@@ -211,8 +240,10 @@ public final class ApprovalRouteEngine {
                 if (answer == null) {
                     // Cannot tell whether this sign-off applies: require it
                     // rather than skip it, and say why.
-                    problems.add("Level " + i + " uses the rule “" + rule
-                            + "”, which the system can't check — the level is required to be safe.");
+                    problems.add((rule.isBlank()
+                            ? "Level " + i + " has a rule with nothing to check"
+                            : "Level " + i + " uses the rule “" + rule + "”, which the system can't check")
+                            + " — the level is required to be safe.");
                 }
                 if (answer == null || answer) {
                     String id = "lvl-" + lv.path("id").asText(String.valueOf(i));
@@ -224,15 +255,29 @@ public final class ApprovalRouteEngine {
             }
         }
         path.add("end");
-        return new Route(false, path, approvals, notes, problems);
+        return new Route(false, path, approvals, notes, problems, noLines(path));
+    }
+
+    /** A chain of levels has no lines drawn: one blank entry for each step after the first. */
+    private static List<String> noLines(List<String> path) {
+        return Collections.nCopies(Math.max(0, path.size() - 1), "");
     }
 
     /* ----------------------------------------------------------- validation */
 
     /**
-     * Everything that makes a definition unsafe to switch on. A rule must have
-     * a line for every answer it can give: "Always" can only answer YES, every
-     * other rule can answer either way.
+     * Everything wrong or unfinished about a definition. BLOCKING issues make it
+     * unsafe to switch on: a rule must have a line for every answer it can give
+     * ("Always" can only answer YES, every other rule can answer either way),
+     * and an approval must name who approves. ADVICE is the rest of the to-do
+     * list: steps nothing leads to, steps nothing follows, messages with no
+     * template chosen.
+     *
+     * <p>Lines are followed the way routing follows them: a step leads to the
+     * first line drawn out of it, a rule to the line of each answer it can
+     * give. So a step that is drawn and connected but that no request can come
+     * to is reported — and what is wrong with such a step holds nothing back,
+     * because it can't affect where a request goes.
      */
     public static List<Issue> validate(JsonNode graph, JsonNode levels) {
         List<Issue> issues = new ArrayList<>();
@@ -243,8 +288,10 @@ public final class ApprovalRouteEngine {
                     i++;
                     String rule = lv.path("condition").asText(ALWAYS);
                     if (!KNOWN_RULES.contains(rule)) {
-                        issues.add(new Issue("LEVEL_RULE_UNKNOWN", lv.path("id").asText(String.valueOf(i)),
-                                "Level " + i + " uses the rule “" + rule + "”, which the system can't check."));
+                        issues.add(Issue.blocking("LEVEL_RULE_UNKNOWN", lv.path("id").asText(String.valueOf(i)),
+                                rule.isBlank()
+                                        ? "Level " + i + " has a rule with nothing to check."
+                                        : "Level " + i + " uses the rule “" + rule + "”, which the system can't check."));
                     }
                 }
             }
@@ -256,61 +303,254 @@ public final class ApprovalRouteEngine {
         for (JsonNode n : graph.path("nodes")) {
             String id = n.path("id").asText();
             if (nodes.put(id, n) != null && duplicates.add(id)) {
-                issues.add(new Issue("DUPLICATE_STEP", id, "Two steps share the same identity, so one of them is ignored."));
+                issues.add(Issue.blocking("DUPLICATE_STEP", id, "Two steps share the same identity, so one of them is ignored."));
             }
         }
         Map<String, List<JsonNode>> out = new HashMap<>();
         graph.path("edges").forEach(e -> out.computeIfAbsent(e.path("source").asText(), k -> new ArrayList<>()).add(e));
-        if (startId(nodes, out) == null) {
-            issues.add(new Issue("NO_START", null, "This workflow has no starting point."));
+        String start = startId(nodes, out);
+        if (start == null) {
+            issues.add(Issue.blocking("NO_START", null, "This workflow has no starting point."));
         }
+        Set<String> connected = start == null ? Set.of() : reachable(start, out);
+        Walk walk = start == null ? Walk.NOWHERE : Walk.from(start, nodes, out);
 
         for (JsonNode n : nodes.values()) {
-            if (!"condition".equals(n.path("type").asText())) {
-                continue;
-            }
             String id = n.path("id").asText();
-            String rule = ruleText(n);
-            String named = "The rule “" + rule + "”";
-            if (!KNOWN_RULES.contains(rule)) {
-                issues.add(new Issue("RULE_UNKNOWN", id, named + " isn't one the system can check."));
+            String type = n.path("type").asText();
+            String named = named(n);
+            // With no start nothing is walked at all; that is reported on its own.
+            boolean met = start == null || walk.steps().contains(id);
+
+            List<Issue> own = new ArrayList<>();
+            if ("condition".equals(type)) {
+                validateRule(n, out.getOrDefault(id, List.of()), own);
+            } else if ("approval".equals(type)) {
+                if (text(n, "approverRole").isBlank()) {
+                    own.add(Issue.blocking("APPROVER_NO_ROLE", id,
+                            capital(named) + " has nobody to approve it — choose a role."));
+                }
+                if (n.path("data").path("emailAttached").asBoolean(false) && text(n, "emailTemplateId").isBlank()) {
+                    own.add(Issue.advice("MESSAGE_NO_TEMPLATE", id,
+                            "The email sent with " + named + " has no message chosen yet."));
+                }
+            } else if (("email".equals(type) && text(n, "emailTemplateId").isBlank())
+                    || ("sms".equals(type) && text(n, "smsTemplateId").isBlank())) {
+                own.add(Issue.advice("MESSAGE_NO_TEMPLATE", id, capital(named) + " has no message chosen yet."));
             }
-            int yes = 0;
-            int no = 0;
-            int unmarked = 0;
-            for (JsonNode e : out.getOrDefault(id, List.of())) {
-                String handle = e.path("sourceHandle").asText(null);
-                if ("yes".equals(handle)) {
-                    yes++;
-                } else if ("no".equals(handle)) {
-                    no++;
-                } else {
-                    unmarked++;
+            for (Issue issue : own) {
+                issues.add(met || !issue.blocks() ? issue : Issue.advice(issue.code(), issue.nodeId(), issue.message()));
+            }
+
+            boolean isStart = id.equals(start);
+            // The outcome belongs to every workflow and can't be taken out, so
+            // a workflow that always stops for review is not told to fix it.
+            // Paths that end nowhere are reported where they end: an open end,
+            // a line that leads back, a line to a step that is gone.
+            boolean isEnd = "end".equals(type) || "end".equals(id);
+            if (!isStart && !isEnd && !isPolicy(n, id) && start != null) {
+                if (!connected.contains(id)) {
+                    issues.add(Issue.advice("UNREACHABLE", id,
+                            capital(named) + " isn't connected to the flow, so it is never reached."));
+                } else if (!met) {
+                    issues.add(Issue.advice("NOT_FOLLOWED", id,
+                            capital(named) + " is never reached: a request always takes another line before it."));
                 }
             }
-            if (yes == 0) {
-                issues.add(new Issue("RULE_NO_YES", id, named + " has no path for YES."));
-            }
-            if (no == 0 && !ALWAYS.equals(rule)) {
-                issues.add(new Issue("RULE_NO_OTHERWISE", id, named + " has no path for NO (otherwise)."));
-            }
-            if (yes > 1 || no > 1) {
-                issues.add(new Issue("RULE_DUPLICATE_PATH", id,
-                        named + " has more than one line for " + (yes > 1 ? "YES" : "NO") + " — only one is followed."));
-            }
-            if (unmarked > 0) {
-                issues.add(new Issue("RULE_UNMARKED_PATH", id,
-                        "A line leaving the rule \u201c" + rule + "\u201d isn't marked YES or NO, so it is never followed."));
+            boolean leadsOn = out.getOrDefault(id, List.of()).stream()
+                    .anyMatch(e -> !isPolicy(nodes.get(e.path("target").asText()), e.path("target").asText()));
+            if (!"condition".equals(type) && !isOutcome(nodes, id) && !isPolicy(n, id) && !leadsOn
+                    && (isStart || walk.steps().contains(id))) {
+                issues.add(Issue.advice("OPEN_END", id,
+                        "Nothing happens after " + named + " — add the next step or an outcome."));
             }
         }
+        for (String[] line : walk.nowhere()) {
+            issues.add(Issue.advice("LINE_TO_NOWHERE", line[0],
+                    "A line leaving " + nameOf(nodes, line[0]) + " leads to a step that no longer exists."));
+        }
+        for (String[] line : walk.loops()) {
+            issues.add(Issue.advice(LOOP_BACK, line[0],
+                    capital(nameOf(nodes, line[0])) + " leads back to " + nameOf(nodes, line[1])
+                            + ", so a request that comes this way never reaches an outcome."));
+        }
         return issues;
+    }
+
+    /** A request is routed once; a line that leads back is where it would stop. */
+    public static final String LOOP_BACK = "LOOP_BACK";
+
+    /**
+     * The steps a request can come to, following lines the way routing does,
+     * and the lines on the way that lead back or lead nowhere.
+     */
+    private record Walk(Set<String> steps, List<String[]> loops, List<String[]> nowhere) {
+
+        static final Walk NOWHERE = new Walk(Set.of(), List.of(), List.of());
+
+        static Walk from(String start, Map<String, JsonNode> nodes, Map<String, List<JsonNode>> out) {
+            Walk walk = new Walk(new HashSet<>(), new ArrayList<>(), new ArrayList<>());
+            walk.visit(start, new HashSet<>(), nodes, out);
+            return walk;
+        }
+
+        private void visit(String id, Set<String> onTheWay, Map<String, JsonNode> nodes, Map<String, List<JsonNode>> out) {
+            steps.add(id);
+            onTheWay.add(id);
+            for (JsonNode line : followed(id, nodes, out)) {
+                String target = line.path("target").asText();
+                if (!nodes.containsKey(target)) {
+                    nowhere.add(new String[] {id, target});
+                } else if (onTheWay.contains(target)) {
+                    loops.add(new String[] {id, target});
+                } else if (!steps.contains(target)) {
+                    visit(target, onTheWay, nodes, out);
+                }
+            }
+            onTheWay.remove(id);
+        }
+
+        /** The lines a request can leave a step by: the same choice {@link #evaluate} makes. */
+        private static List<JsonNode> followed(String id, Map<String, JsonNode> nodes, Map<String, List<JsonNode>> out) {
+            JsonNode node = nodes.get(id);
+            String type = node == null ? "" : node.path("type").asText();
+            List<JsonNode> outgoing = out.getOrDefault(id, List.of());
+            if (isPolicy(node, id) || isOutcome(nodes, id)) {
+                return List.of();
+            }
+            List<JsonNode> lines = new ArrayList<>();
+            if ("condition".equals(type)) {
+                // "Always" only ever answers YES; any other rule — even one not
+                // chosen yet — may go either way once it can be checked.
+                for (String answer : ALWAYS.equals(ruleText(node)) ? List.of("yes") : List.of("yes", "no")) {
+                    outgoing.stream()
+                            .filter(e -> answer.equals(e.path("sourceHandle").asText(null)))
+                            .findFirst()
+                            .ifPresent(lines::add);
+                }
+                return lines;
+            }
+            outgoing.stream()
+                    .filter(e -> !isPolicy(nodes.get(e.path("target").asText()), e.path("target").asText()))
+                    .findFirst()
+                    .ifPresent(lines::add);
+            return lines;
+        }
+    }
+
+    private static String nameOf(Map<String, JsonNode> nodes, String id) {
+        JsonNode n = nodes.get(id);
+        return n == null ? "a step" : named(n);
+    }
+
+    private static void validateRule(JsonNode n, List<JsonNode> outgoing, List<Issue> issues) {
+        String id = n.path("id").asText();
+        String rule = ruleText(n);
+        String named = named(n);
+        String Named = capital(named);
+        if (rule.isBlank()) {
+            issues.add(Issue.blocking("RULE_EMPTY", id, NOTHING_TO_CHECK));
+        } else if (!KNOWN_RULES.contains(rule)) {
+            issues.add(Issue.blocking("RULE_UNKNOWN", id, Named + " isn't one the system can check."));
+        }
+        int yes = 0;
+        int no = 0;
+        int unmarked = 0;
+        for (JsonNode e : outgoing) {
+            String handle = e.path("sourceHandle").asText(null);
+            if ("yes".equals(handle)) {
+                yes++;
+            } else if ("no".equals(handle)) {
+                no++;
+            } else {
+                unmarked++;
+            }
+        }
+        if (yes == 0) {
+            issues.add(Issue.blocking("RULE_NO_YES", id, Named + " has no path for YES."));
+        }
+        if (no == 0 && !ALWAYS.equals(rule)) {
+            issues.add(Issue.blocking("RULE_NO_OTHERWISE", id, Named + " has no path for NO (otherwise)."));
+        }
+        if (yes > 1 || no > 1) {
+            issues.add(Issue.blocking("RULE_DUPLICATE_PATH", id,
+                    Named + " has more than one line for " + (yes > 1 ? "YES" : "NO") + " — only one is followed."));
+        }
+        if (unmarked > 0) {
+            issues.add(Issue.blocking("RULE_UNMARKED_PATH", id,
+                    "A line leaving " + named + " isn't marked YES or NO, so it is never followed."));
+        }
+    }
+
+    /** Every step a line can lead to from {@code start}, following lines in any order. */
+    private static Set<String> reachable(String start, Map<String, List<JsonNode>> out) {
+        Set<String> seen = new HashSet<>(List.of(start));
+        List<String> todo = new ArrayList<>(List.of(start));
+        while (!todo.isEmpty()) {
+            String cur = todo.remove(todo.size() - 1);
+            for (JsonNode e : out.getOrDefault(cur, List.of())) {
+                String target = e.path("target").asText();
+                if (seen.add(target)) {
+                    todo.add(target);
+                }
+            }
+        }
+        return seen;
+    }
+
+    /**
+     * How a step is referred to inside a sentence: its own name in quotes, a
+     * rule by what it checks, and a step nobody has named by what it is —
+     * never a pair of empty quotes.
+     */
+    private static String named(JsonNode n) {
+        String type = n.path("type").asText();
+        if ("condition".equals(type)) {
+            String rule = ruleText(n);
+            return rule.isBlank() ? "a rule with nothing to check" : "the rule “" + rule + "”";
+        }
+        String own = switch (type) {
+            case "email" -> firstText(n, "emailTemplateName", "label");
+            case "sms" -> firstText(n, "smsTemplateName", "label");
+            default -> firstText(n, "label");
+        };
+        if (!own.isBlank()) {
+            return "“" + own + "”";
+        }
+        return switch (type) {
+            case "approval" -> "an approval with no name";
+            case "email" -> "an email";
+            case "sms" -> "a text message";
+            case "exception" -> "an exception with no name";
+            case "trigger" -> "the start";
+            case "end" -> "the outcome";
+            default -> "a step with no name";
+        };
+    }
+
+    private static String text(JsonNode n, String field) {
+        return n.path("data").path(field).asText("").trim();
+    }
+
+    private static String firstText(JsonNode n, String... fields) {
+        for (String field : fields) {
+            String value = text(n, field);
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private static String capital(String s) {
+        return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 
     /* ---------------------------------------------------------------- rules */
 
     /** @return the rule's answer, or {@code null} when the engine does not know the rule */
     static Boolean evalRule(String rule, Facts facts) {
-        if (rule == null || !KNOWN_RULES.contains(rule)) {
+        if (rule == null || rule.isBlank() || !KNOWN_RULES.contains(rule)) {
             return null;
         }
         if (SHORT_NOTICE.equals(rule)) {
@@ -354,6 +594,15 @@ public final class ApprovalRouteEngine {
             return byType;
         }
         return out.containsKey(LEGACY_START) ? LEGACY_START : null;
+    }
+
+    /** The first line drawn from one step to another; "" when there is none. */
+    private static String lineBetween(Map<String, List<JsonNode>> out, String from, String to) {
+        return out.getOrDefault(from, List.of()).stream()
+                .filter(e -> to.equals(e.path("target").asText()))
+                .map(e -> e.path("id").asText(""))
+                .findFirst()
+                .orElse("");
     }
 
     /** An outcome is where a route is allowed to end. */

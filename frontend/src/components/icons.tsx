@@ -59,6 +59,13 @@ export const IconCheck = (p: P) => (
     <path d="M20 6L9 17l-5-5" />
   </Svg>
 )
+export const IconAlert = (p: P) => (
+  <Svg sw={2} {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7.5v5.5" />
+    <path d="M12 16.5h.01" />
+  </Svg>
+)
 export const IconChevronLeft = (p: P) => (
   <Svg sw={1.9} {...p}>
     <path d="M15 6l-6 6 6 6" />

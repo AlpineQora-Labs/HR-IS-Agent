@@ -604,14 +604,14 @@ function InterviewActions({ iv }: { iv: Interview }) {
 
   if (status === 'REQUESTED') {
     return (
-      <button className="btn btn--outline btn--sm" style={btn} disabled={busy} onClick={() => propose.mutate(iv.id)}>
+      <button className="btn btn--outline btn--sm" style={btn} disabled={busy} onClick={() => propose.mutate({ interviewId: iv.id })}>
         Suggest times
       </button>
     )
   }
   if (status === 'SLOTS_PROPOSED') {
     return (
-      <button className="btn btn--outline btn--sm" style={btn} disabled={busy} onClick={() => propose.mutate(iv.id)}
+      <button className="btn btn--outline btn--sm" style={btn} disabled={busy} onClick={() => propose.mutate({ interviewId: iv.id })}
         title="Retract the current offer and compute fresh times from the team's calendars">
         Re-propose
       </button>

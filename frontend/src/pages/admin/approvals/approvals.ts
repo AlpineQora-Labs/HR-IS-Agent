@@ -27,6 +27,9 @@ export interface WorkflowNode {
     smsTemplateId?: string
     smsTemplateName?: string
     smsTrigger?: string
+    /** Exception: who reviews it, and why requests land here. */
+    reviewerRole?: string
+    reason?: string
   }
 }
 
@@ -127,7 +130,22 @@ export interface SimulateResult {
   notes: string[]
   /** Plain-English reasons the route could not be completed; empty when it could. */
   problems?: string[]
+  /** The line followed into each step of `path` after the first ('' when it has none). */
+  lines?: string[]
 }
+
+/** One thing the server says is wrong or unfinished about a drawing. */
+export interface CheckIssue {
+  code: string
+  /** true when it stops the workflow being switched on */
+  blocking: boolean
+  nodeId: string | null
+  message: string
+}
+
+/** Ask the server what is left to finish. Stores nothing. */
+export const checkWorkflow = (graph: WorkflowGraph, levels: ApprovalLevel[], trigger: string) =>
+  api.post<CheckIssue[]>('/approval-workflows/check', { graph, levels, trigger }).then((r) => r.data)
 
 export function useDeleteWorkflow() {
   const qc = useQueryClient()

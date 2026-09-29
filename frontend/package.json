@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:graph": "tsc src/pages/admin/approvals/graphModel.ts --outDir \"${TMPDIR:-/tmp}/ta-graph-model\" --target es2022 --module commonjs --strict --skipLibCheck --ignoreConfig && GM_DIR=\"${TMPDIR:-/tmp}/ta-graph-model\" node scripts/graph-model.check.cjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.100.14",
