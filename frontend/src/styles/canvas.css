@@ -925,6 +925,7 @@
    shows through the notch), so the panel reads as a sheet over the board. */
 .wfc-inspector {
   border-top-left-radius: 18px;
+  border-bottom-left-radius: 18px;
   box-shadow: -1px 0 0 var(--line, #e7e9ee);
   border-left: none;
   position: relative;
