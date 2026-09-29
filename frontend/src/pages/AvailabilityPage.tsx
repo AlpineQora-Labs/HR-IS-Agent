@@ -382,7 +382,8 @@ function InterviewPlans({ users, refreshUsers, openId }: { users: UserRow[]; ref
             </div>
           </div>
         </div>
-        <div className="card__body" style={{ maxWidth: 860 }}>
+        <div className="card__body">
+          <div style={{ maxWidth: 860 }}>
           <SpineRow node={<StageDot />}>
             <div style={{ fontSize: 12.5, fontWeight: 650, color: 'var(--ink-3)', paddingTop: 3 }}>Candidate ready for interviews</div>
           </SpineRow>
@@ -427,6 +428,7 @@ function InterviewPlans({ users, refreshUsers, openId }: { users: UserRow[]; ref
             Each round is scheduled against every listed interviewer's calendar — working windows, weekly preferences,
             vacations and load caps all apply. Blocked rounds notify their interviewers automatically.
           </p>
+          </div>
 
           <div style={{ marginTop: 22, paddingTop: 4, borderTop: '1px solid var(--line, #edf0f4)' }}>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: 'var(--ink-0)', margin: '16px 0 2px' }}>
