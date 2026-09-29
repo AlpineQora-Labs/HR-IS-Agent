@@ -124,21 +124,95 @@ public class InterviewService {
         return toResponse(interviewRepository.save(interview));
     }
 
+    /**
+     * The hiring team books a time directly. The same guards hold as when a
+     * candidate picks one: an application has one interview booked at a time,
+     * the interviewers must be free, and their calendars are blocked — so the
+     * hour cannot be offered to anyone else. Whatever was on offer to the
+     * candidate for this application is withdrawn.
+     */
     @Transactional
     public InterviewResponse schedule(UUID id, ScheduleInterviewRequest request) {
-        Interview interview = load(id);
         InterviewSlot slot = slotRepository.findById(request.slotId())
                 .orElseThrow(() -> new EntityNotFoundException("Slot not found: " + request.slotId()));
+        Interview interview = interviewRepository.lockById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Interview not found: " + id));
+        Application app = applications.findById(interview.getApplicationId()).orElseThrow();
+        List<UUID> ids = participantsFor(interview, app).stream().map(RecruiterUser::getId).toList();
+        List<RecruiterUser> team = ids.isEmpty() ? List.of() : recruiterUsers.lockAllByIdIn(ids);
+        entityManager.refresh(slot);
+        entityManager.refresh(interview);
 
+        refuseSecondBooking(interview);
+        if (slot.isBooked() && !slot.getId().equals(interview.getSlotId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This time has been taken");
+        }
+        OffsetDateTime startsAt = request.scheduledAt() != null ? request.scheduledAt() : slot.getStartsAt();
+        OffsetDateTime endsAt = startsAt.plusMinutes(interview.getDurationMin());
+        if (!startsAt.isAfter(OffsetDateTime.now())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This time has passed");
+        }
+        if (!ids.isEmpty() && availability.hasConflict(ids, startsAt, endsAt, interview.getId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "An interviewer is not free at this time. Choose another time.");
+        }
+
+        calendarEvents.deleteByInterviewId(interview.getId()); // a time it was booked for before, if any
         interview.setSlotId(slot.getId());
-        interview.setScheduledAt(request.scheduledAt() != null ? request.scheduledAt() : slot.getStartsAt());
+        interview.setScheduledAt(startsAt);
+        interview.setStatus("SCHEDULED");
+        if (interview.getMeetingLink() == null || interview.getMeetingLink().isBlank()) {
+            interview.setMeetingLink("https://teams.microsoft.com/l/meetup-join/19%3Ameeting_" + UUID.randomUUID());
+        }
         slot.setBooked(true);
         slot.setStatus("SELECTED");
         slotRepository.save(slot);
         interview.setBookedAt(OffsetDateTime.now());
         Interview saved = interviewRepository.save(interview);
+        block(saved, app, team, startsAt, endsAt);
+        withdrawOtherOffers(saved);
         events.publishEvent(new InterviewBooked(saved.getId(), saved.getScheduledAt(), BookingOrigin.TEAM));
         return toResponse(saved);
+    }
+
+    /** One interview booked for an application at a time: a second would be a second invitation. */
+    private void refuseSecondBooking(Interview interview) {
+        Interview other = bookedAhead(interview.getApplicationId())
+                .filter(i -> !i.getId().equals(interview.getId())).orElse(null);
+        if (other != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This application already has an interview booked. Reschedule or cancel that one first.");
+        }
+    }
+
+    /** The interviewers' calendars are blocked for the hour: invites double as blockers for everyone else. */
+    private void block(Interview interview, Application app, List<RecruiterUser> team,
+            OffsetDateTime startsAt, OffsetDateTime endsAt) {
+        String candidateName = candidates.findById(app.getCandidateId()).map(c -> c.getName()).orElse("Candidate");
+        Job job = jobs.findById(app.getJobId()).orElse(null);
+        String title = "Interview — " + candidateName + (job != null ? " (" + job.getTitle() + ")" : "");
+        for (RecruiterUser member : team) {
+            CalendarEvent event = new CalendarEvent();
+            event.setUserId(member.getId());
+            event.setInterviewId(interview.getId());
+            event.setTitle(title);
+            event.setStartsAt(startsAt);
+            event.setEndsAt(endsAt);
+            event.setKind("INTERVIEW");
+            calendarEvents.save(event);
+        }
+    }
+
+    /** Times on offer for the application's other interviews can no longer be picked. */
+    private void withdrawOtherOffers(Interview booked) {
+        for (Interview other : interviewRepository.findByApplicationId(booked.getApplicationId())) {
+            if (!other.getId().equals(booked.getId())
+                    && List.of("REQUESTED", "SLOTS_PROPOSED").contains(other.getStatus())) {
+                expireSlots(other.getId());
+                other.setStatus("REQUESTED");
+                interviewRepository.save(other);
+            }
+        }
     }
 
     // =====================================================================
@@ -383,6 +457,7 @@ public class InterviewService {
         if (isBooked(interview)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This interview is already booked");
         }
+        refuseSecondBooking(interview);
         if (!slot.getStartsAt().isAfter(OffsetDateTime.now())) {
             slot.setStatus("EXPIRED");
             slotRepository.save(slot);
@@ -413,20 +488,8 @@ public class InterviewService {
         interviewRepository.save(interview);
         events.publishEvent(new InterviewBooked(interview.getId(), interview.getScheduledAt(), origin));
 
-        // Invites double as availability blockers for every other candidate.
-        String candidateName = candidates.findById(app.getCandidateId()).map(c -> c.getName()).orElse("Candidate");
-        Job job = jobs.findById(app.getJobId()).orElse(null);
-        String title = "Interview — " + candidateName + (job != null ? " (" + job.getTitle() + ")" : "");
-        for (RecruiterUser member : team) {
-            CalendarEvent event = new CalendarEvent();
-            event.setUserId(member.getId());
-            event.setInterviewId(interview.getId());
-            event.setTitle(title);
-            event.setStartsAt(slot.getStartsAt());
-            event.setEndsAt(slot.getEndsAt());
-            event.setKind("INTERVIEW");
-            calendarEvents.save(event);
-        }
+        block(interview, app, team, slot.getStartsAt(), slot.getEndsAt());
+        withdrawOtherOffers(interview);
 
         app.setStage("INTERVIEW");
         applications.save(app);
@@ -569,6 +632,19 @@ public class InterviewService {
      */
     @Transactional
     public List<SlotResponse> rescheduleByTeam(UUID interviewId) {
+        Interview interview = load(interviewId);
+        if (isBooked(interview)) {
+            // Look before letting go: a candidate is not left with no interview and nothing to choose from.
+            Application app = applications.findById(interview.getApplicationId()).orElseThrow();
+            List<UUID> ids = participantsFor(interview, app).stream().map(RecruiterUser::getId).toList();
+            boolean somewhereToGo = !availability.openSlots(ids, interview.getDurationMin(), 1, null,
+                    List.of(interview.getScheduledAt()), interviewId).isEmpty();
+            if (!somewhereToGo) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "No other time is open for these interviewers, so the interview stays as booked. "
+                                + "Open time in their calendars, change the panel, or cancel the interview.");
+            }
+        }
         List<SlotResponse> slots = release(interviewId);
         events.publishEvent(new InterviewTimesOffered(interviewId, InterviewTimesOffered.Why.MOVED));
         return slots;

@@ -19,7 +19,11 @@ class SmsIntentParserTest {
     @ParameterizedTest(name = "\"{0}\" stops texts")
     @ValueSource(strings = {
         "STOP", "stop", " Stop. ", "STOPALL", "stop all", "Unsubscribe", "END", "quit", "STOP!", "CANCEL", "cancel",
-        "Revoke", "opt out", "Stop please", "stop texting me", "STOP sending these"})
+        "Revoke", "opt out", "Stop please", "stop texting me", "STOP sending these",
+        // said in a sentence, and meant
+        "Please stop texting me", "Opt-out", "unsubscribe me", "quit asking", "do not text me", "Don't text me again",
+        "\"STOP\"", "\u201cStop\u201d", "please remove me from this list", "no more texts please",
+        "take me off your list", "I want to opt out"})
     void stopWords(String text) {
         assertThat(kind(text)).isEqualTo(Kind.OPT_OUT);
     }
@@ -31,7 +35,8 @@ class SmsIntentParserTest {
     }
 
     @ParameterizedTest(name = "\"{0}\" picks time {1}")
-    @CsvSource({"1, 1", "2, 2", "' 3 ', 3", "2., 2", "#2, 2", "option 2, 2", "Option 3!, 3", "number 1, 1"})
+    @CsvSource({"1, 1", "2, 2", "' 3 ', 3", "2., 2", "#2, 2", "option 2, 2", "Option 3!, 3", "number 1, 1",
+        "2 please, 2", "Option 2 please, 2"})
     void aNumberOnItsOwnPicksATime(String text, int choice) {
         SmsIntent intent = SmsIntentParser.parse(text);
 
@@ -56,10 +61,41 @@ class SmsIntentParserTest {
 
     @ParameterizedTest(name = "\"{0}\" asks to move the interview")
     @ValueSource(strings = {
-        "RESCHEDULE", "reschedule please", "I need to reschedule", "can't make it", "Can’t make it",
-        "cannot make that time", "can we change the time", "need a different time", "move my interview"})
+        "RESCHEDULE", "reschedule", "reschedule please", "Please reschedule", "I need to reschedule",
+        "I want to reschedule my interview", "Can we reschedule?", "could I reschedule", "re-schedule",
+        "I'd like to reschedule it"})
+    @DisplayName("RESCHEDULE asked for plainly moves the interview")
     void reschedule(String text) {
         assertThat(kind(text)).isEqualTo(Kind.RESCHEDULE);
+    }
+
+    @ParameterizedTest(name = "\"{0}\" may be asking; nothing is moved on the strength of it")
+    @ValueSource(strings = {
+        "can't make it", "Can’t make it", "cannot make that time", "can we change the time",
+        "need a different time", "move my interview", "I won't be able to make it",
+        "thanks, but I need to reschedule", "stop, I need to reschedule", "Do I need to reschedule?",
+        "please stop sending options, reschedule instead", "could we find another time"})
+    void aSentenceThatMayAskToMoveTheInterviewIsOnlyAHint(String text) {
+        assertThat(kind(text)).isEqualTo(Kind.RESCHEDULE_HINTED);
+    }
+
+    @ParameterizedTest(name = "\"{0}\" moves nothing")
+    @ValueSource(strings = {
+        "Thanks for rescheduling!", "The new time works, see you then", "No need to reschedule, I'll be there",
+        "What's the status of my reschedule?", "I rescheduled my flight so I can make it", "never mind rescheduling",
+        "I don't need to reschedule", "the different time zone confused me", "new time is great"})
+    @DisplayName("a word about a move that was made, or is not wanted, is not a request to move")
+    void speakingOfAMoveIsNotAskingForOne(String text) {
+        assertThat(kind(text)).isNotIn(Kind.RESCHEDULE, Kind.RESCHEDULE_HINTED);
+    }
+
+    @Test
+    @DisplayName("where a text can be read two ways, the reading that changes nothing wins")
+    void theHarmlessReadingWins() {
+        assertThat(kind("What's the status of my reschedule?")).isEqualTo(Kind.STATUS);
+        assertThat(kind("Thanks for rescheduling!")).isEqualTo(Kind.THANKS);
+        assertThat(kind("No need to reschedule, I'll be there")).isEqualTo(Kind.THANKS);
+        assertThat(kind("The new time works, see you then")).isEqualTo(Kind.THANKS);
     }
 
     @ParameterizedTest(name = "\"{0}\" asks for other times")
@@ -82,7 +118,8 @@ class SmsIntentParserTest {
 
     @ParameterizedTest(name = "\"{0}\" is not understood")
     @NullSource
-    @ValueSource(strings = {"", "   ", "who is this?", "hello", "...", "end of the week works", "cancel my interview", "quit asking"})
+    @ValueSource(strings = {"", "   ", "who is this?", "hello", "...", "end of the week works", "cancel my interview",
+        "please cancel my interview", "I can't stop thinking about this role", "2 pm", "1 or 2", "ok 2"})
     void everythingElseIsUnclear(String text) {
         assertThat(kind(text)).isEqualTo(Kind.UNCLEAR);
     }
@@ -104,9 +141,11 @@ class SmsIntentParserTest {
     @Test
     @DisplayName("a sentence that only contains an opt-out word is not an opt-out")
     void anOptOutWordInsideASentenceIsNot() {
-        assertThat(kind("please stop sending options, reschedule instead")).isEqualTo(Kind.RESCHEDULE);
-        assertThat(kind("stop, I need to reschedule")).isEqualTo(Kind.RESCHEDULE);
+        assertThat(kind("please stop sending options, reschedule instead")).isNotEqualTo(Kind.OPT_OUT);
+        assertThat(kind("stop, I need to reschedule")).isNotEqualTo(Kind.OPT_OUT);
         assertThat(kind("cancel my interview")).isNotEqualTo(Kind.OPT_OUT);
         assertThat(kind("the end")).isNotEqualTo(Kind.OPT_OUT);
+        assertThat(kind("I can't stop thinking about this role")).isNotEqualTo(Kind.OPT_OUT);
+        assertThat(kind("end of day works")).isNotEqualTo(Kind.OPT_OUT);
     }
 }

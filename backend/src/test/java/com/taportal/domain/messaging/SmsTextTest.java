@@ -30,6 +30,20 @@ class SmsTextTest {
     }
 
     @Test
+    @DisplayName("a letter the basic set lacks keeps its letter and loses only its mark")
+    void aNameLosesItsAccentNotItsLetter() {
+        assertThat(SmsText.plain("Hi María, Sofía, Jesús, Zoë, François, Ramón"))
+                .isEqualTo("Hi Maria, Sofia, Jesus, Zoe, Francois, Ramon");
+        assertThat(SmsText.plain("Łukasz Škoda, Øystein, Renée")).isEqualTo("Lukasz Skoda, Øystein, Renée");
+        assertThat(SmsText.plain("Đorđe Œuvre")).isEqualTo("Dorde OEuvre");
+    }
+
+    @Test
+    void whatHasNoPlainFormIsStillLeftOut() {
+        assertThat(SmsText.plain("Hi 李 and Дмитрий")).isEqualTo("Hi and");
+    }
+
+    @Test
     void partsAreCountedTheWayACarrierBills() {
         assertThat(SmsText.parts("a".repeat(160))).isEqualTo(1);
         assertThat(SmsText.parts("a".repeat(161))).isEqualTo(2);

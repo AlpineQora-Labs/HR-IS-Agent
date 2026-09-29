@@ -120,7 +120,7 @@ function CandidateDetailPane({ summary, tab, setTab, frameless = false }: {
       </div>
 
       {/* Tab bar */}
-      <div style={{ display: 'flex', gap: 2, padding: '0 12px', borderBottom: '1px solid var(--line)' }}>
+      <div style={{ display: 'flex', gap: 2, padding: '0 12px', borderBottom: '1px solid var(--line)', overflowX: 'auto' }}>
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -129,7 +129,8 @@ function CandidateDetailPane({ summary, tab, setTab, frameless = false }: {
               border: 0,
               background: 'none',
               cursor: 'pointer',
-              padding: '9px 11px',
+              padding: '9px 8px',
+              whiteSpace: 'nowrap',
               fontSize: 12.5,
               fontWeight: tab === t.key ? 600 : 500,
               color: tab === t.key ? 'var(--bofa-navy)' : 'var(--ink-4)',

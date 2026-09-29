@@ -58,6 +58,8 @@ class SmsConversationTest {
         verify(journey).times(texter);
         aria.receive(NUMBER, "I need to reschedule", null, null);
         verify(journey).reschedule(texter);
+        aria.receive(NUMBER, "I can't make it", null, null);
+        verify(journey).mayWantToReschedule(texter);
         aria.receive(NUMBER, "help", null, null);
         verify(journey).help(texter);
         aria.receive(NUMBER, "who is this?", null, null);

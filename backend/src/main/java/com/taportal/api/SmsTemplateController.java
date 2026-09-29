@@ -60,7 +60,8 @@ public class SmsTemplateController {
     @PutMapping("/{id}")
     public SmsDto update(@PathVariable UUID id, @RequestBody SmsSave req) {
         SmsTemplate t = load(id);
-        rules.mayChange(t.getTemplateKey(), t.getName(), req.status() == null ? "ACTIVE" : req.status(), req.body(), true);
+        rules.mayChange(t.getTemplateKey(), t.getName(), req.status() == null ? "ACTIVE" : req.status(),
+                null, req.body(), true);
         apply(t, req);
         return toDto(repository.save(t));
     }

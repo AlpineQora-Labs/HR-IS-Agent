@@ -194,6 +194,82 @@ class InterviewServiceTest {
         }
 
         @Test
+        @DisplayName("an application has one interview booked at a time: a time picked for a second is refused")
+        void aSecondInterviewForTheApplicationIsNotBooked() {
+            InterviewSlot slot = proposed(inDays(3, 14));
+            Interview byTheTeam = new Interview();
+            ReflectionTestUtils.setField(byTheTeam, "id", UUID.randomUUID());
+            byTheTeam.setApplicationId(application.getId());
+            byTheTeam.setStatus("SCHEDULED");
+            byTheTeam.setScheduledAt(inDays(2, 11));
+            when(interviews.findByApplicationId(application.getId())).thenReturn(List.of(interview, byTheTeam));
+
+            refused(() -> service.selectProposedSlot(slot.getId(), BookingOrigin.TEXT), HttpStatus.CONFLICT,
+                    "already has an interview booked");
+
+            assertThat(interview.getStatus()).isEqualTo("SLOTS_PROPOSED");
+            verify(events, never()).publishEvent(any());
+        }
+
+        @Test
+        @DisplayName("booked by the team directly: the interviewers' hour is blocked and what was on offer is withdrawn")
+        void aTimeBookedByTheTeamIsHeldLikeAnyOther() {
+            Interview direct = new Interview();
+            ReflectionTestUtils.setField(direct, "id", UUID.randomUUID());
+            direct.setApplicationId(application.getId());
+            direct.setStatus("SCHEDULED");
+            direct.setType("PHONE_SCREEN");
+            direct.setDurationMin(30);
+            when(interviews.lockById(direct.getId())).thenReturn(Optional.of(direct));
+            when(interviews.findByApplicationId(application.getId())).thenReturn(List.of(interview, direct));
+            when(panelists.findByInterviewId(direct.getId())).thenReturn(List.of());
+            InterviewSlot onOffer = proposed(inDays(3, 14));
+            when(slots.findByInterviewId(interview.getId())).thenReturn(List.of(onOffer));
+            InterviewSlot pool = new InterviewSlot();
+            ReflectionTestUtils.setField(pool, "id", UUID.randomUUID());
+            pool.setStartsAt(inDays(2, 11));
+            pool.setEndsAt(inDays(2, 11).plusMinutes(30));
+            when(slots.findById(pool.getId())).thenReturn(Optional.of(pool));
+
+            service.schedule(direct.getId(), new com.taportal.api.InterviewDtos.ScheduleInterviewRequest(pool.getId(), null));
+
+            assertThat(direct.getScheduledAt()).isEqualTo(pool.getStartsAt());
+            assertThat(direct.getBookedAt()).isNotNull();
+            ArgumentCaptor<CalendarEvent> blocked = ArgumentCaptor.forClass(CalendarEvent.class);
+            verify(calendar).save(blocked.capture());
+            assertThat(blocked.getValue().getUserId()).isEqualTo(managerId);
+            assertThat(blocked.getValue().getStartsAt()).isEqualTo(pool.getStartsAt());
+            assertThat(onOffer.getStatus()).as("the time texted to the candidate can no longer be picked").isEqualTo("EXPIRED");
+            assertThat(interview.getStatus()).isEqualTo("REQUESTED");
+            verify(events).publishEvent(new InterviewBooked(direct.getId(), pool.getStartsAt(), BookingOrigin.TEAM));
+        }
+
+        @Test
+        @DisplayName("the team cannot book over an interviewer who is busy, or a second interview for an application")
+        void aTimeBookedByTheTeamIsCheckedLikeAnyOther() {
+            InterviewSlot pool = new InterviewSlot();
+            ReflectionTestUtils.setField(pool, "id", UUID.randomUUID());
+            pool.setStartsAt(inDays(2, 11));
+            pool.setEndsAt(inDays(2, 11).plusMinutes(45));
+            when(slots.findById(pool.getId())).thenReturn(Optional.of(pool));
+            var request = new com.taportal.api.InterviewDtos.ScheduleInterviewRequest(pool.getId(), null);
+
+            when(availability.hasConflict(anyList(), any(), any(), any())).thenReturn(true);
+            refused(() -> service.schedule(interview.getId(), request), HttpStatus.CONFLICT, "not free");
+            verify(events, never()).publishEvent(any());
+
+            when(availability.hasConflict(anyList(), any(), any(), any())).thenReturn(false);
+            Interview other = new Interview();
+            ReflectionTestUtils.setField(other, "id", UUID.randomUUID());
+            other.setApplicationId(application.getId());
+            other.setStatus("SCHEDULED");
+            other.setScheduledAt(inDays(5, 9));
+            when(interviews.findByApplicationId(application.getId())).thenReturn(List.of(interview, other));
+            refused(() -> service.schedule(interview.getId(), request), HttpStatus.CONFLICT,
+                    "already has an interview booked");
+        }
+
+        @Test
         @DisplayName("an interview already booked is not booked again by a second reply")
         void aBookedInterviewIsNotBookedAgain() {
             InterviewSlot slot = proposed(inDays(4, 10));
@@ -440,6 +516,21 @@ class InterviewServiceTest {
 
             verify(events).publishEvent(new InterviewTimesOffered(interview.getId(), InterviewTimesOffered.Why.MOVED));
             assertThat(interview.getRescheduleCount()).as("the team's move is not the candidate's").isZero();
+        }
+
+        @Test
+        @DisplayName("the team cannot move an interview to nowhere: with no other time open, the booking is kept")
+        void aMoveByTheTeamWithNowhereToGoIsRefused() {
+            OffsetDateTime at = interview.getScheduledAt();
+            when(availability.openSlots(anyList(), anyInt(), anyInt(), any(), anyList(), any())).thenReturn(List.of());
+
+            refused(() -> service.rescheduleByTeam(interview.getId()), HttpStatus.CONFLICT,
+                    "No other time is open");
+
+            assertThat(interview.getStatus()).isEqualTo("SCHEDULED");
+            assertThat(interview.getScheduledAt()).isEqualTo(at);
+            verify(calendar, never()).deleteByInterviewId(any());
+            verify(events, never()).publishEvent(any());
         }
 
         @Test

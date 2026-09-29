@@ -48,8 +48,10 @@ function SmsEditor({
 
   // The fields a message can carry, and what this template's point needs, are the server's.
   const { data: journey } = useJourney()
-  const fields = journey?.fields ?? FIELDS_MEANWHILE.map((name) => ({ name, holds: '' }))
   const point = journey?.points.find((p) => p.templateKey === template?.templateKey)
+  // A journey's own template is offered the fields its point has values for; the server refuses the rest.
+  const fields = (journey?.fields ?? FIELDS_MEANWHILE.map((name) => ({ name, holds: '' })))
+    .filter((f) => !point || point.has.includes(f.name))
 
   const segments = Math.max(1, Math.ceil(body.length / 160))
 

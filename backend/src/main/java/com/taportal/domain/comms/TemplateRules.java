@@ -1,6 +1,7 @@
 package com.taportal.domain.comms;
 
 import com.taportal.domain.journey.JourneyPoint;
+import com.taportal.domain.journey.JourneyTemplates;
 import com.taportal.domain.messaging.TemplateRenderer;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,9 +13,9 @@ import org.springframework.web.server.ResponseStatusException;
 /**
  * What may be done to a template. A template that words a point of the
  * candidate journey (it has a {@code template_key}) is part of how the system
- * works: it can be reworded, but it cannot be deleted, taken out of use, or
- * lose the fields its point needs — so a journey point always has something
- * to say.
+ * works: it can be reworded, but it cannot be deleted, taken out of use, lose
+ * the fields its point needs, or use a field its point has no value for — so
+ * a journey point always has something to say, and can always say it.
  */
 @Service
 public class TemplateRules {
@@ -28,9 +29,11 @@ public class TemplateRules {
     }
 
     /**
-     * @param text true for a text message, false for an email
+     * @param newSubject the email's subject; null for a text message
+     * @param text       true for a text message, false for an email
      */
-    public void mayChange(String templateKey, String name, String newStatus, String newBody, boolean text) {
+    public void mayChange(
+            String templateKey, String name, String newStatus, String newSubject, String newBody, boolean text) {
         if (templateKey == null) {
             return;
         }
@@ -38,7 +41,19 @@ public class TemplateRules {
             throw refuse("“" + name + "” words a step of the candidate journey, so it has to stay Active.");
         }
         JourneyPoint point = JourneyPoint.ofTemplateKey(templateKey).orElse(null);
-        if (point == null || !text) {
+        if (point == null) {
+            return;
+        }
+        Set<String> uses = new java.util.LinkedHashSet<>(TemplateRenderer.fieldsIn(newSubject));
+        uses.addAll(TemplateRenderer.fieldsIn(newBody));
+        List<String> unknown = JourneyTemplates.unfillable(point, uses);
+        if (!unknown.isEmpty()) {
+            throw refuse("This message is sent " + lowerFirst(point.label()) + ". "
+                    + String.join(" and ", unknown.stream().map(f -> "{{" + f + "}}").toList())
+                    + (unknown.size() == 1 ? " has" : " have") + " no value then, so the message could never be sent. "
+                    + "It can use " + String.join(", ", point.has().stream().map(f -> "{{" + f + "}}").toList()) + ".");
+        }
+        if (!text) {
             return;
         }
         Set<String> has = TemplateRenderer.fieldsIn(newBody);

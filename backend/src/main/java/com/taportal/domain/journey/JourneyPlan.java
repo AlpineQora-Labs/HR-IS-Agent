@@ -22,6 +22,10 @@ import org.springframework.stereotype.Service;
  *
  * <p>The drawing decides wording and channels. It does not decide the order of
  * events: those come from the candidate and the hiring team.
+ *
+ * <p>A step counts when a line leads to it from the start. A step cut out of
+ * the flow is not part of the journey and sends nothing — which is what the
+ * drawing shows, and what the check of the drawing says.
  */
 @Service
 public class JourneyPlan {
@@ -115,14 +119,19 @@ public class JourneyPlan {
         return CandidateMessage.SMS.equals(step.channel) ? step.point.byText() : step.point.byEmail();
     }
 
+    /** The message steps a line leads to from the start, in the order they are drawn. */
     private static List<Step> stepsOf(JsonNode graph) {
         List<Step> steps = new ArrayList<>();
         if (graph == null) {
             return steps;
         }
+        Set<String> reached = reached(graph);
         for (JsonNode node : graph.path("nodes")) {
             String type = node.path("type").asText("");
             JsonNode data = node.path("data");
+            if (!reached.contains(node.path("id").asText())) {
+                continue;
+            }
             if ("sms".equals(type)) {
                 steps.add(new Step(node.path("id").asText(), CandidateMessage.SMS,
                         bound(data), uuid(data.path("smsTemplateId").asText(""))));
@@ -132,6 +141,48 @@ public class JourneyPlan {
             }
         }
         return steps;
+    }
+
+    /** Every step a line leads to from the start, the start included. */
+    static Set<String> reached(JsonNode graph) {
+        String start = null;
+        for (JsonNode node : graph.path("nodes")) {
+            if ("trigger".equals(node.path("type").asText(""))) {
+                start = node.path("id").asText();
+                break;
+            }
+        }
+        Set<String> seen = new HashSet<>();
+        if (start == null) {
+            return seen;
+        }
+        Map<String, List<String>> next = new HashMap<>();
+        for (JsonNode edge : graph.path("edges")) {
+            next.computeIfAbsent(edge.path("source").asText(), k -> new ArrayList<>()).add(edge.path("target").asText());
+        }
+        List<String> todo = new ArrayList<>(List.of(start));
+        seen.add(start);
+        while (!todo.isEmpty()) {
+            String at = todo.remove(todo.size() - 1);
+            for (String to : next.getOrDefault(at, List.of())) {
+                if (seen.add(to)) {
+                    todo.add(to);
+                }
+            }
+        }
+        return seen;
+    }
+
+    /** A message step with a point and a template chosen, for whoever checks the template. */
+    public record Chosen(String nodeId, String channel, JourneyPoint point, UUID templateId) {
+    }
+
+    /** Pure: the steps of a drawing that name a template, whether or not the template will do. */
+    public static List<Chosen> chosen(JsonNode graph) {
+        return stepsOf(graph).stream()
+                .filter(st -> st.point != null && st.templateId != null && allowed(st))
+                .map(st -> new Chosen(st.nodeId, st.channel, st.point, st.templateId))
+                .toList();
     }
 
     /** A step is bound to a drawn point by its key. */

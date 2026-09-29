@@ -115,6 +115,7 @@ export default function MessageTimeline({ candidateId, narrow = false, maxHeight
       {!data.canBeTexted && data.whyNot ? (
         <div className="msgs__note">Texts are held back. {data.whyNot}.</div>
       ) : null}
+      {data.note ? <div className="msgs__note">{data.note}</div> : null}
       {!data.journeyOn ? (
         <div className="msgs__note">
           The candidate journey is switched off. Nothing is sent unprompted; a text from the candidate is still answered.

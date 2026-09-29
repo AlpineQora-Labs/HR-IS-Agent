@@ -77,7 +77,7 @@ public class EmailTemplateController {
     public TemplateDto update(@PathVariable UUID id, @RequestBody TemplateSave req) {
         EmailTemplate t = load(id);
         rules.mayChange(t.getTemplateKey(), t.getName(), req.status() == null ? "DRAFT" : req.status(),
-                req.bodyHtml(), false);
+                req.subject(), req.bodyHtml(), false);
         apply(t, req);
         return TemplateDto.of(templates.save(t));
     }

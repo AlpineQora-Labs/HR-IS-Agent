@@ -141,6 +141,16 @@ class ApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("a number given with \"please don't text me\" is kept for calls and is not agreement to texts")
+    void aNumberGivenWithARefusalIsNotAgreement() {
+        service.receive(new NewApplication(UUID.randomUUID(), "Raj Patel", "raj.patel@example.com", "704-555-0101",
+                "en", "WEB_CHAT", true, true, "You can call me on 704-555-0101 but please don't text me"));
+
+        assertThat(saved().getPhoneE164()).isEqualTo("+17045550101");
+        assertThat(saved().getSmsConsentAt()).isNull();
+    }
+
+    @Test
     void withoutAgreementNoAgreementIsRecorded() {
         service.receive(applying("212-555-0109", false, true));
 

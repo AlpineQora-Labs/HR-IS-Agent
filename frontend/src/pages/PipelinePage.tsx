@@ -127,9 +127,10 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
    interview plan (defined at intake on the Availability screen), the recruiter
    picks the round — its lineup and length drive the proposed times. */
 function SelfScheduleLink({ applicationId, jobId }: { applicationId: string; jobId: string }) {
-  const { toastMsg } = useStore()
   const qc = useQueryClient()
   const [busy, setBusy] = useState(false)
+  // Shown here, in the drawer: what was done, and the link when it could not be copied.
+  const [done, setDone] = useState<{ url?: string; copied?: boolean; error?: string } | null>(null)
   const [rounds, setRounds] = useState<{ id: string; roundNo: number; name: string; members: { name: string }[] }[]>([])
   const [roundId, setRoundId] = useState<string | null>(null)
 
@@ -163,28 +164,61 @@ function SelfScheduleLink({ applicationId, jobId }: { applicationId: string; job
       <button
         className="btn btn--outline btn--sm"
         disabled={busy}
+        title="Offers times to the candidate, by the journey's text and email, and copies the link to their page"
         onClick={async () => {
           setBusy(true)
+          setDone(null)
+          let url: string
           try {
             const r = await api.post<{ id: string }>('/interviews/self-schedule', {
               applicationId,
               ...(roundId ? { roundId } : {}),
             })
-            const url = `${window.location.origin}/schedule/${r.data.id}`
-            // Times are offered to the candidate as the invitation is made.
-            qc.invalidateQueries({ queryKey: ['messages'] })
-            qc.invalidateQueries({ queryKey: ['interviews'] })
-            await navigator.clipboard.writeText(url)
-            toastMsg('Self-schedule link copied. Texts and emails shows what the candidate was sent.')
-          } catch {
-            toastMsg('Could not create the self-schedule link', 'danger')
-          } finally {
+            url = `${window.location.origin}/schedule/${r.data.id}`
+          } catch (e) {
+            setDone({
+              error:
+                (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+                'The invitation could not be made.',
+            })
             setBusy(false)
+            return
           }
+          // The invitation is made, whatever becomes of the copy.
+          qc.invalidateQueries({ queryKey: ['messages'] })
+          qc.invalidateQueries({ queryKey: ['interviews'] })
+          qc.invalidateQueries({ queryKey: ['scheduling-overview'] })
+          let copied = true
+          try {
+            await navigator.clipboard.writeText(url)
+          } catch {
+            copied = false
+          }
+          setDone({ url, copied })
+          setBusy(false)
         }}
       >
-        Copy self-schedule link
+        Invite to pick a time
       </button>
+      {done?.error ? (
+        <div role="alert" style={{ fontSize: 12, color: 'var(--danger-fg)', lineHeight: 1.45 }}>{done.error}</div>
+      ) : null}
+      {done?.url ? (
+        <div role="status" style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.45 }}>
+          Times are on offer. Texts and emails, below, shows what the candidate was sent.{' '}
+          {done.copied ? 'The link to their page was copied.' : 'The link to their page could not be copied; it is:'}
+          {!done.copied ? (
+            <input
+              className="input"
+              readOnly
+              value={done.url}
+              aria-label="Link to the candidate's scheduling page"
+              onFocus={(e) => e.currentTarget.select()}
+              style={{ fontSize: 12, marginTop: 6, width: '100%' }}
+            />
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -196,21 +230,43 @@ function ScheduleInterview({ applicationId, jobId }: { applicationId: string; jo
   const schedule = useScheduleInterview()
   const [booked, setBooked] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const qc = useQueryClient()
 
   const free = (slots ?? []).filter((s) => !s.booked)
+
+  const said = (e: unknown, fallback: string) =>
+    (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback
 
   function book(slotId: string, label: string) {
     if (busy) return
     setBusy(true)
+    setRefusal(null)
     create.mutate(
       { applicationId, type: 'PHONE_SCREEN', durationMin: 30 },
       {
         onSuccess: (iv) =>
           schedule.mutate(
             { id: iv.id, slotId },
-            { onSuccess: () => { setBooked(label); setBusy(false) }, onError: () => setBusy(false) },
+            {
+              onSuccess: () => {
+                setBooked(label)
+                setBusy(false)
+                qc.invalidateQueries({ queryKey: ['messages'] })
+                qc.invalidateQueries({ queryKey: ['interviews'] })
+              },
+              onError: (e) => {
+                // The time was refused: the interview made for it is not left behind without one.
+                api.post(`/interviews/${iv.id}/transition`, { status: 'CANCELED' }).catch(() => undefined)
+                setRefusal(said(e, 'This time could not be booked.'))
+                setBusy(false)
+              },
+            },
           ),
-        onError: () => setBusy(false),
+        onError: (e) => {
+          setRefusal(said(e, 'The interview could not be made.'))
+          setBusy(false)
+        },
       },
     )
   }
@@ -226,8 +282,13 @@ function ScheduleInterview({ applicationId, jobId }: { applicationId: string; jo
       </button>
       {open && (
         <div style={{ marginTop: 10 }}>
+          {refusal ? (
+            <div role="alert" style={{ fontSize: 12, color: 'var(--danger-fg)', lineHeight: 1.45, marginBottom: 8 }}>
+              {refusal}
+            </div>
+          ) : null}
           {booked ? (
-            <div style={{ fontSize: 12.5, color: 'var(--ok-fg)' }}>Booked for {booked} ✓</div>
+            <div style={{ fontSize: 12.5, color: 'var(--ok-fg)' }}>Booked for {booked}.</div>
           ) : free.length === 0 ? (
             <div style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>No open interview slots for this job.</div>
           ) : (

@@ -171,7 +171,7 @@ public class ConversationEngine {
             case STEP_COLLECT_PHONE -> {
                 state.phone = interpreter.extractField("PHONE", text);
                 // Profile complete: create candidate + application.
-                createCandidateAndApplication(conversation, state, job);
+                createCandidateAndApplication(conversation, state, job, text);
                 emitted.add(record(conversation, STEP_COLLECT_PHONE,
                         brain.acknowledge(STEP_COLLECT_PHONE, text)));
                 enterKnockout(conversation, state, job, emitted);
@@ -375,14 +375,14 @@ public class ConversationEngine {
 
     /**
      * The profile is complete: the application is made. What an application
-     * is, and what a phone number given here allows, is the service's to say —
-     * the question just asked named texting, so the number comes with
-     * agreement to be texted.
+     * is, and what a phone number given here allows, is the service's to say:
+     * the question just asked named texting, and the service is given the
+     * candidate's answer as they wrote it to judge whether they agreed.
      */
-    private void createCandidateAndApplication(Conversation conversation, State state, Job job) {
+    private void createCandidateAndApplication(Conversation conversation, State state, Job job, String phoneAnswer) {
         Application app = applicationService.receive(new ApplicationService.NewApplication(
                 job.getId(), state.name, state.email, state.phone, conversation.getLanguage(),
-                conversation.getChannel(), true, true));
+                conversation.getChannel(), true, true, phoneAnswer));
         conversation.setCandidateId(app.getCandidateId());
         conversation.setApplicationId(app.getId());
         conversations.save(conversation);

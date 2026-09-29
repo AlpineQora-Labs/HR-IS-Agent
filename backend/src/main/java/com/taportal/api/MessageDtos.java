@@ -78,10 +78,11 @@ public final class MessageDtos {
      * @param phone       the number texts go to, or null when there is none a text can reach
      * @param canBeTexted false when texts are held back; {@code whyNot} then says why
      * @param journeyOn   false when the candidate journey is switched off: nothing is sent unprompted
+     * @param note        something about this candidate's messages a recruiter should know, or null
      */
     public record Timeline(
             UUID candidateId, String candidateName, String phone, String email,
-            boolean canBeTexted, String whyNot, boolean journeyOn, List<MessageRow> messages) {
+            boolean canBeTexted, String whyNot, boolean journeyOn, String note, List<MessageRow> messages) {
     }
 
     /** A text played as the candidate's phone. */
@@ -102,9 +103,16 @@ public final class MessageDtos {
             UUID inboundId, String understood, String understoodAs, boolean duplicate, List<MessageRow> replies) {
     }
 
-    /** A point of the journey, for the screens that let one be chosen. */
+    /**
+     * A point of the journey, for the screens that let one be chosen.
+     *
+     * @param has            the fields a message at this point has values for
+     * @param textTemplates  the text templates that can word this point, the journey's own first
+     * @param emailTemplates the email templates that can word this point, the journey's own first
+     */
     public record PointDto(String key, String sentWhen, String kind, boolean byText, boolean byEmail,
-            boolean drawn, List<String> needs, String templateKey) {
+            boolean drawn, List<String> needs, String templateKey, List<String> has,
+            List<UUID> textTemplates, List<UUID> emailTemplates) {
     }
 
     public record FieldDto(String name, String holds) {

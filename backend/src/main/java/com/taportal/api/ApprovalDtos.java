@@ -29,7 +29,13 @@ public final class ApprovalDtos {
      * @param autoApprove optional unsaved auto-approve setting; null = stored
      */
     public record SimulateRequest(
-            String eventFormat, Double daysNotice, Boolean flaggedCritical, JsonNode graph, Boolean autoApprove) {
+            String eventFormat, Double daysNotice, Boolean flaggedCritical, JsonNode graph, Boolean autoApprove,
+            String trigger) {
+
+        public SimulateRequest(
+                String eventFormat, Double daysNotice, Boolean flaggedCritical, JsonNode graph, Boolean autoApprove) {
+            this(eventFormat, daysNotice, flaggedCritical, graph, autoApprove, null);
+        }
     }
 
     /**

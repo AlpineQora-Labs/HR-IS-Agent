@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { defaultJobId } from '@/lib/jobs'
 import SlideOver, { useSlideOverClose } from '@/components/SlideOver'
 import { SchedulingRadar } from '@/components/SchedulingRadar'
+import { useStore } from '@/state/store'
 import { useApplications, useJobInterviews, useJobs, useProposeTimes, useRescheduleInterview, useSlots, useTransitionInterview } from '@/api/hooks'
 import { date } from '@/lib/format'
 import type { Interview, Slot } from '@/api/types'
@@ -598,20 +599,28 @@ function InterviewActions({ iv }: { iv: Interview }) {
   const propose = useProposeTimes()
   const reschedule = useRescheduleInterview()
   const transition = useTransitionInterview()
+  const { toastMsg } = useStore()
   const busy = propose.isPending || reschedule.isPending || transition.isPending
   const btn = { fontSize: 12, padding: '3px 8px' } as const
   const status = (iv.status || '').toUpperCase()
+  /** What the server said when it refused, shown as it said it. */
+  const refused = (fallback: string) => ({
+    onError: (e: unknown) =>
+      toastMsg((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback, 'danger'),
+  })
 
   if (status === 'REQUESTED') {
     return (
-      <button className="btn btn--outline btn--sm" style={btn} disabled={busy} onClick={() => propose.mutate({ interviewId: iv.id })}>
+      <button className="btn btn--outline btn--sm" style={btn} disabled={busy}
+        onClick={() => propose.mutate({ interviewId: iv.id }, refused('Times could not be suggested.'))}>
         Suggest times
       </button>
     )
   }
   if (status === 'SLOTS_PROPOSED') {
     return (
-      <button className="btn btn--outline btn--sm" style={btn} disabled={busy} onClick={() => propose.mutate({ interviewId: iv.id })}
+      <button className="btn btn--outline btn--sm" style={btn} disabled={busy}
+        onClick={() => propose.mutate({ interviewId: iv.id }, refused('Times could not be suggested.'))}
         title="Retract the current offer and compute fresh times from the team's calendars">
         Re-propose
       </button>
@@ -620,7 +629,8 @@ function InterviewActions({ iv }: { iv: Interview }) {
   if (status === 'SCHEDULED') {
     return (
       <span style={{ display: 'inline-flex', gap: 6 }}>
-        <button className="btn btn--outline btn--sm" style={btn} disabled={busy} onClick={() => reschedule.mutate(iv.id)}
+        <button className="btn btn--outline btn--sm" style={btn} disabled={busy}
+          onClick={() => reschedule.mutate(iv.id, refused('The interview could not be moved.'))}
           title="Free the time and re-offer fresh options to the candidate">
           Reschedule
         </button>

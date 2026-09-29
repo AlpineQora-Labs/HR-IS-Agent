@@ -21,7 +21,10 @@ public record SmsIntent(Kind kind, int choice) {
         MORE("Other times"),
         /** Show me the times again. */
         TIMES("Show me the times"),
+        /** RESCHEDULE asked for plainly. */
         RESCHEDULE("Move my interview"),
+        /** A sentence that may be asking to move the interview: nothing is moved, the candidate is told how to ask. */
+        RESCHEDULE_HINTED("Perhaps: move my interview"),
         /** "Thanks", "ok": nothing is being asked. */
         THANKS("Thanks; nothing is asked"),
         /** Not something Aria can act on by text. */

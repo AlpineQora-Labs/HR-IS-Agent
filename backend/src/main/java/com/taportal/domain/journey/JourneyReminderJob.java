@@ -24,6 +24,13 @@ public class JourneyReminderJob {
 
     private static final Logger log = LoggerFactory.getLogger(JourneyReminderJob.class);
 
+    /** The points at which times are offered: once one is written, the promise of times has been acted on. */
+    private static final List<String> OFFERING = List.of(
+            JourneyPoint.INTERVIEW_INVITE.name(), JourneyPoint.INVITE_BY_LINK.name(),
+            JourneyPoint.TEAM_RESCHEDULED.name(), JourneyPoint.TEAM_RESCHEDULED_BY_LINK.name(),
+            JourneyPoint.RESCHEDULE_OPTIONS.name(), JourneyPoint.MORE_TIMES.name(),
+            JourneyPoint.SLOT_TAKEN.name(), JourneyPoint.PICK_A_NUMBER.name());
+
     private final InterviewRepository interviews;
     private final CandidateMessageRepository messages;
     private final JourneyService journey;
@@ -42,7 +49,7 @@ public class JourneyReminderJob {
             for (Interview interview : interviews.findByStatusAndScheduledAtBetween("SCHEDULED", now, now.plusHours(24))) {
                 due(interview, now).ifPresent(point -> journey.remind(interview.getId(), point));
             }
-            List<UUID> waiting = messages.interviewsWaitingForTimes(now.minusDays(14));
+            List<UUID> waiting = messages.interviewsWaitingForTimes(now.minusDays(14), OFFERING);
             for (UUID interviewId : waiting) {
                 journey.offerWhenTimesOpen(interviewId);
             }

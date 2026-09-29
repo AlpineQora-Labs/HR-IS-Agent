@@ -744,7 +744,7 @@ function SentWhen({ points, value, onChange }: {
       )}
       {chosen && chosen.needs.length > 0 && (
         <div className="wfc-inspector__hint">
-          The message has to carry {chosen.needs.map((f) => `{{${f}}}`).join(', ')}. A template without it is not used.
+          The message has to carry {chosen.needs.map((f) => `{{${f}}}`).join(', ')}. Only templates that do are listed.
         </div>
       )}
     </>
@@ -1616,7 +1616,8 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
       return
     }
     onSaved(updated)
-    flash('Workflow saved · approval chain updated')
+    // A journey has no approval chain: it follows what the candidate and the hiring team do.
+    flash(isJourney ? 'Workflow saved' : 'Workflow saved · approval chain updated')
     onClose()
   }
 
@@ -1763,18 +1764,17 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   const selData = (selected?.data ?? {}) as WfData
 
   /** Template + trigger selects, shared by email nodes and step-attached notifications. */
-  // On a journey the point comes first: it decides which templates can word the message.
+  // On a journey the point comes first, and the server says which templates can word it.
+  // With no point chosen yet there is nothing to choose a template for.
   const point = isJourney ? journey?.points.find((p) => p.key === selData.journeyPoint) : undefined
-  const fits = (status: string, body: string, key: string | null | undefined) =>
-    !isJourney ||
-    (status !== 'ARCHIVED' &&
-      (!point || point.needs.every((f) => body.includes(`{{${f}}}`))) &&
-      // A template that words another point of the journey is not offered for this one.
-      (!key || !point || key === point.templateKey))
   const ownFirst = <T extends { templateKey?: string | null }>(list: T[]) =>
     point ? [...list].sort((x, y) => Number(y.templateKey === point.templateKey) - Number(x.templateKey === point.templateKey)) : list
-  const emailChoices = ownFirst((templates ?? []).filter((t) => fits(t.status, `${t.subject} ${t.bodyHtml}`, t.templateKey)))
-  const smsChoices = ownFirst((smsTemplates ?? []).filter((t) => fits(t.status, t.body, t.templateKey)))
+  const emailChoices = !isJourney
+    ? (templates ?? [])
+    : ownFirst((templates ?? []).filter((t) => point?.emailTemplates.includes(t.templateId)))
+  const smsChoices = !isJourney
+    ? (smsTemplates ?? [])
+    : ownFirst((smsTemplates ?? []).filter((t) => point?.textTemplates.includes(t.id)))
 
   const emailRules = (
     <>
@@ -1784,7 +1784,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
           value={selData.journeyPoint}
           onChange={(p) => {
             // A new point brings its own wording; what worded the old point does not follow.
-            const own = (templates ?? []).find((t) => p && t.templateKey === p.templateKey && t.status === 'ACTIVE')
+            const own = (templates ?? []).find((t) => p && t.templateKey === p.templateKey && p.emailTemplates.includes(t.templateId))
             patchData({
               journeyPoint: p?.key, emailTrigger: p?.sentWhen,
               emailTemplateId: own?.templateId, emailTemplateName: own?.name,
@@ -1811,7 +1811,9 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
           <div className="wfc-tpl-empty">
             {(templates ?? []).length === 0
               ? 'No templates yet. Create them in Admin, Communications.'
-              : 'No template can word this message. The journey’s own wording is sent.'}
+              : isJourney && !point
+                ? 'Choose when this is sent, then its wording.'
+                : 'No template can word this message. The journey’s own wording is sent.'}
           </div>
         )}
       </div>
@@ -1839,7 +1841,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
           points={(journey?.points ?? []).filter((p) => p.drawn && p.byText)}
           value={selData.journeyPoint}
           onChange={(p) => {
-            const own = (smsTemplates ?? []).find((t) => p && t.templateKey === p.templateKey && t.status === 'ACTIVE')
+            const own = (smsTemplates ?? []).find((t) => p && t.templateKey === p.templateKey && p.textTemplates.includes(t.id))
             patchData({
               journeyPoint: p?.key, smsTrigger: p?.sentWhen,
               smsTemplateId: own?.id, smsTemplateName: own?.name,
@@ -1866,7 +1868,9 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
           <div className="wfc-tpl-empty">
             {(smsTemplates ?? []).length === 0
               ? 'No SMS templates yet. Create them in Admin, Communications.'
-              : 'No template can word this message. The journey’s own wording is sent.'}
+              : isJourney && !point
+                ? 'Choose when this is sent, then its wording.'
+                : 'No template can word this message. The journey’s own wording is sent.'}
           </div>
         )}
       </div>
@@ -1976,15 +1980,18 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
           <div className="wfc-top__title">{workflow.name}</div>
         </div>
 
-        <button
-          className={simOpen ? 'btn btn--primary btn--sm' : 'btn btn--outline btn--sm'}
-          onClick={() => {
-            if (simOpen) clearLit()
-            setSimOpen((o) => !o)
-          }}
-        >
-          Test
-        </button>
+        {/* A journey is not routed like a request, so there is no route to test (the server refuses too). */}
+        {!isJourney && (
+          <button
+            className={simOpen ? 'btn btn--primary btn--sm' : 'btn btn--outline btn--sm'}
+            onClick={() => {
+              if (simOpen) clearLit()
+              setSimOpen((o) => !o)
+            }}
+          >
+            Test
+          </button>
+        )}
         <button className="btn btn--ghost btn--sm" onClick={onClose}>
           Cancel
         </button>

@@ -93,6 +93,16 @@ public class JourneyService {
         return run("offering times that have opened up", () -> units.offerWhenTimesOpen(interviewId));
     }
 
+    /** What is on record for a reminder of an interview as it is booked now. Empty when nothing is. */
+    public List<CandidateMessage> reminded(UUID interviewId, JourneyPoint which) {
+        try {
+            return units.reminded(interviewId, which);
+        } catch (RuntimeException e) {
+            log.warn("Could not read the record of a reminder: {}", e.toString());
+            return List.of();
+        }
+    }
+
     // ---- what a candidate texts ----
 
     public Inbound receive(String address, String text, String provider, String providerMessageId) {
@@ -219,6 +229,31 @@ public class JourneyService {
             return List.of();
         }
         return run("answering a request to reschedule", () -> units.rescheduled(t, plan.interviewId(), attempt));
+    }
+
+    /**
+     * A text that may have been asking to move an interview, in words that
+     * could mean something else. A booking is never given up on the strength
+     * of it: the candidate is told what they are booked for and how to ask.
+     * With nothing booked, asking again costs nothing, and it is taken as asked.
+     */
+    public List<CandidateMessage> mayWantToReschedule(Texter t) {
+        Reschedule plan;
+        try {
+            plan = units.reschedule(t);
+        } catch (RuntimeException e) {
+            failed("reading a text that may ask to reschedule", e);
+            return List.of();
+        }
+        if (plan.interviewId() != null) {
+            return run("answering a text that may ask to reschedule",
+                    () -> units.bookedAsItIs(t, plan.interviewId()));
+        }
+        if (plan.asMore()) {
+            return more(t);
+        }
+        dispatcher.dispatch(plan.written());
+        return plan.written();
     }
 
     /** Send what was written and never sent. */

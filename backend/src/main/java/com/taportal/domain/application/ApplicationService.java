@@ -51,12 +51,20 @@ public class ApplicationService {
      *                         text can reach, in one standard form as well
      * @param agreedToTexts    the candidate gave the number in answer to a question that said it
      *                         would be used to text them
+     * @param phoneAnswer      what the candidate wrote in answer to that question, as they wrote
+     *                         it: a number given with "please don't text me" is not agreement
      * @param screeningFollows screening questions come next; the application is announced as
      *                         received once they are passed, not before
      */
     public record NewApplication(
             UUID jobId, String name, String email, String phoneAsTyped, String language,
-            String source, boolean agreedToTexts, boolean screeningFollows) {
+            String source, boolean agreedToTexts, boolean screeningFollows, String phoneAnswer) {
+
+        public NewApplication(
+                UUID jobId, String name, String email, String phoneAsTyped, String language,
+                String source, boolean agreedToTexts, boolean screeningFollows) {
+            this(jobId, name, email, phoneAsTyped, language, source, agreedToTexts, screeningFollows, phoneAsTyped);
+        }
     }
 
     /**
@@ -69,8 +77,9 @@ public class ApplicationService {
         candidate.setName(in.name() == null || in.name().isBlank() ? "Unknown" : in.name().trim());
         candidate.setEmail(in.email() == null ? "" : in.email().trim());
         candidate.setPhone(in.phoneAsTyped());
-        // Agreement counts only with a number it can apply to.
-        if (in.agreedToTexts() && candidate.getPhoneE164() != null) {
+        // Agreement counts only with a number it can apply to, and not when the answer refused it.
+        if (in.agreedToTexts() && candidate.getPhoneE164() != null
+                && !com.taportal.domain.messaging.TextAgreement.refused(in.phoneAnswer())) {
             candidate.setSmsConsentAt(java.time.OffsetDateTime.now());
         }
         candidate.setYearsExperience(java.math.BigDecimal.ZERO);

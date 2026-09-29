@@ -7,6 +7,7 @@ import com.taportal.api.ApprovalDtos.SimulateRequest;
 import com.taportal.api.ApprovalDtos.SimulateResponse;
 import com.taportal.api.ApprovalDtos.WorkflowDto;
 import com.taportal.domain.journey.JourneyPlan;
+import com.taportal.domain.journey.JourneyTemplates;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -24,14 +25,17 @@ public class ApprovalWorkflowService {
     private final ApprovalWorkflowRepository repository;
     private final ApprovalRequestRepository requestRepository;
     private final ObjectMapper mapper;
+    private final JourneyTemplates journeyTemplates;
 
     public ApprovalWorkflowService(
             ApprovalWorkflowRepository repository,
             ApprovalRequestRepository requestRepository,
-            ObjectMapper mapper) {
+            ObjectMapper mapper,
+            JourneyTemplates journeyTemplates) {
         this.repository = repository;
         this.requestRepository = requestRepository;
         this.mapper = mapper;
+        this.journeyTemplates = journeyTemplates;
     }
 
     public List<WorkflowDto> list() {
@@ -133,6 +137,13 @@ public class ApprovalWorkflowService {
         if (wf == null && draft == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Workflow not found");
         }
+        String trigger = req.trigger() != null ? req.trigger() : wf == null ? null : wf.getTriggerType();
+        if (trigger != null && JourneyPlan.TRIGGER.equalsIgnoreCase(trigger.trim())) {
+            // A journey's rules are things a candidate does, not facts about a request: there is no route to walk.
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "A candidate journey is not routed like a request, so there is nothing to test. "
+                            + "It follows what the candidate and the hiring team do.");
+        }
         boolean autoApprove = req.autoApprove() != null ? req.autoApprove() : wf != null && wf.isAutoApprove();
         ApprovalRouteEngine.Route route = ApprovalRouteEngine.evaluate(
                 draft != null ? draft : readGraph(wf),
@@ -163,6 +174,9 @@ public class ApprovalWorkflowService {
         if (journey) {
             // What a journey's message steps will not do as drawn. The journey itself says; this only passes it on.
             for (JourneyPlan.Advice a : JourneyPlan.advise(graph)) {
+                found.add(new CheckIssue(a.code(), false, a.nodeId(), a.message()));
+            }
+            for (JourneyPlan.Advice a : journeyTemplates.advise(graph)) {
                 found.add(new CheckIssue(a.code(), false, a.nodeId(), a.message()));
             }
         }

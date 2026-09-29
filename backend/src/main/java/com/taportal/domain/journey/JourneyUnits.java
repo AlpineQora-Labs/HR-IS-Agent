@@ -66,7 +66,6 @@ public class JourneyUnits {
     /** A time picked by text must still be this far off, or it is treated as gone. */
     static final Duration PICK_NOTICE = Duration.ofHours(1);
 
-    /** Answers a number gets within ten minutes before the system stops answering: two machines can talk all night. */
     /** Answers to texts that were not understood, in ten minutes, before the system goes quiet. */
     private static final int ANSWERS_BEFORE_SILENCE = 3;
     private static final Set<String> ANSWERS_THAT_CAN_LOOP = Set.of("HELP", "PICK_A_NUMBER", "UNKNOWN_SENDER");
@@ -121,8 +120,14 @@ public class JourneyUnits {
      *
      * @param inboundId the record of the text being answered
      * @param primary   the record used for a name; null when nobody gave this number
+     * @param shared    true when the records that gave this number are not one person: nothing
+     *                  about any of them is said or changed by text
      */
-    public record Texter(String address, UUID inboundId, List<UUID> candidateIds, UUID primary) {
+    public record Texter(String address, UUID inboundId, List<UUID> candidateIds, UUID primary, boolean shared) {
+
+        public Texter(String address, UUID inboundId, List<UUID> candidateIds, UUID primary) {
+            this(address, inboundId, candidateIds, primary, false);
+        }
 
         public boolean known() {
             return !candidateIds.isEmpty();
@@ -228,14 +233,28 @@ public class JourneyUnits {
                 || !interview.getScheduledAt().toInstant().equals(at.toInstant())) {
             return List.of(); // it has changed since: this booking is no longer the news
         }
-        store.closeOffers(interviewId);
+        // Booked: nothing else on offer for this application can be picked any more.
+        for (Interview other : interviews.findByApplicationId(interview.getApplicationId())) {
+            store.closeOffers(other.getId());
+        }
         Subject s = subject(interview.getApplicationId(), interview);
         if (s == null) {
             return List.of();
         }
         return tell(JourneyPoint.INTERVIEW_CONFIRMED, s, values.of(s.candidate, s.application, s.job, interview),
-                "INTERVIEW_CONFIRMED:" + interviewId + ":" + at.toEpochSecond(), null,
+                "INTERVIEW_CONFIRMED:" + booking(interview), null,
                 origin == BookingOrigin.TEXT, false);
+    }
+
+    /**
+     * What tells one booking from another: the interview, the time, and when
+     * it was booked. A time given up and booked again is a booking of its own,
+     * with a confirmation and reminders of its own.
+     */
+    private static String booking(Interview interview) {
+        OffsetDateTime bookedAt = interview.getBookedAt();
+        return interview.getId() + ":" + interview.getScheduledAt().toEpochSecond()
+                + ":" + (bookedAt == null ? 0 : bookedAt.toInstant().toEpochMilli());
     }
 
     /** The hiring team's side cancelled an interview the candidate was booked for. */
@@ -274,7 +293,23 @@ public class JourneyUnits {
             return List.of();
         }
         return tell(which, s, values.of(s.candidate, s.application, s.job, interview),
-                which.name() + ":" + interviewId + ":" + interview.getScheduledAt().toEpochSecond(), null, false, once);
+                reminderKey(which, interview), null, false, once);
+    }
+
+    private static String reminderKey(JourneyPoint which, Interview interview) {
+        return which.name() + ":" + booking(interview);
+    }
+
+    /** What is on record for a reminder of this booking: sent, held back, or nothing. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+    public List<CandidateMessage> reminded(UUID interviewId, JourneyPoint which) {
+        Interview interview = interviews.findById(interviewId).orElse(null);
+        if (interview == null || interview.getScheduledAt() == null) {
+            return List.of();
+        }
+        String key = reminderKey(which, interview);
+        return messages.findByDedupeKeyIn(List.of(
+                key + ":SMS", key + ":EMAIL", key + ":SMS:held", key + ":EMAIL:held"));
     }
 
     /**
@@ -289,7 +324,8 @@ public class JourneyUnits {
             return List.of();
         }
         Subject s = subject(interview.getApplicationId(), interview);
-        if (s == null || StatusWording.closed(s.application.getStage())) {
+        if (s == null || StatusWording.closed(s.application.getStage())
+                || interviewService.bookedAhead(interview.getApplicationId()).isPresent()) {
             return List.of();
         }
         if (open(interviewId).isEmpty()) {
@@ -316,19 +352,21 @@ public class JourneyUnits {
     public Inbound inbound(String address, String text, String provider, String providerMessageId) {
         List<Candidate> people = candidates.findByPhoneE164(address);
         List<UUID> ids = people.stream().map(Candidate::getId).toList();
-        UUID primary = primaryOf(people);
+        boolean shared = !SamePerson.all(people);
+        // A text from a number two people gave is nobody's in particular.
+        UUID primary = shared ? null : primaryOf(people);
         if (providerMessageId != null && !providerMessageId.isBlank()) {
             CandidateMessage seen = messages.findByProviderAndProviderMessageId(provider, providerMessageId).orElse(null);
             if (seen != null) {
                 // Delivered again. Handled already, or being handled right now: nothing to do.
                 boolean handled = seen.getProcessedAt() != null
                         || seen.getCreatedAt().isAfter(OffsetDateTime.now().minusMinutes(1));
-                return new Inbound(new Texter(address, seen.getId(), ids, primary), handled);
+                return new Inbound(new Texter(address, seen.getId(), ids, primary, shared), handled);
             }
         }
         CandidateMessage row = store.received(primary, address, text, provider,
                 providerMessageId == null || providerMessageId.isBlank() ? null : providerMessageId);
-        return new Inbound(new Texter(address, row.getId(), ids, primary), false);
+        return new Inbound(new Texter(address, row.getId(), ids, primary, shared), false);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -351,7 +389,8 @@ public class JourneyUnits {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<CandidateMessage> optIn(Texter t) {
         policy.optIn(t.address());
-        for (Candidate c : candidates.findAllById(t.candidateIds())) {
+        // START from a number two people gave is not agreement from each of them.
+        for (Candidate c : t.shared() ? List.<Candidate>of() : candidates.findAllById(t.candidateIds())) {
             if (c.getSmsConsentAt() == null) {
                 c.setSmsConsentAt(OffsetDateTime.now());
                 candidates.save(c);
@@ -385,6 +424,9 @@ public class JourneyUnits {
         if (!t.known()) {
             return unknownSender(t);
         }
+        if (t.shared()) {
+            return sharedNumber(t);
+        }
         if (answeredTooOften(t)) {
             return List.of(silence(t));
         }
@@ -399,6 +441,9 @@ public class JourneyUnits {
     public List<CandidateMessage> status(Texter t) {
         if (!t.known()) {
             return unknownSender(t);
+        }
+        if (t.shared()) {
+            return sharedNumber(t);
         }
         List<Application> apps = applicationsOf(t).stream()
                 .sorted(Comparator
@@ -432,6 +477,9 @@ public class JourneyUnits {
     public Pick pick(Texter t, int n) {
         if (!t.known()) {
             return answered(unknownSender(t));
+        }
+        if (t.shared()) {
+            return answered(sharedNumber(t));
         }
         CandidateMessage offer = openOffer(t);
         if (offer == null) {
@@ -487,6 +535,9 @@ public class JourneyUnits {
         if (!t.known()) {
             return unknownSender(t);
         }
+        if (t.shared()) {
+            return sharedNumber(t);
+        }
         CandidateMessage offer = openOffer(t);
         if (offer == null) {
             Interview booked = bookedFor(t);
@@ -507,6 +558,9 @@ public class JourneyUnits {
         if (!t.known()) {
             return unknownSender(t);
         }
+        if (t.shared()) {
+            return sharedNumber(t);
+        }
         CandidateMessage offer = openOffer(t);
         UUID interviewId = offer != null ? offer.getInterviewId() : waitingFor(t);
         if (interviewId != null) {
@@ -516,21 +570,54 @@ public class JourneyUnits {
         return booked != null ? alreadyBooked(t, booked) : status(t);
     }
 
-    /** RESCHEDULE: find what is to be moved, before anything is moved. */
+    /**
+     * RESCHEDULE: find what is to be moved, before anything is moved.
+     *
+     * <p>A reply is about what was last texted. With times on offer, the
+     * candidate is asking for other times, and an interview they are booked
+     * for elsewhere is left alone. With more than one interview booked there
+     * is no telling which is meant, so none is moved.
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Reschedule reschedule(Texter t) {
         if (!t.known()) {
             return new Reschedule(null, false, unknownSender(t));
         }
-        Interview booked = bookedFor(t);
-        if (booked != null) {
-            return new Reschedule(booked.getId(), false, List.of());
+        if (t.shared()) {
+            return new Reschedule(null, false, sharedNumber(t));
         }
         if (openOffer(t) != null) {
-            return new Reschedule(null, true, List.of()); // nothing booked, times on offer: they want other times
+            return new Reschedule(null, true, List.of());
+        }
+        List<Interview> booked = allBookedFor(t);
+        if (booked.size() == 1) {
+            return new Reschedule(booked.get(0).getId(), false, List.of());
+        }
+        if (booked.size() > 1) {
+            Interview soonest = booked.get(0);
+            Subject s = subject(soonest.getApplicationId(), soonest);
+            Map<String, String> v = values.of(s.candidate, s.application, s.job, soonest);
+            v.put("reason", "You have more than one interview booked; to change one, use the link in its "
+                    + "confirmation email.");
+            askRecruiter(s, "asked by text to move an interview and has " + booked.size() + " booked",
+                    "Nothing was moved: it could not be told which interview was meant");
+            return new Reschedule(null, false, answer(JourneyPoint.RESCHEDULE_DECLINED, t, s, v));
         }
         return new Reschedule(null, false,
                 answer(JourneyPoint.NOTHING_TO_RESCHEDULE, t, replySubject(t, null), Map.of()));
+    }
+
+    /**
+     * A text that may have been asking to move an interview. Nothing is
+     * moved: the candidate is told what they are booked for and how to ask.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public List<CandidateMessage> bookedAsItIs(Texter t, UUID interviewId) {
+        Interview interview = interviews.findById(interviewId).orElse(null);
+        if (interview == null || !InterviewService.isBooked(interview)) {
+            return answer(JourneyPoint.NOTHING_TO_RESCHEDULE, t, replySubject(t, null), Map.of());
+        }
+        return alreadyBooked(t, interview);
     }
 
     /** Tell the candidate what came of asking to move their interview. */
@@ -580,13 +667,21 @@ public class JourneyUnits {
         Interview interview = interviews.findById(interviewId).orElseThrow();
         Subject s = subject(interview.getApplicationId(), interview);
         List<SlotResponse> open = open(interviewId);
+        // Nobody asked: what goes out, and whether anything does, is for the drawing to say.
+        Plan plan = plans.current();
+        boolean notice = point.kind() == JourneyPoint.Kind.NOTICE;
+        boolean byText = plan.on() && (notice || plan.draws(point, CandidateMessage.SMS));
+        boolean byEmail = plan.on() && point.byEmail() && (notice || plan.draws(point, CandidateMessage.EMAIL));
         if (open.isEmpty()) {
             Map<String, String> v = values.of(s.candidate, s.application, s.job, interview);
-            // Once a day at most: the promise is "we will text you", not a running commentary.
-            String key = "NO_TIMES_AVAILABLE:" + interviewId + ":" + OffsetDateTime.now(ZoneOffset.UTC).toLocalDate();
             if (texter != null) {
                 return answer(JourneyPoint.NO_TIMES_AVAILABLE, texter, s, v);
             }
+            if (!byText) {
+                return List.of(); // no text would follow when times open, so none is promised
+            }
+            // Once a day at most: the promise is "we will text you", not a running commentary.
+            String key = "NO_TIMES_AVAILABLE:" + interviewId + ":" + OffsetDateTime.now(ZoneOffset.UTC).toLocalDate();
             CandidateMessage told = write(JourneyPoint.NO_TIMES_AVAILABLE, CandidateMessage.SMS, s, v,
                     s.candidate.getPhoneE164(), false, key, null, true);
             return told == null ? List.of() : List.of(told);
@@ -595,33 +690,48 @@ public class JourneyUnits {
         Map<String, String> v = values.of(s.candidate, s.application, s.job, interview);
         JourneyValues.offer(v, times);
         String offered = writeOffer(open);
-        String key = point.name() + ":" + interviewId + ":" + times.get(0).toEpochSecond() + ":" + times.size();
 
         if (texter != null) {
             store.closeOffers(interviewId);
             return answer(point, texter, s, v, offered);
         }
-        // One open offer for a number at a time: with two, "2" would have two meanings.
+        // One key for one putting-on-offer: the same times offered on another occasion are news again.
+        String key = point.name() + ":" + interviewId + ":" + proposal(interviewId);
+        // Numbers in reply need one open offer for a number, and one person behind it: with two
+        // offers "2" would have two meanings, and a shared phone cannot say whose reply it is.
         String address = s.candidate.getPhoneE164();
         boolean anotherOpen = address != null && messages.openOffersTo(address).stream()
                 .anyMatch(m -> !interviewId.equals(m.getInterviewId()) && stillOpen(m));
-        if (anotherOpen) {
+        boolean shared = address != null && !SamePerson.all(candidates.findByPhoneE164(address));
+        if (anotherOpen || shared) {
+            JourneyPoint byLink = point == JourneyPoint.TEAM_RESCHEDULED
+                    ? JourneyPoint.TEAM_RESCHEDULED_BY_LINK : JourneyPoint.INVITE_BY_LINK;
             List<CandidateMessage> written = new ArrayList<>();
-            add(written, write(JourneyPoint.INVITE_BY_LINK, CandidateMessage.SMS, s, v, address, false,
-                    "INVITE_BY_LINK:" + interviewId + ":" + times.get(0).toEpochSecond(), null, once));
-            Plan plan = plans.current();
-            if (plan.on() && point.byEmail() && (point.kind() == JourneyPoint.Kind.NOTICE
-                    || plan.draws(point, CandidateMessage.EMAIL))) {
+            if (byText) {
+                add(written, write(byLink, CandidateMessage.SMS, s, v, address, false, key + ":LINK:SMS", null, once));
+            }
+            if (byEmail) {
                 add(written, write(point, CandidateMessage.EMAIL, s, v, s.candidate.getEmail(), false,
                         key + ":EMAIL", null, once));
             }
+            alertWhenUnreached(point, s, written);
             return written;
         }
         if (store.known(key + ":SMS")) {
-            return List.of(); // these very times were sent already
+            return List.of(); // this very offer was sent already
         }
         store.closeOffers(interviewId);
         return tell(point, s, v, key, offered, false, once);
+    }
+
+    /**
+     * What tells one putting-on-offer from another: the first of the times put
+     * on offer together. Times offered again are new rows, so an interview
+     * moved twice is announced twice, even to the same times.
+     */
+    private String proposal(UUID interviewId) {
+        return slots.findByInterviewIdAndStatusOrderByStartsAt(interviewId, "PROPOSED").stream()
+                .findFirst().map(sl -> String.valueOf(sl.getId())).orElse("none");
     }
 
     /** The times on offer that can still be picked. */
@@ -697,6 +807,10 @@ public class JourneyUnits {
                 || !List.of("REQUESTED", "SLOTS_PROPOSED").contains(interview.getStatus())) {
             return false;
         }
+        // Booked some other way since the offer went out: picking a time now would book a second interview.
+        if (interviewService.bookedAhead(interview.getApplicationId()).isPresent()) {
+            return false;
+        }
         return applications.findById(interview.getApplicationId())
                 .map(a -> !StatusWording.closed(a.getStage()))
                 .orElse(false);
@@ -716,14 +830,20 @@ public class JourneyUnits {
 
     /** The soonest interview this person is booked for, among applications still running. */
     private Interview bookedFor(Texter t) {
+        List<Interview> all = allBookedFor(t);
+        return all.isEmpty() ? null : all.get(0);
+    }
+
+    /** Every interview this person is booked for, soonest first. */
+    private List<Interview> allBookedFor(Texter t) {
         List<UUID> ids = runningApplicationsOf(t).stream().map(Application::getId).toList();
         if (ids.isEmpty()) {
-            return null;
+            return List.of();
         }
         return interviews.findByApplicationIdIn(ids).stream()
                 .filter(InterviewService::isBooked)
-                .min(Comparator.comparing(Interview::getScheduledAt))
-                .orElse(null);
+                .sorted(Comparator.comparing(Interview::getScheduledAt))
+                .toList();
     }
 
     /** An interview with times on offer that were never texted: offered in chat, or on the web page. */
@@ -821,13 +941,18 @@ public class JourneyUnits {
             add(written, write(point, CandidateMessage.EMAIL, s, v, s.candidate.getEmail(), false,
                     key + ":EMAIL", null, once));
         }
+        alertWhenUnreached(point, s, written);
+        return written;
+    }
+
+    /** A candidate told on no channel at all is somebody's to chase: say so where recruiters look. */
+    private void alertWhenUnreached(JourneyPoint point, Subject s, List<CandidateMessage> written) {
         if (!written.isEmpty() && written.stream().noneMatch(m -> CandidateMessage.QUEUED.equals(m.getStatus()))) {
             String why = written.stream()
                     .map(m -> (CandidateMessage.SMS.equals(m.getChannel()) ? "Text: " : "Email: ") + m.getReason())
                     .reduce((a, b) -> a + ". " + b).orElse("");
             askRecruiter(s, "was not told: " + point.label().toLowerCase(), why);
         }
-        return written;
     }
 
     private List<CandidateMessage> answer(JourneyPoint point, Texter t, Subject s, Map<String, String> v) {
@@ -850,6 +975,27 @@ public class JourneyUnits {
             return List.of(); // told once today already
         }
         return answer(JourneyPoint.UNKNOWN_SENDER, t, new Subject(null, null, null, null), Map.of());
+    }
+
+    /**
+     * A text from a number more than one person gave. Whose applications and
+     * whose interviews it speaks of cannot be known, so nothing is said of
+     * them and nothing is changed; the recruiters are told the number is
+     * shared, once a day.
+     */
+    private List<CandidateMessage> sharedNumber(Texter t) {
+        long told = messages.countAnswers(t.address(), Set.of(JourneyPoint.SHARED_NUMBER.name()),
+                OffsetDateTime.now().minusHours(24));
+        if (told > 0) {
+            return List.of();
+        }
+        List<String> names = candidates.findAllById(t.candidateIds()).stream().map(Candidate::getName).toList();
+        notifications.notifyRole("RECRUITER", "MESSAGE",
+                clip("A text came from a number " + names.size() + " candidates gave", 200),
+                clip(String.join(", ", names) + " gave " + t.address()
+                        + ". It was not answered with anything about them. Reach them by email.", 400),
+                "/candidates");
+        return answer(JourneyPoint.SHARED_NUMBER, t, new Subject(null, null, null, null), Map.of());
     }
 
     private boolean answeredTooOften(Texter t) {
@@ -875,23 +1021,25 @@ public class JourneyUnits {
     private CandidateMessage write(
             JourneyPoint point, String channel, Subject s, Map<String, String> v,
             String address, boolean answering, String key, String offer, boolean once) {
-        String held = once ? key + ":held" : null;
-        if (store.known(key) || store.known(held)) {
+        if (store.known(key)) {
             return null;
         }
+        // Held back before and recorded then: it is not recorded again, but it may go now.
+        String held = once ? key + ":held" : null;
+        boolean recorded = store.known(held);
         boolean text = CandidateMessage.SMS.equals(channel);
         OffsetDateTime consent = s.candidate == null ? null : s.candidate.getSmsConsentAt();
         MessagePolicy.Decision may = text
                 ? policy.text(address, consent, answering, point.name())
                 : policy.email(address);
         if (!may.send()) {
-            return store.notSent(draft(point, channel, s, address, null, "", null, null, held),
+            return recorded ? null : store.notSent(draft(point, channel, s, address, null, "", null, null, held),
                     CandidateMessage.SUPPRESSED, may.reason());
         }
         Plan plan = plans.current();
         List<Wording> wordings = text ? templates.forText(point, plan) : templates.forEmail(point, plan);
         if (wordings.isEmpty()) {
-            return store.notSent(draft(point, channel, s, address, null, "", null, null, held),
+            return recorded ? null : store.notSent(draft(point, channel, s, address, null, "", null, null, held),
                     CandidateMessage.FAILED,
                     "The journey has no active template for “" + point.label() + "”");
         }
@@ -913,7 +1061,7 @@ public class JourneyUnits {
             return store.queue(draft(point, channel, s, address,
                     subject == null ? null : subject.text(), out, w.templateId(), w.name(), key).withOffer(offer));
         }
-        return store.notSent(draft(point, channel, s, address, null, "", wordings.get(0).templateId(),
+        return recorded ? null : store.notSent(draft(point, channel, s, address, null, "", wordings.get(0).templateId(),
                         wordings.get(0).name(), held),
                 CandidateMessage.FAILED,
                 "The template needs " + String.join(", ", missing.stream().map(f -> "{{" + f + "}}").toList())

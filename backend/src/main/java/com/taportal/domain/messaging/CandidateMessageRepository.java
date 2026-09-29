@@ -19,7 +19,23 @@ public interface CandidateMessageRepository extends JpaRepository<CandidateMessa
             order by m.createdAt asc, m.id asc""")
     List<CandidateMessage> timeline(@Param("candidateIds") Collection<UUID> candidateIds, @Param("phone") String phone);
 
+    /**
+     * The messages of one of several people who gave the same number: their
+     * own, and those of the number that are nobody's in particular — a text
+     * that came from it, and what was answered. What was sent to the others
+     * is theirs.
+     */
+    @Query("""
+            select m from CandidateMessage m
+            where m.candidateId in :candidateIds
+               or (m.channel = 'SMS' and m.address = :phone and m.candidateId is null)
+            order by m.createdAt asc, m.id asc""")
+    List<CandidateMessage> timelineOnSharedNumber(
+            @Param("candidateIds") Collection<UUID> candidateIds, @Param("phone") String phone);
+
     boolean existsByDedupeKey(String dedupeKey);
+
+    List<CandidateMessage> findByDedupeKeyIn(Collection<String> dedupeKeys);
 
     Optional<CandidateMessage> findByProviderAndProviderMessageId(String provider, String providerMessageId);
 
@@ -71,8 +87,11 @@ public interface CandidateMessageRepository extends JpaRepository<CandidateMessa
     boolean hasBeenTexted(@Param("address") String address);
 
     /**
-     * Interviews whose candidate was told times are being arranged, and who has
-     * not been offered any since.
+     * Interviews whose candidate was told times are being arranged, and for
+     * whom nothing has been written since that offers any. Whatever was
+     * written — a text with times, an email, a link, or a text held back and
+     * recorded as such — the promise has been acted on, and is not acted on
+     * again every minute.
      */
     @Query("""
             select distinct m.interviewId from CandidateMessage m
@@ -80,9 +99,11 @@ public interface CandidateMessageRepository extends JpaRepository<CandidateMessa
               and m.status in ('QUEUED', 'SENDING', 'SENT')
               and not exists (
                 select 1 from CandidateMessage later
-                where later.interviewId = m.interviewId and later.offer is not null
-                  and later.createdAt > m.createdAt)""")
-    List<UUID> interviewsWaitingForTimes(@Param("since") OffsetDateTime since);
+                where later.interviewId = m.interviewId and later.createdAt > m.createdAt
+                  and later.direction = 'OUTBOUND'
+                  and (later.offer is not null or later.point in :offering))""")
+    List<UUID> interviewsWaitingForTimes(
+            @Param("since") OffsetDateTime since, @Param("offering") Collection<String> offering);
 
     /** What was written for a number from a moment on: the answers to a text that arrived then. */
     @Query("""

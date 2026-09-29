@@ -61,13 +61,16 @@ public class JourneyValues {
         v.put("company_name", companyName);
         v.put("sender_name", companyName);
         if (candidate != null) {
-            put(v, "candidate_name", known(candidate.getName()));
+            String name = known(candidate.getName());
+            v.put("candidate_name", name == null ? "Candidate" : name);
             v.put("first_name", firstName(candidate.getName()));
         } else {
             v.put("first_name", "there");
         }
         if (job != null) {
             put(v, "job_title", job.getTitle());
+            // A role with no recruiter set is still recruited for by somebody.
+            v.put("recruiter_name", "the recruiting team");
             if (job.getRecruiterId() != null) {
                 people.findById(job.getRecruiterId()).map(RecruiterUser::getName).ifPresent(name -> {
                     v.put("recruiter_name", name);

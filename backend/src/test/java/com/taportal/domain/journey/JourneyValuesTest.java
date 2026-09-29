@@ -66,8 +66,10 @@ class JourneyValuesTest {
         assertThat(v).containsEntry("first_name", "Raj").containsEntry("candidate_name", "Raj Patel")
                 .containsEntry("job_title", "Summer Analyst Intern")
                 .containsEntry("company_name", "Example Careers")
-                .containsEntry("sender_name", "Example Careers");
-        assertThat(v).doesNotContainKeys("interview_time", "meeting_link", "link", "slot_options", "recruiter_name");
+                .containsEntry("sender_name", "Example Careers")
+                // A role with no recruiter set is still recruited for by somebody: the field never fails a message.
+                .containsEntry("recruiter_name", "the recruiting team");
+        assertThat(v).doesNotContainKeys("interview_time", "meeting_link", "link", "slot_options");
     }
 
     @Test

@@ -209,11 +209,33 @@ class JourneyUnitsTest {
         return open;
     }
 
+    private static final OffsetDateTime BOOKED_AT = OffsetDateTime.now().minusHours(30).withNano(0);
+
     private void theInterviewIsBooked(OffsetDateTime at) {
         interview.setStatus("SCHEDULED");
         interview.setScheduledAt(at);
+        interview.setBookedAt(BOOKED_AT);
         interview.setMeetingLink("https://meet.example/abc");
         when(interviewService.bookedAhead(application.getId())).thenReturn(Optional.of(interview));
+    }
+
+    /** What tells one booking from another in a key: the interview, the time, and when it was booked. */
+    private String booking(OffsetDateTime at) {
+        return interview.getId() + ":" + at.toEpochSecond() + ":" + interview.getBookedAt().toInstant().toEpochMilli();
+    }
+
+    /** A second record with the same number: another person, unless given the same name or email. */
+    private Candidate anotherRecordWithTheNumber(String name, String email) {
+        Candidate other = new Candidate();
+        ReflectionTestUtils.setField(other, "id", UUID.randomUUID());
+        other.setName(name);
+        other.setEmail(email);
+        other.setPhone("(212) 555-0109");
+        other.setSmsConsentAt(OffsetDateTime.now().minusDays(1));
+        when(candidates.findById(other.getId())).thenReturn(Optional.of(other));
+        when(candidates.findByPhoneE164(PHONE)).thenReturn(List.of(raj, other));
+        when(candidates.findAllById(any())).thenReturn(List.of(raj, other));
+        return other;
     }
 
     private List<String> texts() {
@@ -460,6 +482,134 @@ class JourneyUnitsTest {
         }
 
         @Test
+        @DisplayName("with the journey switched off, no text promises times and no link is texted")
+        void withTheJourneyOffNothingGoesUnprompted() {
+            journeyIsOff();
+            when(interviewService.proposedSlots(interview.getId())).thenReturn(List.of());
+            assertThat(units.selectedForInterview(application.getId())).isEmpty();
+
+            anOfferIsOpen(inDays(3, 14));
+            Interview other = new Interview();
+            ReflectionTestUtils.setField(other, "id", UUID.randomUUID());
+            other.setApplicationId(application.getId());
+            other.setStatus("SLOTS_PROPOSED");
+            when(interviews.findById(other.getId())).thenReturn(Optional.of(other));
+            CandidateMessage earlier = new CandidateMessage();
+            earlier.setId(UUID.randomUUID());
+            earlier.setInterviewId(other.getId());
+            earlier.setOffer("[]");
+            when(messages.openOffersTo(PHONE)).thenReturn(List.of(earlier));
+            assertThat(units.selectedForInterview(application.getId())).isEmpty();
+            assertThat(written).isEmpty();
+        }
+
+        @Test
+        @DisplayName("an invitation with no Text step drawn promises no text when the calendars are full")
+        void noTextIsPromisedWhereNoneWouldFollow() {
+            when(plans.current()).thenReturn(new Plan(true, Map.of("INTERVIEW_INVITE|EMAIL", Optional.empty())));
+            when(interviewService.proposedSlots(interview.getId())).thenReturn(List.of());
+
+            assertThat(units.selectedForInterview(application.getId())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("an interview moved twice is announced twice, even when the first time offered is the same")
+        void aSecondMoveIsAnnounced() {
+            OffsetDateTime t1 = inDays(3, 10);
+            anOfferIsOpen(t1, t1.plusHours(3), t1.plusDays(1));
+            when(messages.openOffersTo(PHONE)).thenReturn(List.of());
+            List<CandidateMessage> first = units.timesOffered(
+                    interview.getId(), com.taportal.domain.events.InterviewTimesOffered.Why.MOVED);
+            assertThat(first).extracting(CandidateMessage::getPoint)
+                    .containsExactly("TEAM_RESCHEDULED", "TEAM_RESCHEDULED");
+            for (CandidateMessage m : first) {
+                when(messages.existsByDedupeKey(m.getDedupeKey())).thenReturn(true);
+            }
+
+            // Booked, moved again: the same first time and the same number of times, put on offer afresh.
+            anOfferIsOpen(t1, t1.plusHours(4), t1.plusDays(2));
+            when(messages.openOffersTo(PHONE)).thenReturn(List.of());
+            List<CandidateMessage> second = units.timesOffered(
+                    interview.getId(), com.taportal.domain.events.InterviewTimesOffered.Why.MOVED);
+
+            assertThat(second).extracting(CandidateMessage::getChannel, CandidateMessage::getStatus)
+                    .containsExactly(
+                            org.assertj.core.groups.Tuple.tuple("SMS", "QUEUED"),
+                            org.assertj.core.groups.Tuple.tuple("EMAIL", "QUEUED"));
+            assertThat(units.readOffer(second.get(0).getOffer())).extracting(o -> o.startsAt().toInstant())
+                    .containsExactly(t1.toInstant(), t1.plusHours(4).toInstant(), t1.plusDays(2).toInstant());
+        }
+
+        @Test
+        @DisplayName("the same putting-on-offer heard of twice is sent once")
+        void theSameOfferIsSentOnce() {
+            anOfferIsOpen(inDays(3, 10));
+            when(messages.openOffersTo(PHONE)).thenReturn(List.of());
+            List<CandidateMessage> first = units.timesOffered(
+                    interview.getId(), com.taportal.domain.events.InterviewTimesOffered.Why.PROPOSED);
+            for (CandidateMessage m : first) {
+                when(messages.existsByDedupeKey(m.getDedupeKey())).thenReturn(true);
+            }
+
+            assertThat(units.timesOffered(
+                    interview.getId(), com.taportal.domain.events.InterviewTimesOffered.Why.PROPOSED)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a moved interview is announced as moved, by link, when numbers cannot be used in reply")
+        void aMoveGoesByLinkAsAMove() {
+            anOfferIsOpen(inDays(3, 14));
+            Interview other = new Interview();
+            ReflectionTestUtils.setField(other, "id", UUID.randomUUID());
+            other.setApplicationId(application.getId());
+            other.setStatus("SLOTS_PROPOSED");
+            when(interviews.findById(other.getId())).thenReturn(Optional.of(other));
+            CandidateMessage earlier = new CandidateMessage();
+            earlier.setId(UUID.randomUUID());
+            earlier.setInterviewId(other.getId());
+            earlier.setOffer("[]");
+            when(messages.openOffersTo(PHONE)).thenReturn(List.of(earlier));
+
+            List<CandidateMessage> sent = units.timesOffered(
+                    interview.getId(), com.taportal.domain.events.InterviewTimesOffered.Why.MOVED);
+
+            assertThat(sent).extracting(CandidateMessage::getChannel, CandidateMessage::getPoint)
+                    .containsExactly(
+                            org.assertj.core.groups.Tuple.tuple("SMS", "TEAM_RESCHEDULED_BY_LINK"),
+                            org.assertj.core.groups.Tuple.tuple("EMAIL", "TEAM_RESCHEDULED"));
+            assertThat(sent.get(0).getOffer()).isNull();
+        }
+
+        @Test
+        @DisplayName("to a phone two people gave, an invitation goes by link: a number in reply could be either's")
+        void aSharedPhoneIsInvitedByLink() {
+            anOfferIsOpen(inDays(3, 14));
+            when(messages.openOffersTo(PHONE)).thenReturn(List.of());
+            anotherRecordWithTheNumber("Maria Gomez", "maria@example.com");
+
+            List<CandidateMessage> sent = units.selectedForInterview(application.getId());
+
+            assertThat(sent).extracting(CandidateMessage::getPoint)
+                    .containsExactly("INVITE_BY_LINK", "INTERVIEW_INVITE");
+            assertThat(sent.get(0).getOffer()).isNull();
+        }
+
+        @Test
+        @DisplayName("told on no channel: the recruiters hear of it on the by-link path too")
+        void byLinkAndUnreachedIsReported() {
+            anOfferIsOpen(inDays(3, 14));
+            when(messages.openOffersTo(PHONE)).thenReturn(List.of());
+            anotherRecordWithTheNumber("Maria Gomez", "maria@example.com");
+            raj.setSmsConsentAt(null);
+            raj.setEmail("");
+
+            units.selectedForInterview(application.getId());
+
+            verify(notifications).notifyRole(eq("RECRUITER"), eq("MESSAGE"),
+                    org.mockito.ArgumentMatchers.contains("was not told"), anyString(), anyString());
+        }
+
+        @Test
         void aTimeTooCloseToPickIsNotOffered() {
             anOfferIsOpen(OffsetDateTime.now().plusMinutes(40), inDays(3, 14));
             when(messages.openOffersTo(PHONE)).thenReturn(List.of());
@@ -554,6 +704,26 @@ class JourneyUnitsTest {
         }
 
         @Test
+        @DisplayName("booked some other way since the offer went out: a number books no second interview")
+        void aNumberAfterTheTeamBookedAnotherInterviewBooksNothing() {
+            anOfferIsOpen(inDays(3, 14));
+            Interview byTheTeam = new Interview();
+            ReflectionTestUtils.setField(byTheTeam, "id", UUID.randomUUID());
+            byTheTeam.setApplicationId(application.getId());
+            byTheTeam.setStatus("SCHEDULED");
+            byTheTeam.setScheduledAt(inDays(2, 11));
+            byTheTeam.setBookedAt(BOOKED_AT);
+            when(interviews.findById(byTheTeam.getId())).thenReturn(Optional.of(byTheTeam));
+            when(interviews.findByApplicationIdIn(any())).thenReturn(List.of(interview, byTheTeam));
+            when(interviewService.bookedAhead(application.getId())).thenReturn(Optional.of(byTheTeam));
+
+            Pick pick = units.pick(texter, 1);
+
+            assertThat(pick.next()).isEqualTo(PickNext.ANSWERED);
+            assertThat(pick.written()).extracting(CandidateMessage::getPoint).containsExactly("ALREADY_BOOKED");
+        }
+
+        @Test
         void aNumberForAnApplicationSinceClosedBooksNothing() {
             anOfferIsOpen(inDays(3, 14));
             application.setStage("REJECTED");
@@ -612,8 +782,38 @@ class JourneyUnitsTest {
                     .containsExactly(
                             org.assertj.core.groups.Tuple.tuple("SMS", "INTERVIEW_CONFIRMED"),
                             org.assertj.core.groups.Tuple.tuple("EMAIL", "INTERVIEW_CONFIRMED"));
-            assertThat(sent.get(0).getDedupeKey())
-                    .isEqualTo("INTERVIEW_CONFIRMED:" + interview.getId() + ":" + at.toEpochSecond() + ":SMS");
+            assertThat(sent.get(0).getDedupeKey()).isEqualTo("INTERVIEW_CONFIRMED:" + booking(at) + ":SMS");
+        }
+
+        @Test
+        @DisplayName("a time given up and booked again is a booking of its own, confirmed again")
+        void theSameTimeBookedAgainIsConfirmedAgain() {
+            OffsetDateTime at = inDays(2, 15);
+            theInterviewIsBooked(at);
+            String first = units.booked(interview.getId(), at, BookingOrigin.TEXT).get(0).getDedupeKey();
+
+            // Released, offered again, and the same time picked: what is on record is the first booking's.
+            when(messages.existsByDedupeKey(first)).thenReturn(true);
+            interview.setBookedAt(BOOKED_AT.plusHours(3));
+
+            List<CandidateMessage> again = units.booked(interview.getId(), at, BookingOrigin.TEXT);
+
+            assertThat(again).isNotEmpty();
+            assertThat(again.get(0).getPoint()).isEqualTo("INTERVIEW_CONFIRMED");
+            assertThat(again.get(0).getDedupeKey()).isNotEqualTo(first);
+        }
+
+        @Test
+        @DisplayName("the same booking heard of twice is confirmed once")
+        void theSameBookingIsConfirmedOnce() {
+            OffsetDateTime at = inDays(2, 15);
+            theInterviewIsBooked(at);
+            List<CandidateMessage> first = units.booked(interview.getId(), at, BookingOrigin.WEB_PAGE);
+            for (CandidateMessage m : first) {
+                when(messages.existsByDedupeKey(m.getDedupeKey())).thenReturn(true);
+            }
+
+            assertThat(units.booked(interview.getId(), at, BookingOrigin.WEB_PAGE)).isEmpty();
         }
 
         @Test
@@ -662,8 +862,7 @@ class JourneyUnitsTest {
 
             List<CandidateMessage> sent = units.remind(interview.getId(), JourneyPoint.INTERVIEW_REMINDER_24H);
 
-            assertThat(sent.get(0).getDedupeKey())
-                    .isEqualTo("INTERVIEW_REMINDER_24H:" + interview.getId() + ":" + at.toEpochSecond() + ":SMS");
+            assertThat(sent.get(0).getDedupeKey()).isEqualTo("INTERVIEW_REMINDER_24H:" + booking(at) + ":SMS");
         }
 
         @Test
@@ -672,7 +871,7 @@ class JourneyUnitsTest {
             raj.setSmsConsentAt(null);
             OffsetDateTime at = inDays(1, 10);
             theInterviewIsBooked(at);
-            String held = "INTERVIEW_REMINDER_1H:" + interview.getId() + ":" + at.toEpochSecond() + ":SMS:held";
+            String held = "INTERVIEW_REMINDER_1H:" + booking(at) + ":SMS:held";
 
             List<CandidateMessage> first = units.remind(interview.getId(), JourneyPoint.INTERVIEW_REMINDER_1H);
             assertThat(first).singleElement().satisfies(m -> {
@@ -682,6 +881,25 @@ class JourneyUnitsTest {
 
             when(messages.existsByDedupeKey(held)).thenReturn(true);
             assertThat(units.remind(interview.getId(), JourneyPoint.INTERVIEW_REMINDER_1H)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("held back is not sent: once the candidate may be texted, the reminder goes")
+        void aReminderHeldBackGoesOnceItMay() {
+            raj.setSmsConsentAt(null);
+            OffsetDateTime at = inDays(1, 10);
+            theInterviewIsBooked(at);
+            String key = "INTERVIEW_REMINDER_1H:" + booking(at) + ":SMS";
+            units.remind(interview.getId(), JourneyPoint.INTERVIEW_REMINDER_1H);
+            when(messages.existsByDedupeKey(key + ":held")).thenReturn(true);
+
+            raj.setSmsConsentAt(OffsetDateTime.now()); // START, say
+
+            assertThat(units.remind(interview.getId(), JourneyPoint.INTERVIEW_REMINDER_1H)).singleElement()
+                    .satisfies(m -> {
+                        assertThat(m.getStatus()).isEqualTo("QUEUED");
+                        assertThat(m.getDedupeKey()).isEqualTo(key);
+                    });
         }
 
         @Test
@@ -736,6 +954,48 @@ class JourneyUnitsTest {
             assertThat(sent.get(0).getBody()).isEqualTo("STATUS_REPLY for Raj | "
                     + "Summer Analyst Intern: you passed the first screening and the hiring team is reviewing it.\n"
                     + "Teller: we are not moving forward with it. Thank you for your interest.");
+        }
+
+        @Test
+        @DisplayName("a number two people gave: nothing about either is said, and the recruiters are told")
+        void aSharedNumberIsToldNothingAboutAnyone() {
+            Candidate maria = anotherRecordWithTheNumber("Maria Gomez", "maria@example.com");
+            Texter shared = new Texter(PHONE, TEXT_IN, List.of(raj.getId(), maria.getId()), null, true);
+
+            List<CandidateMessage> sent = units.status(shared);
+
+            assertThat(sent).singleElement().satisfies(m -> {
+                assertThat(m.getPoint()).isEqualTo("SHARED_NUMBER");
+                assertThat(m.getCandidateId()).isNull();
+                assertThat(m.getBody()).doesNotContain("Raj").doesNotContain("Maria").doesNotContain("Summer Analyst");
+            });
+            verify(notifications).notifyRole(eq("RECRUITER"), eq("MESSAGE"), anyString(),
+                    org.mockito.ArgumentMatchers.contains("Maria Gomez"), anyString());
+
+            theInterviewIsBooked(inDays(2, 15));
+            assertThat(units.reschedule(shared).interviewId()).as("nothing of anyone's is moved").isNull();
+            assertThat(units.pick(shared, 1).next()).isEqualTo(PickNext.ANSWERED);
+        }
+
+        @Test
+        @DisplayName("a text arriving from a number two people gave is nobody's in particular")
+        void aTextFromASharedNumberIsShared() {
+            anotherRecordWithTheNumber("Maria Gomez", "maria@example.com");
+
+            JourneyUnits.Inbound in = units.inbound(PHONE, "STATUS", "SIM", null);
+
+            assertThat(in.texter().shared()).isTrue();
+            assertThat(in.texter().primary()).isNull();
+        }
+
+        @Test
+        @DisplayName("one person who applied twice is not a shared number")
+        void thePersonWhoAppliedTwiceIsOnePerson() {
+            anotherRecordWithTheNumber("Raj Patel", "raj.p@example.com");
+            assertThat(units.inbound(PHONE, "STATUS", "SIM", null).texter().shared()).isFalse();
+
+            anotherRecordWithTheNumber("R. Patel", "RAJ.PATEL@example.com");
+            assertThat(units.inbound(PHONE, "STATUS", "SIM", null).texter().shared()).isFalse();
         }
 
         @Test
@@ -869,6 +1129,58 @@ class JourneyUnitsTest {
 
             assertThat(plan.interviewId()).isNull();
             assertThat(plan.asMore()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a reply is about what was last texted: with times on offer, a booking elsewhere is left alone")
+        void rescheduleWithAnOfferOpenLeavesABookingAlone() {
+            // Booked for one role, and texted times for another.
+            Interview booked = new Interview();
+            ReflectionTestUtils.setField(booked, "id", UUID.randomUUID());
+            booked.setApplicationId(UUID.randomUUID());
+            booked.setStatus("SCHEDULED");
+            booked.setScheduledAt(inDays(2, 15));
+            when(interviews.findByApplicationIdIn(any())).thenReturn(List.of(interview, booked));
+            anOfferIsOpen(inDays(3, 14));
+
+            JourneyUnits.Reschedule plan = units.reschedule(texter);
+
+            assertThat(plan.interviewId()).isNull();
+            assertThat(plan.asMore()).isTrue();
+        }
+
+        @Test
+        @DisplayName("more than one interview booked: there is no telling which is meant, so none is moved")
+        void rescheduleWithSeveralBookedMovesNothing() {
+            theInterviewIsBooked(inDays(2, 15));
+            Interview second = new Interview();
+            ReflectionTestUtils.setField(second, "id", UUID.randomUUID());
+            second.setApplicationId(application.getId());
+            second.setStatus("SCHEDULED");
+            second.setScheduledAt(inDays(4, 10));
+            when(interviews.findByApplicationIdIn(any())).thenReturn(List.of(second, interview));
+            when(messages.openOffersTo(PHONE)).thenReturn(List.of());
+
+            JourneyUnits.Reschedule plan = units.reschedule(texter);
+
+            assertThat(plan.interviewId()).isNull();
+            assertThat(plan.asMore()).isFalse();
+            assertThat(plan.written()).extracting(CandidateMessage::getPoint).containsExactly("RESCHEDULE_DECLINED");
+            assertThat(plan.written().get(0).getBody()).contains("more than one interview booked");
+            verify(notifications).notifyRole(eq("RECRUITER"), eq("MESSAGE"), anyString(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("a text that may be asking: nothing is moved, and the candidate is told how to ask")
+        void aHintMovesNothing() {
+            OffsetDateTime at = inDays(2, 15);
+            theInterviewIsBooked(at);
+
+            List<CandidateMessage> sent = units.bookedAsItIs(texter, interview.getId());
+
+            assertThat(sent).extracting(CandidateMessage::getPoint).containsExactly("ALREADY_BOOKED");
+            assertThat(interview.getScheduledAt()).isEqualTo(at);
+            verify(interviewService, never()).tryCandidateReschedule(any());
         }
 
         @Test

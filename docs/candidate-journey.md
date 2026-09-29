@@ -25,7 +25,8 @@ These seven are on the drawing. Two further groups are not drawn; their wording 
 |---|---|---|---|
 | `TEAM_RESCHEDULED` | The hiring team moves a booked interview; new times are offered. | yes | yes |
 | `INTERVIEW_CANCELED` | The hiring team cancels, or the application is rejected or withdrawn. | yes | yes |
-| `INVITE_BY_LINK` | A second invitation goes out while one is still open (two applications, one phone). It carries a link, so numbers in reply stay unambiguous. | yes | – |
+| `INVITE_BY_LINK` | An invitation goes out when numbers cannot be used in reply: another invitation is open to the same phone, or the phone was given by two people. It carries a link. | yes | – |
+| `TEAM_RESCHEDULED_BY_LINK` | The same, for an interview the hiring team moved. | yes | – |
 
 **Service replies** — what the system answers when a candidate texts:
 
@@ -43,19 +44,28 @@ These seven are on the drawing. Two further groups are not drawn; their wording 
 | `HELP` | HELP, or anything not understood. |
 | `OPT_OUT` / `OPT_IN` | STOP / START. |
 | `UNKNOWN_SENDER` | A text from a number we have no candidate for (answered once a day). |
+| `SHARED_NUMBER` | A text from a number more than one person gave (answered once a day; recruiters are told). |
 
 Keywords (case-insensitive): `STATUS`, `1` `2` `3`, `MORE`, `TIMES`, `RESCHEDULE`, `HELP`, `STOP`, `START`.
 
-- A number books a time **only** when it is the whole message ("2", "option 2", "#2"). "Can we do 2pm" books nothing.
+- A number books a time **only** when it is the whole message ("2", "option 2", "#2", "2 please"). "Can we do 2pm" books nothing.
 - `STOP`, `STOPALL`, `UNSUBSCRIBE`, `CANCEL`, `END`, `QUIT`, `REVOKE` and "opt out" as the whole message are opt-out, as carriers require.
-  A sentence that starts with "stop" is opt-out too, unless it asks to reschedule.
+  So is opting out said in a sentence: "please stop texting me", "do not text me", "unsubscribe me", "remove me".
+- **Where a text can be read two ways, the reading that changes nothing wins.** RESCHEDULE moves an interview only when it
+  is asked for plainly ("reschedule", "I need to reschedule", "can we reschedule?"). A sentence that may be asking
+  ("I can't make it", "need a different time") moves nothing: the candidate is told what they are booked for and to reply
+  RESCHEDULE. "Thanks for rescheduling" and "no need to reschedule" ask for nothing.
+- A reply is about what was last texted. With times on offer, RESCHEDULE asks for other times and leaves a booking for
+  another role alone. With more than one interview booked, none is moved: the candidate is pointed to the links in their
+  emails and the recruiter is told.
 - HELP asked for by name is always answered. Texts nobody understood are answered three times in ten minutes,
   then met with silence, so two machines cannot talk all night.
 
 ## 2. Rules (all enforced in the Java service layer)
 
 1. **Consent.** A text is sent only when the number is a valid mobile number, the candidate agreed to be texted
-   (`sms_consent_at`), and the number has not opted out. Otherwise the message is recorded as not sent, with the reason,
+   (`sms_consent_at`), and the number has not opted out. A number given with "please don't text me" is kept and is not
+   agreement. Otherwise the message is recorded as not sent, with the reason,
    and the recruiter is told if the candidate was reached on no channel at all. Email is unaffected by STOP.
 2. **STOP belongs to the phone number**, not the candidate record (`sms_opt_out`). After STOP only the opt-out confirmation
    and the answers to HELP and START are texted; anything else received is recorded and not acted on. STOP also closes any
@@ -67,10 +77,15 @@ Keywords (case-insensitive): `STATUS`, `1` `2` `3`, `MORE`, `TIMES`, `RESCHEDULE
    time in the last offer sent. If that time is gone, the candidate gets `SLOT_TAKEN` and a new list. An offer is acted on
    once, however many replies arrive together.
 6. **Booking is guarded.** The interview and the panel are locked while a time is taken; a unique index on the calendar
-   (`uq_calendar_interview_start`) makes a double booking impossible even if the code is wrong.
+   (`uq_calendar_interview_start`) makes a double booking impossible even if the code is wrong. An application has one
+   interview booked at a time. A time the hiring team books directly is held to the same checks, blocks the interviewers'
+   calendars, and withdraws whatever was on offer to the candidate.
 7. **Reschedule by text is policied** (`reschedule_limit`, `reschedule_cutoff_hours`) — the same rule the self-schedule
    page uses. The policy is checked *before* anything is released, and the booking is kept unless other times exist.
-8. **Reminders fire once per booked time**, keyed by interview and scheduled time, so a moved interview gets its own.
+   The hiring team is held to the second half too: it cannot move an interview when no other time is open.
+8. **Reminders and confirmations belong to a booking** — the interview, the time, and when it was booked — so a time
+   given up and booked again is confirmed and reminded of again, and an interview moved twice is announced twice.
+   A reminder held back (no agreement, STOP) is recorded once and goes if the candidate may be texted later.
    The 24-hour reminder is sent between 24 and 12 hours before, and only when the interview was booked more than
    24 hours ahead; booked later than that, the confirmation is the reminder. The 1-hour reminder is sent in the last hour.
    Reminders are sent by the journey only — the chat assistant no longer sends its own.
@@ -79,8 +94,12 @@ Keywords (case-insensitive): `STATUS`, `1` `2` `3`, `MORE`, `TIMES`, `RESCHEDULE
     A booking is never rolled back because a message failed, and a failure raises an alert for administrators.
 11. **Every message is recorded** — what, to whom, which channel, which template, status — before it is handed to a gateway.
     A message is handed over once (claimed `QUEUED` to `SENDING`); anything recorded and never sent is swept up.
-12. **Journey templates cannot be deleted or switched off**, and a text template must keep the fields its point needs
-    (an invitation without `{{slot_options}}` is refused), so a journey point always has wording that works.
+12. **Journey templates cannot be deleted or switched off**, a text template must keep the fields its point needs
+    (an invitation without `{{slot_options}}` is refused), and no journey template may use a field its point has no value
+    for (an opt-out confirmation cannot name a role), so a journey point always has wording that can be sent.
+13. **A phone number two people gave is nobody's in particular.** Records that share a number are one person when the
+    email or the name is the same. Otherwise a text from the number says and changes nothing about either, invitations
+    go with a link, each record shows only its own messages, and the recruiters are told.
 
 ## 3. What the drawing controls
 
@@ -90,12 +109,17 @@ The enabled workflow with trigger **Candidate journey** is the journey's configu
 - For the points sent unprompted (1, 3, 4, 6, 7), the step being on the drawing decides *whether that channel is used*.
   Application received by text only: remove the Email step. Both: keep both.
 - Switching the workflow off stops unprompted messages and notices. Replies to a candidate's own text are always given.
+- A step counts when a line leads to it from the start. A step cut out of the flow sends nothing, and the check of the
+  drawing says so.
+- A journey is not routed like a request, so it has no Test.
 - The *order of events* is not run from the drawing: events come from the candidate and the hiring team.
   The drawing shows the path; the system follows the events.
 
-A step with no template chosen, one that is not Active, or one whose template lacks a needed field falls back to the
-journey's own template for that point. Saving the drawing gives advice when a message step is not bound to a point,
-is bound to a point its channel cannot carry, or repeats a point.
+Which templates can word a point is decided by the server (`JourneyTemplates`): Active, not the wording of another
+point, carrying what the point needs, and using nothing the point has no value for. The canvas lists exactly those.
+A step with no template chosen, or one whose template is not fit, falls back to the journey's own template for that
+point. Saving the drawing gives advice when a message step is not bound to a point, is bound to a point its channel
+cannot carry, repeats a point, or names a template that is not fit.
 
 ## 4. Architecture
 
@@ -137,7 +161,7 @@ domain events     ApplicationReceived, ApplicationStageChanged, InterviewTimesOf
                   published by the services that make the change; heard after commit
 ```
 
-## 5. Data (migration V24)
+## 5. Data (migrations V24 to V26)
 
 - `candidate`: `phone_e164` (CHECK E.164, indexed), `sms_consent_at`.
 - `sms_opt_out`: the numbers that said STOP.
@@ -148,7 +172,8 @@ domain events     ApplicationReceived, ApplicationStageChanged, InterviewTimesOf
   address, subject, body, journey point, template, status (`QUEUED`|`SENDING`|`SENT`|`FAILED`|`SUPPRESSED`|`RECEIVED`),
   reason, provider, provider message id (unique per provider), dedupe key (unique), offer (the numbered times) and when
   it closed, timestamps.
-- 23 text templates and 6 email templates for the journey. Older starter templates that nobody had edited are archived.
+- 25 text templates and 6 email templates for the journey (V24, V26; wording corrections in V25). Older starter
+  templates that nobody had edited are archived.
 - The Candidate journey workflow, redrawn. The drawing it replaces is kept, switched off, as
   "Candidate journey (earlier drawing)".
 

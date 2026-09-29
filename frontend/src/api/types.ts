@@ -551,6 +551,8 @@ export interface MessageTimeline {
   canBeTexted: boolean
   whyNot: string | null
   journeyOn: boolean
+  /** Something about this candidate's messages a recruiter should know. */
+  note: string | null
   messages: MessageRow[]
 }
 
@@ -572,6 +574,11 @@ export interface JourneyPointInfo {
   drawn: boolean
   needs: string[]
   templateKey: string
+  /** The fields a message at this point has values for. */
+  has: string[]
+  /** The templates that can word this point, as the server judges it. */
+  textTemplates: string[]
+  emailTemplates: string[]
 }
 
 export interface JourneyField {

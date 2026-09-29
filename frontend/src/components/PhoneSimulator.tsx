@@ -104,6 +104,8 @@ export default function PhoneSimulator({ candidateId, tall = false, from = 'Bank
           read.error ? read.text : <>Read as: <b>{read.text}</b></>
         ) : data && !data.canBeTexted && data.whyNot && !noPhone ? (
           <>Texts to this number are held back. {data.whyNot}.</>
+        ) : data?.note ? (
+          data.note
         ) : null}
       </div>
 

@@ -53,7 +53,8 @@ class ApprovalWorkflowServiceTest {
     private final Map<String, ApprovalWorkflowRecord> stored = new LinkedHashMap<>();
     private final ApprovalWorkflowRepository repository = mock(ApprovalWorkflowRepository.class);
     private final ApprovalWorkflowService service =
-            new ApprovalWorkflowService(repository, mock(ApprovalRequestRepository.class), JSON);
+            new ApprovalWorkflowService(repository, mock(ApprovalRequestRepository.class), JSON,
+                    mock(com.taportal.domain.journey.JourneyTemplates.class));
 
     @BeforeEach
     void anInMemoryStore() {
@@ -329,6 +330,23 @@ class ApprovalWorkflowServiceTest {
                     new SimulateRequest("IN_PERSON", 30.0, false, parse(SOUND), true));
 
             assertThat(res.autoApproved()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a candidate journey is not routed: there is nothing to test, and it is not called broken")
+        void aJourneyIsNotRouted() {
+            alreadyStored("cj1", "Candidate journey", true, SOUND);
+
+            assertThatThrownBy(() -> service.simulate("cj1", flaggedStored))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
+                        assertThat(e.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+                        assertThat(e.getReason()).contains("not routed");
+                    });
+            // A draft says what it is a draft of.
+            assertThatThrownBy(() -> service.simulate("brand-new",
+                    new SimulateRequest("IN_PERSON", 30.0, true, parse(SOUND), null, "candidate journey")))
+                    .isInstanceOfSatisfying(ResponseStatusException.class,
+                            e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY));
         }
 
         @Test

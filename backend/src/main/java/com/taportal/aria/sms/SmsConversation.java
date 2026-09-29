@@ -80,6 +80,7 @@ public class SmsConversation {
             case MORE -> journey.more(texter);
             case TIMES -> journey.times(texter);
             case RESCHEDULE -> journey.reschedule(texter);
+            case RESCHEDULE_HINTED -> journey.mayWantToReschedule(texter);
             case THANKS -> { /* nothing was asked: nothing is answered */ }
             case UNCLEAR -> journey.unclear(texter);
         }

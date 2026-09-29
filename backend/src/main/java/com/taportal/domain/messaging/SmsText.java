@@ -35,11 +35,40 @@ public final class SmsText {
                 default -> {
                     if (cp < 0x10000 && (BASIC.indexOf(cp) >= 0 || EXTENDED.indexOf(cp) >= 0)) {
                         sb.append((char) cp);
+                    } else {
+                        sb.append(withoutMarks(cp));
                     }
                 }
             }
         });
         return sb.toString().replaceAll("[ \\t]+\\n", "\n").replaceAll(" {2,}", " ").trim();
+    }
+
+    /**
+     * A letter the basic set lacks, as the letter it is built on: í as i, ç as
+     * c, ë as e. A name loses its accent, not its letter. What has no plain
+     * form — an emoji, a letter of another script — is left out.
+     */
+    private static String withoutMarks(int codePoint) {
+        String letter = switch (codePoint) {
+            case 0x00DF -> "ss";            // ß is in the basic set; kept here for its capital
+            case 0x1E9E -> "SS";
+            case 0x0141 -> "L";
+            case 0x0142 -> "l";
+            case 0x0110 -> "D";
+            case 0x0111 -> "d";
+            case 0x0152 -> "OE";
+            case 0x0153 -> "oe";
+            default -> java.text.Normalizer.normalize(
+                    new String(Character.toChars(codePoint)), java.text.Normalizer.Form.NFD);
+        };
+        StringBuilder plain = new StringBuilder();
+        letter.codePoints().forEach(c -> {
+            if (c < 0x80 && BASIC.indexOf(c) >= 0) {
+                plain.append((char) c);
+            }
+        });
+        return plain.toString();
     }
 
     /** How many messages a carrier would bill this as. */
