@@ -49,6 +49,8 @@ export default function AdminWorkflows() {
   // HMR remounts with preserved state, and stale react-query cache can otherwise
   // schedule a push that overwrites newer server data.
   const dirty = useRef(false)
+  const serverRef = useRef(serverWorkflows)
+  serverRef.current = serverWorkflows
   useEffect(() => {
     // Track the server until the user edits: react-query serves cached (possibly
     // stale) data first and refetches after mount — hydrating once from the cache
@@ -145,9 +147,21 @@ export default function AdminWorkflows() {
       lastPushed.current = json
       saveServer.mutate(payload, {
         onError: (e) => {
-          const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-          flash(msg ?? 'Could not save workflows')
-          lastPushed.current = '' // allow a retry after the user fixes the conflict
+          const res = (e as { response?: { data?: { message?: string } } })?.response
+          flash(res?.data?.message ?? 'Could not save workflows')
+          if (!res) {
+            // No answer at all (offline): keep the edits and allow a retry.
+            lastPushed.current = ''
+            return
+          }
+          // The server refused and rolled the whole batch back. Return to
+          // what it actually holds — otherwise the card keeps showing a state
+          // that was never stored (e.g. "Active") and every later save
+          // re-sends the same refusal.
+          const server = serverRef.current ?? []
+          lastPushed.current = JSON.stringify(server.map((d) => toServerDto(fromServerDto(d))))
+          dirty.current = false
+          setWorkflows(server.map(fromServerDto))
         },
       })
     }, 900)
@@ -281,7 +295,7 @@ export default function AdminWorkflows() {
             }
             updateWorkflow(w.id, { trigger: v })
           }}
-          onAuto={() => updateWorkflow(w.id, { autoApprove: !w.autoApprove, graph: undefined })}
+          onAuto={() => updateWorkflow(w.id, { autoApprove: !w.autoApprove })}
           onAddLevel={() => addWorkflowLevel(w.id)}
           onRemoveLevel={(lid) => {
             const idx = w.levels.findIndex((l) => l.id === lid)
@@ -369,6 +383,12 @@ function WorkflowCard({
   onCanvas: () => void
   onDelete: () => void
 }) {
+  // Once a workflow is drawn on the canvas, routing follows the drawing and
+  // this chain is rebuilt from it on every canvas save. Editing the chain here
+  // would change nothing about where requests go, so it is shown, not edited.
+  // (An empty graph is no drawing: the canvas reseeds from the chain and the
+  // engine routes by the chain, so the chain must stay editable.)
+  const drawn = (w.graph?.nodes?.length ?? 0) > 0
   return (
     <div className="card" style={{ opacity: w.enabled ? 1 : 0.66 }}>
       <div className="card__head">
@@ -381,7 +401,7 @@ function WorkflowCard({
           />
           <span className="badge">{w.trigger}</span>
           <span className={`badge ${w.enabled ? 'badge--ok' : ''}`}>{w.enabled ? 'Active' : 'Disabled'}</span>
-          {w.graph && <span className="badge">canvas</span>}
+          {drawn && <span className="badge">canvas</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button className="btn btn--outline btn--sm" onClick={onCanvas}>
@@ -438,6 +458,18 @@ function WorkflowCard({
           Approval chain · {w.levels.length} {w.levels.length === 1 ? 'level' : 'levels'}
         </div>
 
+        {drawn && (
+          <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 10 }}>
+            This workflow is drawn on the canvas, so its steps are edited there.{' '}
+            <button
+              onClick={onCanvas}
+              style={{ font: 'inherit', border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: 'var(--bofa-navy)', fontWeight: 600 }}
+            >
+              Open canvas
+            </button>
+          </div>
+        )}
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {w.levels.map((l, i) => (
             <div
@@ -463,7 +495,7 @@ function WorkflowCard({
                 <span className="field__label" style={{ fontSize: 11 }}>
                   Approver role
                 </span>
-                <select className="select" style={{ height: 34 }} value={l.approverRole} onChange={(e) => onLevelRole(l.id, e.target.value)}>
+                <select className="select" style={{ height: 34 }} value={l.approverRole} disabled={drawn} onChange={(e) => onLevelRole(l.id, e.target.value)}>
                   {roles.map((r) => (
                     <option key={r.key} value={r.key}>
                       {r.name}
@@ -475,14 +507,14 @@ function WorkflowCard({
                 <span className="field__label" style={{ fontSize: 11 }}>
                   Condition
                 </span>
-                <select className="select" style={{ height: 34 }} value={l.condition} onChange={(e) => onLevelCond(l.id, e.target.value)}>
-                  {CONDITIONS.map((c) => (
+                <select className="select" style={{ height: 34 }} value={l.condition} disabled={drawn} onChange={(e) => onLevelCond(l.id, e.target.value)}>
+                  {(CONDITIONS.includes(l.condition) ? CONDITIONS : [l.condition, ...CONDITIONS]).map((c) => (
                     <option key={c}>{c}</option>
                   ))}
                 </select>
               </div>
               <div style={{ flex: 1 }} />
-              <div style={{ display: 'flex', gap: 4 }}>
+              <div style={{ display: drawn ? 'none' : 'flex', gap: 4 }}>
                 <button className="btn btn--ghost btn--icon btn--sm" disabled={i === 0} onClick={() => onMove(l.id, -1)} title="Move up">
                   <IconChevronUp className="ic" />
                 </button>
@@ -507,9 +539,11 @@ function WorkflowCard({
           )}
         </div>
 
-        <button className="btn btn--outline btn--sm" style={{ marginTop: 14 }} onClick={onAddLevel}>
-          + Add approval level
-        </button>
+        {!drawn && (
+          <button className="btn btn--outline btn--sm" style={{ marginTop: 14 }} onClick={onAddLevel}>
+            + Add approval level
+          </button>
+        )}
 
         <div style={{ marginTop: 16, fontSize: 12.5, color: 'var(--ink-4)' }}>
           Chain: {w.levels.length === 0 ? 'Auto-approved' : w.levels.map((l) => roleName(l.approverRole)).join(' → ')}

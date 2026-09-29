@@ -932,3 +932,13 @@
   z-index: 5;
   margin-left: -18px; /* overlap the board so the gray shows through the curve */
 }
+
+/* Test result: why a request could not be routed */
+.wfc-sim-result__problem {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #8f1d2c;
+  border-left: 2px solid var(--wfc-red, #e31837);
+  padding: 2px 0 2px 9px;
+  margin-top: 8px;
+}

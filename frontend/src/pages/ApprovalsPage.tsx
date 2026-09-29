@@ -38,7 +38,7 @@ function Chain({ r, roleName }: { r: ApprovalRequestApi; roleName: (k: string) =
             title={done ? 'Cleared' : current ? 'Waiting on this step' : 'Upcoming'}
           >
             {done ? '✓ ' : ''}
-            {roleName(s.role)}
+            {s.nodeId === 'needs-attention' ? s.label : roleName(s.role)}
           </span>
         )
       })}

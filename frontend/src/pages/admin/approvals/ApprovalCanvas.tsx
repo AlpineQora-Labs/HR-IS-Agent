@@ -742,7 +742,15 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   const [nodes, setNodes, onNodesChange] = useNodesState(seed.nodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(seed.edges)
   const [selId, setSelId] = useState<string | null>(null)
-  const [idc, setIdc] = useState(1)
+  /** A step id no other step in this graph uses. (A per-session counter restarted
+   *  at 1 every time the canvas opened, so a second visit could mint an id that
+   *  was already taken and silently merge two steps.) */
+  const nextId = (type: BlockType) => {
+    const taken = new Set(nodesRef.current.map((n) => n.id))
+    let k = 1
+    while (taken.has(`n-${type}-${k}`)) k++
+    return `n-${type}-${k}`
+  }
 
   // Drag-from-palette snap preview: while a block is dragged over the canvas,
   // the edge (or approver box) it would snap into is highlighted; dropping
@@ -767,6 +775,8 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   const updateNodeInternals = useUpdateNodeInternals()
   const nodesRef = useRef(nodes)
   nodesRef.current = nodes
+  const edgesRef = useRef(edges)
+  edgesRef.current = edges
   useEffect(() => {
     // Measure every node in the CURRENT state (not just the seed): after a
     // remount, dynamically-added nodes survive in preserved state but their
@@ -786,6 +796,45 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     [setEdges],
   )
 
+  /** Lines the engine could never follow are refused as they are drawn: nothing
+   *  leaves an outcome (exception / end), and a rule gets one line per answer. */
+  const isValidConnection = useCallback(
+    (c: Connection | Edge) => {
+      const src = nodesRef.current.find((n) => n.id === c.source)
+      if (!src || c.source === c.target) return false
+      if (src.type === 'exception' || src.type === 'end') return false
+      if (src.type === 'condition') {
+        // A line may only leave a rule from its YES or NO port. In loose mode a
+        // drag that ENDS on one of the rule's other ports would otherwise make
+        // the rule the source of an unmarked line: never followed, not drawn.
+        if (c.sourceHandle !== 'yes' && c.sourceHandle !== 'no') return false
+        return !edgesRef.current.some((e) => e.source === c.source && e.sourceHandle === c.sourceHandle)
+      }
+      return true
+    },
+    [],
+  )
+
+  /** The keyboard must not remove what the Delete button refuses to: the start
+   *  of the flow and its final outcome. */
+  const onBeforeDelete = useCallback(
+    async ({ nodes: doomed, edges: cut }: { nodes: Node[]; edges: Edge[] }) => {
+      const kept = doomed.filter((n) => n.type !== 'trigger' && n.id !== 'end')
+      if (kept.length === doomed.length) return { nodes: doomed, edges: cut }
+      const keptIds = new Set(kept.map((n) => n.id))
+      const removedIds = new Set(doomed.map((n) => n.id))
+      return {
+        nodes: kept,
+        // Lines are only cut when they touch a step that is really going, or
+        // were selected on their own.
+        edges: cut.filter(
+          (e) => keptIds.has(e.source) || keptIds.has(e.target) || (!removedIds.has(e.source) && !removedIds.has(e.target)),
+        ),
+      }
+    },
+    [],
+  )
+
   // Same retry schedule as the mount effect: a single early call can land before
   // layout settles (or before a flaky ResizeObserver reports), leaving the new
   // node's handle bounds unknown — which silently breaks connecting to it.
@@ -795,8 +844,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   )
 
   const addNode = (type: BlockType, position?: { x: number; y: number }) => {
-    const id = `n-${type}-${idc}`
-    setIdc((n) => n + 1)
+    const id = nextId(type)
     const data: WfData = blockDefaults(type, roles[0]?.name)
     setNodes((ns) => [...ns, sized({ id, type, position: position ?? { x: 560, y: 120 + ns.length * 40 }, data })])
     setSelId(id)
@@ -853,8 +901,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   /** Splice a block into an existing edge (the snap drop), then auto-arrange so
    *  the new step falls in line with the flow. */
   const spliceIntoEdge = (type: BlockType, edge: Edge, p: { x: number; y: number }) => {
-    const id = `n-${type}-${idc}`
-    setIdc((n) => n + 1)
+    const id = nextId(type)
     const data: WfData = blockDefaults(type, roles[0]?.name)
     const node = sized({ id, type, position: { x: p.x - 92, y: p.y - 36 }, data })
     const newEdges = [
@@ -886,7 +933,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     const p = screenToFlowPosition({ x: e.clientX, y: e.clientY })
     let nodeId: string | null = null
     if (type === 'email') nodeId = nodes.find((n) => n.type === 'approval' && hitNode(p, n))?.id ?? null
-    const edgeId = nodeId ? null : (nearestEdge(p)?.id ?? null)
+    const edgeId = nodeId || type === 'exception' ? null : (nearestEdge(p)?.id ?? null)
     if (nodeId !== snapNodeId) setSnapNodeId(nodeId)
     if (edgeId !== snapEdgeId) setSnapEdgeId(edgeId)
   }
@@ -913,11 +960,15 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
       }
     }
     const edge = nearestEdge(p)
-    if (edge) {
+    // An exception ends its path, so splicing one INTO a line would cut off
+    // everything after it. Place it beside the line instead and let the user
+    // wire it from the side of a rule it belongs to.
+    if (edge && type !== 'exception') {
       spliceIntoEdge(type, edge, p)
       return
     }
     addNode(type, { x: p.x - 92, y: p.y - 32 })
+    if (type === 'exception') flash('Exception added — connect it from the YES or NO side of a rule')
   }
 
   const arrange = () => {
@@ -985,11 +1036,19 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
 
   const saveServer = useSaveServerWorkflows()
 
-  const save = () => {
+  const save = async () => {
     const patch = buildPatch()
     const updated = { ...workflow, ...patch }
+    try {
+      await saveServer.mutateAsync([toServerDto(updated)])
+    } catch (e) {
+      // The server refused (e.g. a rule with no NO path on a live workflow).
+      // Keep the canvas open with the work intact and say why.
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      flash(msg ?? 'Could not save the workflow')
+      return
+    }
     onSaved(updated)
-    saveServer.mutate([toServerDto(updated)])
     flash('Workflow saved · approval chain updated')
     onClose()
   }
@@ -1021,13 +1080,13 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     clearLit()
     setSimResult(null)
     try {
-      // Persist the current canvas first so the engine evaluates what's on screen.
-      const patch = buildPatch()
-      await saveServer.mutateAsync([toServerDto({ ...workflow, ...patch })])
+      // Send the canvas as drawn; the engine evaluates it without saving.
       const res = await simulate.mutateAsync({
         eventFormat: sim.format,
         daysNotice: sim.notice === '' ? null : Number(sim.notice),
         flaggedCritical: sim.flagged,
+        graph: buildPatch().graph,
+        autoApprove: workflow.autoApprove,
       })
       setSimResult(res)
       // Light the path node-by-node.
@@ -1048,8 +1107,10 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
           }, 350 * i),
         )
       })
-    } catch {
-      flash('Simulation failed — is the backend running?')
+    } catch (e) {
+      // Only blame the connection when there was no answer at all.
+      const res = (e as { response?: { data?: { message?: string } } })?.response
+      flash(res ? (res.data?.message ?? 'The test could not be run') : 'Simulation failed — is the backend running?')
     }
   }
 
@@ -1205,6 +1266,8 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            isValidConnection={isValidConnection}
+            onBeforeDelete={onBeforeDelete}
             onNodeClick={(_, n) => setSelId(n.id)}
             onPaneClick={() => setSelId(null)}
             nodeTypes={nodeTypes}
@@ -1258,8 +1321,8 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                   <input type="checkbox" checked={sim.flagged} onChange={(e) => setSim((s) => ({ ...s, flagged: e.target.checked }))} />
                   Flagged critical
                 </label>
-                <button className="btn btn--primary btn--sm" onClick={runTest} disabled={simulate.isPending || saveServer.isPending}>
-                  {simulate.isPending || saveServer.isPending ? 'Running…' : 'Run test'}
+                <button className="btn btn--primary btn--sm" onClick={runTest} disabled={simulate.isPending}>
+                  {simulate.isPending ? 'Running…' : 'Run test'}
                 </button>
 
                 {simResult && (
@@ -1267,6 +1330,10 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                     {simResult.autoApproved ? (
                       <div className="wfc-sim-result__verdict" style={{ color: SPEC.policy.iconFg }}>
                         ✓ Auto-approved — chain skipped
+                      </div>
+                    ) : (simResult.problems ?? []).length > 0 ? (
+                      <div className="wfc-sim-result__verdict" style={{ color: 'var(--wfc-red)' }}>
+                        This request can't be routed
                       </div>
                     ) : (
                       <div className="wfc-sim-result__verdict" style={{ color: 'var(--wfc-navy)' }}>
@@ -1282,6 +1349,11 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
                     {simResult.notes.map((n, i) => (
                       <div key={i} className="wfc-sim-result__note">
                         {n}
+                      </div>
+                    ))}
+                    {(simResult.problems ?? []).map((p, i) => (
+                      <div key={`p${i}`} className="wfc-sim-result__problem" role="alert">
+                        {p}
                       </div>
                     ))}
                   </div>

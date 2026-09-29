@@ -114,6 +114,10 @@ export interface SimulateInput {
   eventFormat?: string | null
   daysNotice?: number | null
   flaggedCritical?: boolean
+  /** The canvas's unsaved state — evaluated instead of the stored graph, so Test never saves. */
+  graph?: WorkflowGraph | null
+  /** The workflow's auto-approve setting as it stands on screen. */
+  autoApprove?: boolean
 }
 
 export interface SimulateResult {
@@ -121,6 +125,8 @@ export interface SimulateResult {
   path: string[]
   requiredApprovals: { nodeId: string; label: string; role: string }[]
   notes: string[]
+  /** Plain-English reasons the route could not be completed; empty when it could. */
+  problems?: string[]
 }
 
 export function useDeleteWorkflow() {

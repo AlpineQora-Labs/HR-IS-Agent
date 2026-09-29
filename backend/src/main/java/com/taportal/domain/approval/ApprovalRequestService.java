@@ -65,7 +65,16 @@ public class ApprovalRequestService {
             return null;
         }
         SimulateResponse verdict = engine.simulate(
-                wf.getWfKey(), new SimulateRequest(in.eventFormat(), in.daysNotice(), in.flaggedCritical()));
+                wf.getWfKey(), new SimulateRequest(in.eventFormat(), in.daysNotice(), in.flaggedCritical(), null, null));
+        // Backstop: if the route could not be completed (a rule the engine
+        // can't check, an answer with no path), the rest of the route is
+        // unknown. Never guess and never leave the request ownerless — an
+        // admin must look at it before it can be approved.
+        List<RequiredApproval> required = new java.util.ArrayList<>(verdict.requiredApprovals());
+        boolean incomplete = !verdict.autoApproved() && !verdict.problems().isEmpty();
+        if (incomplete) {
+            required.add(new RequiredApproval(NEEDS_ATTENTION, "Needs attention \u2014 workflow incomplete", "Admin"));
+        }
         ApprovalRequest req = new ApprovalRequest(
                 null,
                 wf.getWfKey(),
@@ -74,19 +83,27 @@ public class ApprovalRequestService {
                 in.title(),
                 in.sub(),
                 verdict.autoApproved() ? ApprovalRequest.Status.AUTO_APPROVED : ApprovalRequest.Status.PENDING,
-                writeJson(verdict.requiredApprovals()),
+                writeJson(required),
                 0,
                 verdict.autoApproved() ? "Policy engine" : null,
                 verdict.autoApproved() ? OffsetDateTime.now() : null,
                 null,
                 null);
         ApprovalRequestResponse saved = toResponse(requests.save(req));
-        if (req.getStatus() == ApprovalRequest.Status.PENDING && !verdict.requiredApprovals().isEmpty()) {
-            String role = verdict.requiredApprovals().get(0).role();
+        if (req.getStatus() == ApprovalRequest.Status.PENDING && !required.isEmpty()) {
+            String role = required.get(0).role();
             notifyApprovers(role, req.getTitle(), saved);
+        }
+        if (incomplete) {
+            notifications.notifyRole("ADMIN", "APPROVAL_NEEDED",
+                    "Workflow needs attention: " + wf.getName(),
+                    verdict.problems().get(0), "/admin?tab=workflow");
         }
         return saved;
     }
+
+    /** Step id of the admin sign-off added when a route could not be completed. */
+    static final String NEEDS_ATTENTION = "needs-attention";
 
     /** The required role gets pinged; admins always see approval traffic too. */
     private void notifyApprovers(String role, String title, ApprovalRequestResponse req) {
@@ -104,7 +121,17 @@ public class ApprovalRequestService {
         requireApprover();
         ApprovalRequest req = pending(id);
         List<RequiredApproval> required = readRequired(req.getRequiredJson());
-        req.setCurrentStep(req.getCurrentStep() + 1);
+        int step = req.getCurrentStep();
+        // The backstop step exists because the workflow could not say who
+        // should decide. Only an admin may clear it — otherwise the incomplete
+        // route is simply guessed as approved by whoever is next in line.
+        if (step < required.size()
+                && NEEDS_ATTENTION.equals(required.get(step).nodeId())
+                && !"ADMIN".equals(CurrentUser.role())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "This request's workflow is incomplete \u2014 an admin must sign it off");
+        }
+        req.setCurrentStep(step + 1);
         if (req.getCurrentStep() >= required.size()) {
             req.setStatus(ApprovalRequest.Status.APPROVED);
             req.setDecidedBy(actor());

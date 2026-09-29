@@ -21,17 +21,34 @@ public final class ApprovalDtos {
             OffsetDateTime updatedAt) {
     }
 
-    /** Sample request the engine evaluates a workflow against — real event context. */
-    public record SimulateRequest(String eventFormat, Double daysNotice, Boolean flaggedCritical) {
+    /**
+     * Sample request the engine evaluates a workflow against — real event context.
+     *
+     * @param graph       optional unsaved canvas to evaluate INSTEAD of the stored
+     *                    one, so Test never has to save first; null = stored
+     * @param autoApprove optional unsaved auto-approve setting; null = stored
+     */
+    public record SimulateRequest(
+            String eventFormat, Double daysNotice, Boolean flaggedCritical, JsonNode graph, Boolean autoApprove) {
     }
 
     /** One approval the request would require. */
     public record RequiredApproval(String nodeId, String label, String role) {
     }
 
-    /** Evaluation result: the node path walked plus what approvals fire along it. */
+    /**
+     * Evaluation result: the node path walked plus what approvals fire along it.
+     *
+     * @param problems plain-English reasons the route could not be completed
+     *                 (a rule the engine can't check, an answer with no path);
+     *                 empty when the request reached the end of a path
+     */
     public record SimulateResponse(
-            boolean autoApproved, List<String> path, List<RequiredApproval> requiredApprovals, List<String> notes) {
+            boolean autoApproved,
+            List<String> path,
+            List<RequiredApproval> requiredApprovals,
+            List<String> notes,
+            List<String> problems) {
     }
 
     /** Submit a real item through a workflow; the engine routes it. */
