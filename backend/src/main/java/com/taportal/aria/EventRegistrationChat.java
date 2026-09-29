@@ -102,7 +102,7 @@ public class EventRegistrationChat {
 
         String when = event.getStartsAt() == null ? ""
                 : " on " + event.getStartsAt().atZoneSameInstant(ZONE).format(WHEN);
-        aria(conversation, "greeting", "Hi! I'm Aria 👋 Great to see you at " + event.getName() + when
+        aria(conversation, "greeting", "Hello, I'm Aria. Good to see you at " + event.getName() + when
                 + ". Let's get you registered — it takes under a minute.");
 
         FormLogicService.Field first = nextUnanswered(state);
@@ -120,7 +120,7 @@ public class EventRegistrationChat {
                 .orElseThrow(() -> new EntityNotFoundException("Conversation not found: " + conversationId));
         State state = readState(conversation);
         if (state.done) {
-            aria(conversation, "done", "You're all set — see you at the event! 🎉");
+            aria(conversation, "done", "You're all set. See you at the event.");
             return turn(conversation, state);
         }
 
@@ -156,7 +156,7 @@ public class EventRegistrationChat {
             state.done = true;
             conversation.setStatus("COMPLETED");
             conversation.setCandidateId(row.candidateId());
-            aria(conversation, "confirm", "You're registered, " + firstName(row.name()) + "! ✅ "
+            aria(conversation, "confirm", "You're registered, " + firstName(row.name()) + ". "
                     + "We've saved your details — swing by the Bank of America booth and we'll take it from there. "
                     + "Keep an eye on " + row.email() + " for what's next.");
         } catch (ResponseStatusException ex) {
@@ -164,7 +164,7 @@ public class EventRegistrationChat {
                 state.done = true;
                 conversation.setStatus("COMPLETED");
                 aria(conversation, "duplicate", "Good news — you're already registered for this event! "
-                        + "No need to do anything else. See you there. 👋");
+                        + "No need to do anything else. See you there.");
             } else {
                 aria(conversation, "error", "Hmm, something didn't add up: "
                         + (ex.getReason() != null ? ex.getReason() : "please try again."));

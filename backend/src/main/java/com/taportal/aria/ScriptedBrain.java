@@ -24,9 +24,9 @@ public class ScriptedBrain implements AssistantBrain {
     @Override
     public String greeting(Job job, String language) {
         String title = job != null ? job.getTitle() : "this role";
-        return "Hi! I'm Aria, your recruiting assistant. 👋 "
-                + "I'm so glad you're interested in the " + title + " role. "
-                + "I'll ask a few quick questions to get your application started — it only takes a minute. "
+        return "Hello, I'm Aria, your recruiting assistant. "
+                + "Thank you for your interest in the " + title + " role. "
+                + "I'll ask a few questions to start your application. It takes about a minute. "
                 + "To begin, what's your full name?";
     }
 
@@ -51,7 +51,7 @@ public class ScriptedBrain implements AssistantBrain {
     public String acknowledge(String step, String userText) {
         switch (step) {
             case ConversationEngine.STEP_COLLECT_NAME:
-                return "Lovely to meet you, " + firstName(userText) + "!";
+                return "Good to meet you, " + firstName(userText) + ".";
             case ConversationEngine.STEP_COLLECT_EMAIL:
                 return "Got it — thank you.";
             case ConversationEngine.STEP_COLLECT_PHONE:
@@ -68,19 +68,19 @@ public class ScriptedBrain implements AssistantBrain {
         return "Thank you so much for taking the time to apply. Based on your responses, "
                 + "this particular role isn't the right match right now. "
                 + "I'd love to keep you in mind for future openings that fit you better — "
-                + "wishing you all the best in your search! 🙏";
+                + "we wish you all the best in your search.";
     }
 
     @Override
     public String schedulePrompt(List<InterviewSlot> slots) {
         if (slots == null || slots.isEmpty()) {
-            return "Wonderful news — you're through to the next step! 🎉 "
-                    + "Our team will reach out shortly to set up a quick conversation.";
+            return "Good news: you're through to the next step. "
+                    + "Our team will reach out shortly to set up a conversation.";
         }
         StringBuilder sb = new StringBuilder();
-        sb.append("Wonderful news — you're through to the next step! 🎉 ")
-                .append("Let's get a quick phone screen on the calendar. ")
-                .append("Here are some times that work — just reply with the one you'd like:\n");
+        sb.append("Good news: you're through to the next step. ")
+                .append("Let's put a phone screen on the calendar. ")
+                .append("These times work for the hiring team. Reply with the one you would like:\n");
         int i = 1;
         for (InterviewSlot slot : slots) {
             sb.append("\n").append(i++).append(". ").append(formatSlot(slot));
@@ -93,9 +93,9 @@ public class ScriptedBrain implements AssistantBrain {
         String when = interview != null && interview.getScheduledAt() != null
                 ? interview.getScheduledAt().atZoneSameInstant(ZONE).format(SLOT_FMT) + " ET"
                 : "your selected time";
-        return "You're all set! ✅ I've booked your phone screen for " + when + ". "
-                + "You'll get a confirmation with the details shortly. "
-                + "Thanks for applying — we're excited to speak with you!";
+        return "You're all set. Your phone screen is booked for " + when + ". "
+                + "A confirmation with the details is on its way. "
+                + "Thank you for applying. We look forward to speaking with you.";
     }
 
     /** Shared so the engine can render slot quick-reply options identically. */
