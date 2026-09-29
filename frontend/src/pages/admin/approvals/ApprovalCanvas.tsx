@@ -30,6 +30,8 @@ import {
   type EdgeProps,
 } from '@xyflow/react'
 import { useQuery } from '@tanstack/react-query'
+import { useJourney } from '@/api/hooks'
+import type { JourneyPointInfo } from '@/api/types'
 import '@xyflow/react/dist/style.css'
 import '@/styles/canvas.css'
 import { useConfig } from '@/state/config'
@@ -46,7 +48,7 @@ import AddMenu from './AddMenu'
 import RulePanel, { type SideChoice } from './RulePanel'
 import WorkflowInWords from './WorkflowInWords'
 import {
-  afterRule, continueChoices, cutOff, describe, isOutcome, lanes, rows, ruleTitle, sideOf, startOf, stepName,
+  JOURNEY, afterRule, continueChoices, cutOff, describe, isOutcome, lanes, rows, ruleTitle, sideOf, startOf, stepName,
   type Answer, type GEdge, type GNode, type WfData,
 } from './graphModel'
 
@@ -711,17 +713,56 @@ const BLOCKS: { type: BlockType; label: string }[] = [
   { type: 'exception', label: 'Exception' },
 ]
 
+/** Which point of the candidate journey a message is sent at. The points are the server's. */
+function SentWhen({ points, value, onChange }: {
+  points: JourneyPointInfo[]
+  value: string | undefined
+  onChange: (point: JourneyPointInfo | undefined) => void
+}) {
+  const chosen = points.find((p) => p.key === value)
+  return (
+    <>
+      <label>
+        Sent when
+        <select
+          className="select"
+          value={chosen ? chosen.key : ''}
+          onChange={(e) => onChange(points.find((p) => p.key === e.target.value))}
+        >
+          <option value="">Choose when this is sent</option>
+          {points.map((p) => (
+            <option key={p.key} value={p.key}>{p.sentWhen}</option>
+          ))}
+        </select>
+      </label>
+      {!chosen && (
+        <div className="wfc-inspector__hint">
+          {value
+            ? 'This step is set to a point this kind of message cannot be sent at. Choose another.'
+            : 'Until a point is chosen, this step sends nothing.'}
+        </div>
+      )}
+      {chosen && chosen.needs.length > 0 && (
+        <div className="wfc-inspector__hint">
+          The message has to carry {chosen.needs.map((f) => `{{${f}}}`).join(', ')}. A template without it is not used.
+        </div>
+      )}
+    </>
+  )
+}
+
 type BlockType = 'approval' | 'condition' | 'email' | 'sms' | 'step' | 'exception'
 
-const blockDefaults = (type: BlockType, firstRole?: string): WfData =>
+/** @param journey true on a candidate journey: a message there is sent at a journey point, chosen on the right */
+const blockDefaults = (type: BlockType, firstRole?: string, journey = false): WfData =>
   type === 'approval'
     ? { label: 'New approval', approverRole: firstRole }
     : type === 'condition'
       ? { condition: '' } // nothing chosen yet: the panel asks what to check
       : type === 'email'
-        ? { label: 'Email notification', emailTrigger: EMAIL_TRIGGERS[0] }
+        ? { label: 'Email notification', ...(journey ? {} : { emailTrigger: EMAIL_TRIGGERS[0] }) }
         : type === 'sms'
-          ? { label: 'SMS message', smsTrigger: SMS_TRIGGERS[0] }
+          ? { label: 'SMS message', ...(journey ? {} : { smsTrigger: SMS_TRIGGERS[0] }) }
           : type === 'step'
             ? { label: 'Journey step' }
             : { label: 'Sent for review' }
@@ -884,6 +925,9 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   // Email templates for the notification rules (right panel).
   const { data: templates } = useQuery({ queryKey: ['email-templates'], queryFn: commsApi.getEmailTemplates })
   const { data: smsTemplates } = useQuery({ queryKey: ['sms-templates'], queryFn: commsApi.getSmsTemplates })
+  // A candidate journey sends its messages at the journey's points; the server says which there are.
+  const isJourney = workflow.trigger === JOURNEY
+  const { data: journey } = useJourney()
 
   // Compute handle bounds after mount so edges render as soon as the canvas opens.
   // Retried on a short schedule: environments without a working ResizeObserver
@@ -997,7 +1041,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   const addNode = (type: BlockType, position?: { x: number; y: number }) => {
     rememberRef.current()
     const id = nextId(type)
-    const data: WfData = blockDefaults(type, roles[0]?.name)
+    const data: WfData = blockDefaults(type, roles[0]?.name, isJourney)
     setNodes((ns) => [...ns, sized({ id, type, position: position ?? { x: 560, y: 120 + ns.length * 40 }, data })])
     setSelId(id)
     measureSoon(id)
@@ -1147,7 +1191,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
       x: ((src?.position.x ?? 0) + (tgt?.position.x ?? 0)) / 2 + 78,
       y: ((src?.position.y ?? 0) + (tgt?.position.y ?? 0)) / 2 + 50,
     }
-    const node = sized({ id, type, position: { x: at.x - 78, y: at.y - 50 }, data: blockDefaults(type, roles[0]?.name) })
+    const node = sized({ id, type, position: { x: at.x - 78, y: at.y - 50 }, data: blockDefaults(type, roles[0]?.name, isJourney) })
     const onward =
       type === 'condition'
         ? (['yes', 'no'] as const).map((answer) =>
@@ -1183,7 +1227,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
       id,
       type,
       position: { x: src.position.x + (answer === 'yes' ? -120 : answer === 'no' ? 120 : 0), y: src.position.y + 210 },
-      data: blockDefaults(type, roles[0]?.name),
+      data: blockDefaults(type, roles[0]?.name, isJourney),
     })
     const next = [
       ...edges,
@@ -1719,11 +1763,38 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
   const selData = (selected?.data ?? {}) as WfData
 
   /** Template + trigger selects, shared by email nodes and step-attached notifications. */
+  // On a journey the point comes first: it decides which templates can word the message.
+  const point = isJourney ? journey?.points.find((p) => p.key === selData.journeyPoint) : undefined
+  const fits = (status: string, body: string, key: string | null | undefined) =>
+    !isJourney ||
+    (status !== 'ARCHIVED' &&
+      (!point || point.needs.every((f) => body.includes(`{{${f}}}`))) &&
+      // A template that words another point of the journey is not offered for this one.
+      (!key || !point || key === point.templateKey))
+  const ownFirst = <T extends { templateKey?: string | null }>(list: T[]) =>
+    point ? [...list].sort((x, y) => Number(y.templateKey === point.templateKey) - Number(x.templateKey === point.templateKey)) : list
+  const emailChoices = ownFirst((templates ?? []).filter((t) => fits(t.status, `${t.subject} ${t.bodyHtml}`, t.templateKey)))
+  const smsChoices = ownFirst((smsTemplates ?? []).filter((t) => fits(t.status, t.body, t.templateKey)))
+
   const emailRules = (
     <>
+      {isJourney && (
+        <SentWhen
+          points={(journey?.points ?? []).filter((p) => p.drawn && p.byEmail)}
+          value={selData.journeyPoint}
+          onChange={(p) => {
+            // A new point brings its own wording; what worded the old point does not follow.
+            const own = (templates ?? []).find((t) => p && t.templateKey === p.templateKey && t.status === 'ACTIVE')
+            patchData({
+              journeyPoint: p?.key, emailTrigger: p?.sentWhen,
+              emailTemplateId: own?.templateId, emailTemplateName: own?.name,
+            })
+          }}
+        />
+      )}
       <div className="wfc-inspector__label">Email template</div>
       <div className="wfc-tpl-list">
-        {(templates ?? []).map((t) => (
+        {emailChoices.map((t) => (
           <button
             key={t.templateId}
             className={`wfc-tpl${selData.emailTemplateId === t.templateId ? ' is-on' : ''}`}
@@ -1736,29 +1807,49 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
             </span>
           </button>
         ))}
-        {(templates ?? []).length === 0 && (
-          <div className="wfc-tpl-empty">No templates yet — create them in Admin → Communications.</div>
+        {emailChoices.length === 0 && (
+          <div className="wfc-tpl-empty">
+            {(templates ?? []).length === 0
+              ? 'No templates yet. Create them in Admin, Communications.'
+              : 'No template can word this message. The journey’s own wording is sent.'}
+          </div>
         )}
       </div>
       <div className="wfc-inspector__hint">
         Templates come from <b>Communications</b>. Hover the step on the canvas to preview the selected email.
+        {isJourney ? ' With none chosen, the journey’s own wording is sent.' : ''}
       </div>
-      <label>
-        Trigger event
-        <select className="select" value={selData.emailTrigger ?? EMAIL_TRIGGERS[0]} onChange={(e) => patchData({ emailTrigger: e.target.value })}>
-          {EMAIL_TRIGGERS.map((t) => (
-            <option key={t}>{t}</option>
-          ))}
-        </select>
-      </label>
+      {!isJourney && (
+        <label>
+          Trigger event
+          <select className="select" value={selData.emailTrigger ?? EMAIL_TRIGGERS[0]} onChange={(e) => patchData({ emailTrigger: e.target.value })}>
+            {EMAIL_TRIGGERS.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </select>
+        </label>
+      )}
     </>
   )
 
   const smsRules = (
     <>
+      {isJourney && (
+        <SentWhen
+          points={(journey?.points ?? []).filter((p) => p.drawn && p.byText)}
+          value={selData.journeyPoint}
+          onChange={(p) => {
+            const own = (smsTemplates ?? []).find((t) => p && t.templateKey === p.templateKey && t.status === 'ACTIVE')
+            patchData({
+              journeyPoint: p?.key, smsTrigger: p?.sentWhen,
+              smsTemplateId: own?.id, smsTemplateName: own?.name,
+            })
+          }}
+        />
+      )}
       <div className="wfc-inspector__label">SMS template</div>
       <div className="wfc-tpl-list">
-        {(smsTemplates ?? []).map((t) => (
+        {smsChoices.map((t) => (
           <button
             key={t.id}
             className={`wfc-tpl${selData.smsTemplateId === t.id ? ' is-on' : ''}`}
@@ -1771,21 +1862,28 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
             </span>
           </button>
         ))}
-        {(smsTemplates ?? []).length === 0 && (
-          <div className="wfc-tpl-empty">No SMS templates yet — create them in Admin → Communications.</div>
+        {smsChoices.length === 0 && (
+          <div className="wfc-tpl-empty">
+            {(smsTemplates ?? []).length === 0
+              ? 'No SMS templates yet. Create them in Admin, Communications.'
+              : 'No template can word this message. The journey’s own wording is sent.'}
+          </div>
         )}
       </div>
       <div className="wfc-inspector__hint">
         SMS templates come from <b>Communications</b>. Hover the step on the canvas to preview the message.
+        {isJourney ? ' With none chosen, the journey’s own wording is sent.' : ''}
       </div>
-      <label>
-        Send when
-        <select className="select" value={selData.smsTrigger ?? SMS_TRIGGERS[0]} onChange={(e) => patchData({ smsTrigger: e.target.value })}>
-          {SMS_TRIGGERS.map((t) => (
-            <option key={t}>{t}</option>
-          ))}
-        </select>
-      </label>
+      {!isJourney && (
+        <label>
+          Send when
+          <select className="select" value={selData.smsTrigger ?? SMS_TRIGGERS[0]} onChange={(e) => patchData({ smsTrigger: e.target.value })}>
+            {SMS_TRIGGERS.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </select>
+        </label>
+      )}
     </>
   )
 
@@ -2057,6 +2155,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
               {selected.type === 'condition' ? (
                 <div className="wfc-inspector__body">
                   <RulePanel
+                    trigger={workflow.trigger}
                     rule={selected as GNode}
                     nodes={nodes as GNode[]}
                     edges={edges as GEdge[]}

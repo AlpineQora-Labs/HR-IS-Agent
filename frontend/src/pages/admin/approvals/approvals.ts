@@ -27,6 +27,8 @@ export interface WorkflowNode {
     smsTemplateId?: string
     smsTemplateName?: string
     smsTrigger?: string
+    /** Candidate journey: the point this message is sent at. */
+    journeyPoint?: string
     /** Exception: who reviews it, and why requests land here. */
     reviewerRole?: string
     reason?: string

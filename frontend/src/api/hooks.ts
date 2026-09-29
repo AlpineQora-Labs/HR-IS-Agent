@@ -22,7 +22,11 @@ import type {
   CopilotArtifact,
   EventCreate,
   EventRow,
+  InboundResult,
   InterviewCreate,
+  JourneyInfo,
+  MessageTimeline,
+  ReminderResult,
   JobCreate,
   OfferCreate,
   PoolCreate,
@@ -76,6 +80,8 @@ export const qk = {
   careerJobs: ['careers', 'jobs'] as const,
   careerJob: (id: string | undefined) => ['careers', 'job', id] as const,
   chat: (conversationId: string | undefined) => ['chat', conversationId] as const,
+  messages: (candidateId: string | undefined) => ['messages', candidateId] as const,
+  journey: ['journey'] as const,
 }
 
 export interface ApplicationsParams {
@@ -159,6 +165,7 @@ function useSchedulingMutation<TArg>(fn: (arg: TArg) => Promise<unknown>) {
       qc.invalidateQueries({ queryKey: ['interviews'] })
       qc.invalidateQueries({ queryKey: ['slots'] })
       qc.invalidateQueries({ queryKey: ['scheduling-overview'] })
+      qc.invalidateQueries({ queryKey: ['messages'] }) // the candidate is told of what the team does
     },
   })
 }
@@ -563,6 +570,11 @@ export function useUpdateApplicationStage() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['applications'] })
       qc.invalidateQueries({ queryKey: qk.pipeline(data.jobId) })
+      // A stage move can begin an interview, cancel one, and message the candidate.
+      qc.invalidateQueries({ queryKey: qk.candidate(data.candidateId) })
+      qc.invalidateQueries({ queryKey: ['interviews'] })
+      qc.invalidateQueries({ queryKey: ['scheduling-overview'] })
+      qc.invalidateQueries({ queryKey: qk.messages(data.candidateId) })
     },
   })
 }
@@ -631,5 +643,54 @@ export function useAddPoolMember() {
     mutationFn: ({ poolId, candidateId }: { poolId: string; candidateId: string }) =>
       api.post(`/pools/${poolId}/members`, { candidateId }).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.pools }),
+  })
+}
+
+// ---- Candidate messages and the candidate journey ----
+
+/** A candidate's texts and emails, in order. Refetched while on screen: messages arrive on their own. */
+export function useCandidateMessages(candidateId: string | undefined, live = true) {
+  return useQuery({
+    enabled: !!candidateId,
+    queryKey: qk.messages(candidateId),
+    queryFn: () => api.get<MessageTimeline>(`/candidates/${candidateId}/messages`).then((r) => r.data),
+    refetchInterval: live ? 5_000 : false,
+  })
+}
+
+/** Text from the candidate's phone. The server handles it exactly as a text from a carrier. */
+export function useTextAsCandidate(candidateId: string | undefined) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: string) =>
+      api.post<InboundResult>(`/candidates/${candidateId}/messages/reply`, { body }).then((r) => r.data),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: qk.messages(candidateId) })
+      // A reply can book or move an interview.
+      qc.invalidateQueries({ queryKey: ['interviews'] })
+      qc.invalidateQueries({ queryKey: ['slots'] })
+      qc.invalidateQueries({ queryKey: ['scheduling-overview'] })
+      qc.invalidateQueries({ queryKey: ['applications'] })
+      qc.invalidateQueries({ queryKey: qk.candidate(candidateId) })
+    },
+  })
+}
+
+/** The journey's points, merge fields and rules, as the server defines them. */
+export function useJourney() {
+  return useQuery({
+    queryKey: qk.journey,
+    queryFn: () => api.get<JourneyInfo>('/journey').then((r) => r.data),
+    staleTime: 5 * 60_000,
+  })
+}
+
+/** Send an interview reminder now rather than at its hour. */
+export function useSendReminder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ interviewId, which }: { interviewId: string; which: '24h' | '1h' }) =>
+      api.post<ReminderResult>(`/interviews/${interviewId}/reminders/${which}`).then((r) => r.data),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['messages'] }),
   })
 }

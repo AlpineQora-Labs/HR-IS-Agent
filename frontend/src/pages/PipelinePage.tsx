@@ -4,10 +4,13 @@ import { Link, useSearchParams } from 'react-router-dom'
 import SlideOver from '../components/SlideOver'
 import ConfirmButton from '../components/ConfirmButton'
 import { useStore } from '@/state/store'
+import MessageTimeline from '@/components/MessageTimeline'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   useAllPipelines,
   useApplicationConversation,
   useCandidate,
+  useCandidateMessages,
   useCreateInterview,
   useJobs,
   usePipeline,
@@ -125,6 +128,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
    picks the round — its lineup and length drive the proposed times. */
 function SelfScheduleLink({ applicationId, jobId }: { applicationId: string; jobId: string }) {
   const { toastMsg } = useStore()
+  const qc = useQueryClient()
   const [busy, setBusy] = useState(false)
   const [rounds, setRounds] = useState<{ id: string; roundNo: number; name: string; members: { name: string }[] }[]>([])
   const [roundId, setRoundId] = useState<string | null>(null)
@@ -167,10 +171,13 @@ function SelfScheduleLink({ applicationId, jobId }: { applicationId: string; job
               ...(roundId ? { roundId } : {}),
             })
             const url = `${window.location.origin}/schedule/${r.data.id}`
+            // Times are offered to the candidate as the invitation is made.
+            qc.invalidateQueries({ queryKey: ['messages'] })
+            qc.invalidateQueries({ queryKey: ['interviews'] })
             await navigator.clipboard.writeText(url)
-            toastMsg('Self-schedule link copied — send it to the candidate')
+            toastMsg('Self-schedule link copied. Texts and emails shows what the candidate was sent.')
           } catch {
-            toastMsg('Could not create the self-schedule link')
+            toastMsg('Could not create the self-schedule link', 'danger')
           } finally {
             setBusy(false)
           }
@@ -241,6 +248,31 @@ function ScheduleInterview({ applicationId, jobId }: { applicationId: string; jo
               })}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// The candidate's texts and emails (collapsed until opened).
+function CandidateMessages({ candidateId }: { candidateId: string }) {
+  const { data } = useCandidateMessages(candidateId)
+  const count = data?.messages.length ?? 0
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ marginTop: 18 }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 0, cursor: 'pointer', padding: 0, color: 'var(--bofa-navy)', fontSize: 13, fontWeight: 600 }}
+      >
+        <span style={{ fontSize: 11 }}>{open ? '▾' : '▸'}</span>
+        Texts and emails
+        {count > 0 && <span className="badge badge--info">{count} on record</span>}
+      </button>
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <MessageTimeline candidateId={candidateId} narrow maxHeight={320} />
         </div>
       )}
     </div>
@@ -423,6 +455,7 @@ function CandidateDrawer({
           <div style={{ marginTop: 10 }}>
             <SelfScheduleLink applicationId={app.id} jobId={app.jobId} />
           </div>
+          <CandidateMessages candidateId={app.candidateId} />
           <AriaTranscript applicationId={app.id} />
         </div>
 

@@ -268,4 +268,16 @@ t('a step with a blank name still has one', () => {
   assert.equal(g.stepName(N('m','email',{emailTemplateName:''})), 'Email')
   assert.equal(g.stepName(N('r','condition',{condition:''})), 'Choose what to check') })
 
+// the candidate journey is drawn with rules of its own
+t('a journey is offered what a candidate does; a request, facts about it', () => {
+  const journey = g.rulesFor(g.JOURNEY).map(r => r.value)
+  assert.deepEqual(journey, ['Candidate asks for status', 'Candidate asks to reschedule'])
+  const request = g.rulesFor('Event').map(r => r.value)
+  assert.equal(request.length, 4)
+  assert.ok(!request.some(v => journey.includes(v)))
+  assert.deepEqual(g.rulesFor(undefined).map(r => r.value), request) })
+t('a journey rule reads as a sentence wherever it is met', () => {
+  assert.equal(g.ruleTitle('Candidate asks to reschedule'), 'If the candidate asks to reschedule')
+  assert.equal(g.ruleSentence('Candidate asks for status'), 'the candidate asks for their status') })
+
 console.log(`\n${n} graph-model checks passed`)

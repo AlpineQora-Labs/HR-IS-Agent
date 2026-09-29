@@ -1,0 +1,149 @@
+/* Candidate messages: the record of texts and emails, and the candidate's phone.
+   Built on the product tokens (ds-product.css). Nothing here carries meaning:
+   status, reasons and wording are the server's. */
+
+/* ---- The record ------------------------------------------------------- */
+.msgs { display: flex; flex-direction: column; min-width: 0; }
+
+.msgs__facts {
+  display: flex; flex-wrap: wrap; gap: 4px 18px;
+  font-size: 12.5px; color: var(--ink-4);
+  padding-bottom: 12px;
+}
+.msgs__facts b { font-weight: 600; color: var(--ink-1); }
+
+.msgs__note {
+  font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+  border: 1px solid var(--line-2); border-left: 3px solid var(--c-amber, #B7791F);
+  border-radius: var(--ra-1); padding: 9px 12px; margin-bottom: 12px;
+  background: var(--app-panel);
+}
+
+.msgs__filter { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+
+.msgs__scroll { overflow-y: auto; min-height: 0; }
+
+.msgs__day {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-4); padding: 14px 0 6px;
+}
+
+.msgs__list { list-style: none; margin: 0; padding: 0; }
+
+.msg {
+  display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 12px;
+  padding: 11px 0; border-top: 1px solid var(--line);
+}
+.msg__time { font-family: var(--font-mono); font-size: 11px; color: var(--ink-4); padding-top: 2px; white-space: nowrap; }
+.msg__head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.msg__what { font-size: 12.5px; font-weight: 600; color: var(--ink-0); }
+.msg__when { font-size: 12px; color: var(--ink-4); }
+.msg__state { margin-left: auto; }
+.msg__subject { font-size: 13px; font-weight: 600; color: var(--ink-0); margin-top: 6px; overflow-wrap: anywhere; }
+.msg__text {
+  font-size: 13px; line-height: 1.5; color: var(--ink-1);
+  white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 5px;
+}
+.msg--in .msg__text { border-left: 2px solid var(--bofa-navy); padding-left: 10px; }
+.msg__text--clipped {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+}
+.msg__reason { font-size: 12px; line-height: 1.45; color: var(--warn-fg); margin-top: 5px; }
+.msg__reason--failed { color: var(--danger-fg); }
+.msg__meta { font-size: 11.5px; color: var(--ink-4); margin-top: 6px; display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.msg__more {
+  appearance: none; border: 0; background: none; padding: 0; margin-top: 4px; cursor: pointer;
+  font: inherit; font-size: 12px; font-weight: 500; color: var(--bofa-navy);
+}
+.msg__more:hover { text-decoration: underline; }
+
+.msgs__empty { font-size: 12.5px; color: var(--ink-4); text-align: center; padding: 28px 0; line-height: 1.5; }
+
+/* Narrow places (the candidates drawer): the time sits above the message. */
+.msgs--narrow .msg { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+
+/* ---- Reminders -------------------------------------------------------- */
+.remind { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.remind__label { font-size: 12px; color: var(--ink-4); }
+.remind__note { flex-basis: 100%; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
+
+/* ---- The candidate's phone ------------------------------------------- */
+.phone {
+  width: 100%; max-width: 340px; margin: 0 auto;
+  display: flex; flex-direction: column;
+  border: 1px solid var(--line-2); border-radius: 26px;
+  background: var(--app-panel); box-shadow: var(--el-2); overflow: hidden;
+}
+.phone__bar { padding: 13px 16px 11px; border-bottom: 1px solid var(--line); text-align: center; }
+.phone__from { font-size: 13px; font-weight: 600; color: var(--ink-0); }
+.phone__number { font-family: var(--font-mono); font-size: 11px; color: var(--ink-4); margin-top: 2px; }
+
+.phone__thread {
+  height: 380px; overflow-y: auto; padding: 14px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+  background: var(--app-sunken);
+}
+.phone--tall .phone__thread { height: min(56vh, 520px); }
+.phone__stamp { font-size: 10.5px; color: var(--ink-4); text-align: center; margin: 6px 0 2px; }
+.phone__bubble {
+  max-width: 86%; padding: 8px 11px; border-radius: 14px;
+  font-size: 13px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.phone__bubble--them {
+  align-self: flex-start; background: var(--app-panel); color: var(--ink-1);
+  border: 1px solid var(--line); border-bottom-left-radius: 4px;
+}
+.phone__bubble--me {
+  align-self: flex-end; background: var(--bofa-navy); color: #fff; border-bottom-right-radius: 4px;
+}
+.phone__bubble--unsent { opacity: 0.55; }
+.phone__quiet { font-size: 12px; color: var(--ink-4); text-align: center; margin: auto 0; line-height: 1.5; padding: 0 12px; }
+
+.phone__read {
+  font-size: 11.5px; color: var(--ink-4); padding: 8px 14px; border-top: 1px solid var(--line);
+  line-height: 1.4;
+}
+.phone__read:empty { display: none; }
+.phone__read b { font-weight: 600; color: var(--ink-2); }
+.phone__read--error { color: var(--danger-fg); }
+
+.phone__keys { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 0; border-top: 1px solid var(--line); }
+.phone__key {
+  appearance: none; cursor: pointer;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em;
+  padding: 5px 9px; border: 1px solid var(--line-2); border-radius: var(--ra-1);
+  background: var(--app-panel); color: var(--ink-2);
+}
+.phone__key:hover:not(:disabled) { background: var(--app-hover); border-color: var(--line-3); color: var(--ink-0); }
+.phone__key:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.phone__key:disabled { opacity: 0.5; cursor: default; }
+
+.phone__compose { display: flex; gap: 8px; padding: 10px 12px 12px; }
+.phone__input {
+  flex: 1; min-width: 0; height: 36px; padding: 0 12px;
+  font-family: var(--font-sans); font-size: 13px; color: var(--ink-0);
+  background: var(--app-panel); border: 1px solid var(--line-3); border-radius: 18px; outline: none;
+}
+.phone__input:focus { border-color: var(--bofa-navy); box-shadow: var(--focus-ring); }
+.phone__input::placeholder { color: var(--ink-5); }
+
+.phone-caption { font-size: 12px; color: var(--ink-4); text-align: center; line-height: 1.5; margin-top: 12px; }
+
+/* The phone on a page of its own, for a second window. */
+.phone-page {
+  min-height: 100vh; background: var(--app-bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 28px 16px;
+}
+.phone-page__title { font-family: var(--font-display); font-size: 19px; color: var(--ink-0); margin: 0 0 4px; text-align: center; }
+.phone-page__sub { font-size: 12.5px; color: var(--ink-4); margin: 0 0 18px; text-align: center; }
+
+/* A card foot that holds nothing shows nothing. */
+.card__foot--quiet:empty { display: none; }
+
+/* The candidate record: the record on the left, the phone and skills on the right.
+   One column when there is not room for both. */
+.record-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+@media (max-width: 1180px) {
+  .record-grid { grid-template-columns: minmax(0, 1fr); }
+}

@@ -9,23 +9,34 @@ public record SmsIntent(Kind kind, int choice) {
 
     public enum Kind {
         /** STOP: no more texts. */
-        OPT_OUT,
+        OPT_OUT("Stop texting me"),
         /** START: texts again. */
-        OPT_IN,
-        HELP,
+        OPT_IN("Text me again"),
+        HELP("Help"),
         /** Where does my application stand? */
-        STATUS,
+        STATUS("Where does my application stand"),
         /** "2": the second time offered. */
-        PICK,
+        PICK("A time, picked by its number"),
         /** None of the times offered work; offer others. */
-        MORE,
+        MORE("Other times"),
         /** Show me the times again. */
-        TIMES,
-        RESCHEDULE,
+        TIMES("Show me the times"),
+        RESCHEDULE("Move my interview"),
         /** "Thanks", "ok": nothing is being asked. */
-        THANKS,
+        THANKS("Thanks; nothing is asked"),
         /** Not something Aria can act on by text. */
-        UNCLEAR
+        UNCLEAR("Not understood");
+
+        private final String words;
+
+        Kind(String words) {
+            this.words = words;
+        }
+
+        /** What the text was taken to mean, as the screens say it. */
+        public String words() {
+            return words;
+        }
     }
 
     static SmsIntent of(Kind kind) {

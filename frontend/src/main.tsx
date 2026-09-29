@@ -14,6 +14,7 @@ import { StoreProvider } from './state/store'
 import { ConfigProvider, useConfig } from './state/config'
 import EventRegisterPage from './pages/EventRegisterPage'
 import SelfSchedulePage from './pages/SelfSchedulePage'
+import PhonePage from './pages/PhonePage'
 import CareersEventsPage from './pages/CareersEventsPage'
 
 // Recruiter / ATS pages
@@ -124,6 +125,9 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/careers/events" element={<CareersEventsPage />} />
               <Route path="/register/:eventId" element={<EventRegisterPage />} />
               <Route path="/schedule/:interviewId" element={<SelfSchedulePage />} />
+              {/* The candidate's phone, stood in for: a narrow second window
+                  beside the console while the journey is shown. */}
+              <Route path="/phone/:candidateId" element={<PhonePage />} />
               {/* The recruiter console. The candidate-facing "Careers and Conv"
                   app is integrated separately. */}
               <Route path="/*" element={<RecruiterApp />} />

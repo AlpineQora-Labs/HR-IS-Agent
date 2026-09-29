@@ -9,7 +9,15 @@ export interface SmsTemplate {
   status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED'
   createdAt?: string | null
   updatedAt?: string | null
+  /** Set on the templates that word a point of the candidate journey. */
+  templateKey?: string | null
+  /** "When the interview is booked": the point this template words. */
+  sentWhen?: string | null
 }
+
+/** What the server said went wrong, or a fallback when it said nothing. */
+export const refusal = (e: unknown, fallback: string) =>
+  (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback
 
 /* Thin client mirroring the teammate-voices api surface, pointed at the
    TA Portal backend (lift-and-shift adapter — the components stay 1:1). */

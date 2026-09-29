@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef, SizeColumnsToFitGridStrategy } from 'ag-grid-community'
-import { commsApi, type SmsTemplate } from './commsApi'
+import { useJourney } from '@/api/hooks'
+import { commsApi, refusal, type SmsTemplate } from './commsApi'
 import { Button } from './TvButton'
 
 /* SMS templates — the text-message channel of Communications, rendered in
@@ -9,7 +10,8 @@ import { Button } from './TvButton'
    channels). Editing swaps the grid for an inline editor inside the card.
    Channel policy: web chat + SMS only (never WhatsApp). */
 
-const MERGE_FIELDS = ['candidate_name', 'job_title', 'interview_type', 'interview_time', 'status', 'link']
+/** Shown until the server's list of fields arrives. */
+const FIELDS_MEANWHILE = ['candidate_name', 'job_title', 'interview_type', 'interview_time', 'link']
 
 const formatDate = (iso?: string | null) => (iso ? iso.substring(0, 10) : '')
 
@@ -42,8 +44,27 @@ function SmsEditor({
   const [body, setBody] = useState(template?.body ?? '')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const message = useRef<HTMLTextAreaElement>(null)
+
+  // The fields a message can carry, and what this template's point needs, are the server's.
+  const { data: journey } = useJourney()
+  const fields = journey?.fields ?? FIELDS_MEANWHILE.map((name) => ({ name, holds: '' }))
+  const point = journey?.points.find((p) => p.templateKey === template?.templateKey)
 
   const segments = Math.max(1, Math.ceil(body.length / 160))
+
+  /** Put a field where the cursor is, not at the end. */
+  const insert = (name: string) => {
+    const token = `{{${name}}}`
+    const el = message.current
+    const from = el?.selectionStart ?? body.length
+    const to = el?.selectionEnd ?? body.length
+    setBody(body.slice(0, from) + token + body.slice(to))
+    requestAnimationFrame(() => {
+      el?.focus()
+      el?.setSelectionRange(from + token.length, from + token.length)
+    })
+  }
 
   const save = async () => {
     setBusy(true)
@@ -54,7 +75,7 @@ function SmsEditor({
       onSaved()
       onDone()
     } catch (e) {
-      setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not save.')
+      setError(refusal(e, 'Could not save.'))
     } finally {
       setBusy(false)
     }
@@ -92,8 +113,19 @@ function SmsEditor({
             </label>
           </div>
 
+          {template?.templateKey && (
+            <div style={{ fontSize: 12.5, color: '#6e6e73', lineHeight: 1.5, margin: '-4px 0 16px' }}>
+              Candidate journey: sent {(template.sentWhen ?? point?.sentWhen ?? '').replace(/^./, (c) => c.toLowerCase())}.
+              {point && point.needs.length > 0
+                ? ` It has to carry ${point.needs.map((f) => `{{${f}}}`).join(', ')}.`
+                : ''}{' '}
+              A journey template stays Active and cannot be deleted.
+            </div>
+          )}
+
           <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f', marginBottom: 6 }}>Message</div>
           <textarea
+            ref={message}
             className="input"
             style={{ width: '100%', minHeight: 130, resize: 'vertical', font: 'inherit', fontSize: 13.5, lineHeight: 1.55 }}
             value={body}
@@ -101,16 +133,18 @@ function SmsEditor({
             placeholder="Hi {{candidate_name}}, …"
           />
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-            {MERGE_FIELDS.map((f) => (
+            {fields.map((f) => (
               <button
-                key={f}
-                onClick={() => setBody((b) => `${b}{{${f}}}`)}
+                key={f.name}
+                type="button"
+                title={f.holds || undefined}
+                onClick={() => insert(f.name)}
                 style={{
                   font: 'inherit', fontSize: 11.5, cursor: 'pointer', padding: '4px 10px',
                   border: '1px solid #d2d2d7', borderRadius: 999, background: '#fff', color: '#1d1d1f',
                 }}
               >
-                {'{{'}{f}{'}}'}
+                {'{{'}{f.name}{'}}'}
               </button>
             ))}
           </div>
@@ -174,8 +208,8 @@ export default function SmsTemplatesView() {
       try {
         await commsApi.deleteSmsTemplate(id)
         setTemplates((prev) => prev.filter((t) => t.id !== id))
-      } catch {
-        alert('Failed to delete template')
+      } catch (e) {
+        alert(refusal(e, 'The template could not be deleted.'))
       }
     },
     [templates],
@@ -204,6 +238,13 @@ export default function SmsTemplatesView() {
         cellStyle: { color: '#6e6e73' },
       },
       {
+        field: 'sentWhen',
+        headerName: 'Sent',
+        flex: 1.4,
+        minWidth: 200,
+        cellStyle: { color: '#6e6e73' },
+      },
+      {
         field: 'updatedAt',
         headerName: 'Last Updated',
         width: 140,
@@ -222,14 +263,16 @@ export default function SmsTemplatesView() {
         sortable: false,
         filter: false,
         resizable: false,
-        cellRenderer: (params: { data: SmsTemplate }) => (
-          <button
-            onClick={() => handleDelete(params.data.id)}
-            style={{ font: 'inherit', fontSize: 12.5, border: 'none', background: 'none', cursor: 'pointer', color: '#b3261e' }}
-          >
-            Delete
-          </button>
-        ),
+        // A journey's own template cannot be deleted, so the action is not offered.
+        cellRenderer: (params: { data: SmsTemplate }) =>
+          params.data.templateKey ? null : (
+            <button
+              onClick={() => handleDelete(params.data.id)}
+              style={{ font: 'inherit', fontSize: 12.5, border: 'none', background: 'none', cursor: 'pointer', color: '#b3261e' }}
+            >
+              Delete
+            </button>
+          ),
       },
     ],
     [handleDelete],

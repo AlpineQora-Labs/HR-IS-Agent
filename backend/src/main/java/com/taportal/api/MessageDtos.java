@@ -93,11 +93,13 @@ public final class MessageDtos {
     }
 
     /**
-     * @param understood what the text was taken to ask for
-     * @param duplicate  true when this text had been handled already
-     * @param replies    what was written in answer
+     * @param understood   what the text was taken to ask for
+     * @param understoodAs the same, in words
+     * @param duplicate    true when this text had been handled already
+     * @param replies      what was written in answer
      */
-    public record InboundResult(UUID inboundId, String understood, boolean duplicate, List<MessageRow> replies) {
+    public record InboundResult(
+            UUID inboundId, String understood, String understoodAs, boolean duplicate, List<MessageRow> replies) {
     }
 
     /** A point of the journey, for the screens that let one be chosen. */

@@ -1,5 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import AriaConversations from '@/components/AriaConversations'
+import MessageTimeline, { InterviewReminders } from '@/components/MessageTimeline'
+import PhoneSimulator from '@/components/PhoneSimulator'
 import { useCandidate } from '../api/hooks'
 import { humanize, initials } from '../lib/format'
 
@@ -98,7 +100,8 @@ export default function CandidateDetailPage() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 360px', gap: 20, alignItems: 'start' }}>
+      <div className="record-grid">
+        <div style={{ display: 'grid', gap: 20, minWidth: 0 }}>
         <div className="card">
           <div className="card__head">
             <h3 style={{ fontSize: 15 }}>Applications</h3>
@@ -140,7 +143,18 @@ export default function CandidateDetailPage() {
           )}
         </div>
 
-        <div className="card" style={{ gridColumn: 1 }}>
+        <div className="card">
+          <div className="card__head">
+            <h3 style={{ fontSize: 15 }}>Messages</h3>
+            <span className="eyebrow">Texts and emails</span>
+          </div>
+          <div className="card__body">
+            <MessageTimeline candidateId={c.id} maxHeight={560} />
+          </div>
+          <ReminderFoot applicationIds={(c.applications ?? []).map((a) => a.id)} />
+        </div>
+
+        <div className="card">
           <div className="card__head">
             <h3 style={{ fontSize: 15 }}>Aria conversations</h3>
             <span className="eyebrow">From the career-site chat</span>
@@ -149,8 +163,34 @@ export default function CandidateDetailPage() {
             <AriaConversations apps={(c.applications ?? []).map((a) => ({ id: a.id, jobTitle: a.jobTitle }))} />
           </div>
         </div>
+        </div>
 
-        <div className="card" style={{ gridColumn: 2, gridRow: '1 / span 2' }}>
+        <div style={{ display: 'grid', gap: 20, minWidth: 0 }}>
+        <div className="card">
+          <div className="card__head">
+            <h3 style={{ fontSize: 15 }}>Candidate’s phone</h3>
+            <a
+              className="link"
+              style={{ fontSize: 12.5 }}
+              href={`/phone/${c.id}`}
+              target="candidate-phone"
+              onClick={(e) => {
+                e.preventDefault()
+                window.open(`/phone/${c.id}`, 'candidate-phone', 'width=420,height=860')
+              }}
+            >
+              Open in its own window
+            </a>
+          </div>
+          <div className="card__body">
+            <PhoneSimulator candidateId={c.id} />
+            <div className="phone-caption">
+              A stand-in for the handset. What is typed here is handled as a text from the candidate.
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
           <div className="card__head">
             <h3 style={{ fontSize: 15 }}>Skills</h3>
             <span className="eyebrow">{c.skills?.length ?? 0} mapped</span>
@@ -188,7 +228,17 @@ export default function CandidateDetailPage() {
             )}
           </div>
         </div>
+        </div>
       </div>
+    </div>
+  )
+}
+
+/** The card's foot, only when there is a booked interview to remind of. */
+function ReminderFoot({ applicationIds }: { applicationIds: string[] }) {
+  return (
+    <div className="card__foot card__foot--quiet">
+      <InterviewReminders applicationIds={applicationIds} />
     </div>
   )
 }

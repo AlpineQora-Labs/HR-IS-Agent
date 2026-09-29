@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useCandidate, useCandidates, useJobInterviews } from '../api/hooks'
 import SlideOver, { useSlideOverClose } from '../components/SlideOver'
 import AriaConversations from '@/components/AriaConversations'
+import MessageTimeline from '@/components/MessageTimeline'
 import type { CandidateSummary } from '../api/types'
 import { date, humanize, initials } from '../lib/format'
 
@@ -21,7 +22,7 @@ function ivStatusBadge(status: string) {
   const s = (status || '').toUpperCase()
   if (s === 'COMPLETED' || s === 'DONE') return 'badge--ok'
   if (s === 'SCHEDULED' || s === 'CONFIRMED') return 'badge--info'
-  if (s === 'CANCELLED' || s === 'NO_SHOW') return 'badge--danger'
+  if (s === 'CANCELED' || s === 'CANCELLED' || s === 'NO_SHOW') return 'badge--danger'
   return 'badge--neutral'
 }
 
@@ -58,7 +59,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   )
 }
 
-type Tab = 'overview' | 'applications' | 'interviews' | 'aria'
+type Tab = 'overview' | 'applications' | 'interviews' | 'messages' | 'aria'
 
 // ── Right pane: the live record ─────────────────────────────────────────────
 function CandidateDetailPane({ summary, tab, setTab, frameless = false }: {
@@ -81,6 +82,7 @@ function CandidateDetailPane({ summary, tab, setTab, frameless = false }: {
     { key: 'overview', label: 'Overview' },
     { key: 'applications', label: 'Applications', count: apps.length },
     { key: 'interviews', label: 'Interviews', count: interviews.length },
+    { key: 'messages', label: 'Messages' },
     { key: 'aria', label: 'Aria chat' },
   ]
 
@@ -223,6 +225,8 @@ function CandidateDetailPane({ summary, tab, setTab, frameless = false }: {
         {tab === 'aria' && (
           <AriaConversations apps={apps.map((a) => ({ id: a.id, jobTitle: a.jobTitle }))} />
         )}
+
+        {tab === 'messages' && <MessageTimeline candidateId={summary.id} narrow />}
 
         {tab === 'interviews' && (
           ivLoading ? (

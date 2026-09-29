@@ -32,9 +32,10 @@ public class SmsConversation {
      * @param inboundId the record of the text, null when the sender's number could not be read
      * @param address   the sender's number in standard form
      * @param understood what the text was taken to ask for
+     * @param inWords   the same, as the screens say it
      * @param again     true when this text had been handled already and nothing was done
      */
-    public record Heard(UUID inboundId, String address, String understood, boolean again) {
+    public record Heard(UUID inboundId, String address, String understood, String inWords, boolean again) {
     }
 
     /**
@@ -52,11 +53,11 @@ public class SmsConversation {
         Texter texter = inbound.texter();
         SmsIntent intent = SmsIntentParser.parse(text);
         if (inbound.again()) {
-            return new Heard(texter.inboundId(), address, intent.kind().name(), true);
+            return new Heard(texter.inboundId(), address, intent.kind().name(), intent.kind().words(), true);
         }
         act(texter, intent, text);
         journey.handled(texter);
-        return new Heard(texter.inboundId(), address, intent.kind().name(), false);
+        return new Heard(texter.inboundId(), address, intent.kind().name(), intent.kind().words(), false);
     }
 
     private void act(Texter texter, SmsIntent intent, String text) {

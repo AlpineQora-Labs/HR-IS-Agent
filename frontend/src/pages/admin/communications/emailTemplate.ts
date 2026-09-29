@@ -13,6 +13,9 @@ export interface EmailTemplate {
   createdBy?: number
   createdAt: string
   updatedAt: string
+  /** Set on the templates that word a point of the candidate journey. */
+  templateKey?: string | null
+  sentWhen?: string | null
 }
 
 export type EmailCategory =

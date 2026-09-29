@@ -517,3 +517,81 @@ export interface UpdateApplicationStageInput {
   id: string
   stage: string
 }
+
+// ---- Candidate messages: texts and emails, to and from a candidate ----
+// Wording, status and reasons come from the server as written. Screens lay them out.
+
+export interface MessageRow {
+  id: string
+  channel: 'SMS' | 'EMAIL'
+  direction: 'OUTBOUND' | 'INBOUND'
+  /** QUEUED | SENDING | SENT | FAILED | SUPPRESSED | RECEIVED */
+  status: string
+  statusText: string
+  reason: string | null
+  point: string | null
+  sentWhen: string | null
+  templateName: string | null
+  address: string | null
+  subject: string | null
+  text: string
+  parts: number | null
+  offersTimes: boolean
+  applicationId: string | null
+  interviewId: string | null
+  createdAt: string
+  sentAt: string | null
+}
+
+export interface MessageTimeline {
+  candidateId: string
+  candidateName: string
+  phone: string | null
+  email: string | null
+  canBeTexted: boolean
+  whyNot: string | null
+  journeyOn: boolean
+  messages: MessageRow[]
+}
+
+export interface InboundResult {
+  inboundId: string
+  understood: string
+  /** What the text was taken to mean, in words. */
+  understoodAs: string
+  duplicate: boolean
+  replies: MessageRow[]
+}
+
+export interface JourneyPointInfo {
+  key: string
+  sentWhen: string
+  kind: 'UNPROMPTED' | 'REPLY' | 'NOTICE' | 'SERVICE'
+  byText: boolean
+  byEmail: boolean
+  drawn: boolean
+  needs: string[]
+  templateKey: string
+}
+
+export interface JourneyField {
+  name: string
+  holds: string
+}
+
+export interface JourneyRule {
+  value: string
+  sentence: string
+}
+
+export interface JourneyInfo {
+  on: boolean
+  points: JourneyPointInfo[]
+  fields: JourneyField[]
+  rules: JourneyRule[]
+}
+
+export interface ReminderResult {
+  sent: MessageRow[]
+  note: string | null
+}

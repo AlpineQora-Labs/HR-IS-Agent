@@ -17,6 +17,8 @@ export type WfData = {
   smsTemplateId?: string
   smsTemplateName?: string
   smsTrigger?: string
+  /** Candidate journey: the point this message is sent at (the server's key for it). */
+  journeyPoint?: string
   /** Exception: who reviews it, and why requests land here. */
   reviewerRole?: string
   reason?: string
@@ -37,13 +39,25 @@ export interface GEdge {
 
 export type Answer = 'yes' | 'no'
 
-/** The rules the engine can check. `value` is the stored key — never reword it. */
-export const RULES: { value: string; sentence: string }[] = [
+/** The trigger of the workflow that draws the candidate journey. */
+export const JOURNEY = 'Candidate journey'
+
+/** The rules the engine can check. `value` is the stored key — never reword it.
+    A journey's rules are things a candidate does; a request's rules are facts about it. */
+export const RULES: { value: string; sentence: string; journey?: boolean }[] = [
   { value: 'Flagged critical', sentence: 'the request is flagged critical' },
   { value: 'Short notice (under 14 days)', sentence: 'notice is under 14 days' },
   { value: 'In-person event', sentence: 'the event is in person' },
   { value: 'Virtual event', sentence: 'the event is virtual' },
+  { value: 'Candidate asks for status', sentence: 'the candidate asks for their status', journey: true },
+  { value: 'Candidate asks to reschedule', sentence: 'the candidate asks to reschedule', journey: true },
 ]
+
+/** The rules a workflow of this trigger can be drawn with. */
+export function rulesFor(trigger: string | undefined) {
+  const journey = trigger === JOURNEY
+  return RULES.filter((r) => !!r.journey === journey)
+}
 
 const START = 'trigger'
 const d = (n: GNode | undefined) => (n?.data ?? {}) as WfData

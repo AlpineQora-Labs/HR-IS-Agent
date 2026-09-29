@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Button } from './TvButton'
 import Breadcrumb from './Breadcrumb'
-import { commsApi as api } from './commsApi'
+import { commsApi as api, refusal } from './commsApi'
 import type { EmailTemplate } from './emailTemplate'
 import '@/styles/tv-comms.css'
 import { EMAIL_CATEGORIES } from './emailTemplate'
@@ -128,7 +128,7 @@ export default function EmailTemplateList() {
     try {
       await api.deleteEmailTemplate(id)
       setTemplates(prev => prev.filter(t => t.templateId !== id))
-    } catch { alert('Failed to delete template') }
+    } catch (e) { alert(refusal(e, 'The template could not be deleted.')) }
   }, [templates])
 
   const columnDefs = useMemo<ColDef[]>(() => [

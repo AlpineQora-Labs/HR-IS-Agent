@@ -70,7 +70,7 @@ public class CandidateMessageController {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                     "The sender is not a phone number a text can come from.");
         }
-        return new InboundResult(heard.inboundId(), heard.understood(), heard.again(),
+        return new InboundResult(heard.inboundId(), heard.understood(), heard.inWords(), heard.again(),
                 heard.again() ? java.util.List.of() : queries.answersTo(heard.inboundId()));
     }
 }

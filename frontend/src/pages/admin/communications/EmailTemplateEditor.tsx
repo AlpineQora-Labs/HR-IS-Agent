@@ -11,7 +11,8 @@ import Breadcrumb from './Breadcrumb'
 import TabBar from './TabBar'
 import FormField from './FormField'
 import ToggleSwitch from './ToggleSwitch'
-import { commsApi as api } from './commsApi'
+import { commsApi as api, refusal } from './commsApi'
+import { useJourney } from '@/api/hooks'
 import type { EmailTemplate, EmailCategory } from './emailTemplate'
 import '@/styles/tv-comms.css'
 import { EMAIL_CATEGORIES } from './emailTemplate'
@@ -117,10 +118,24 @@ const SAMPLE_DATA: Record<string, string> = {
   '{{register_link}}':    'https://careers.bofa.com/register/abc123',
   '{{program_name}}':     'Teammate Voices',
   '{{program_description}}': 'Employee feedback program',
-  '{{company_name}}':     'Acme Corporation',
+  '{{company_name}}':     'Bank of America Careers',
   '{{sender_name}}':      'HR Team',
   '{{sender_title}}':     'People & Culture',
   '{{sender_email}}':     'hr@acme.com',
+  // The candidate journey's fields, as a candidate would read them.
+  '{{first_name}}':       'Jane',
+  '{{candidate_name}}':   'Jane Smith',
+  '{{job_title}}':        'Software Engineer',
+  '{{status_summary}}':   'Your application for Software Engineer: the hiring team is reviewing it.',
+  '{{slot_options}}':     '1) Tue, Oct 6, 10:00 AM ET<br>2) Tue, Oct 6, 2:00 PM ET<br>3) Wed, Oct 7, 11:00 AM ET',
+  '{{slot_choices}}':     '1, 2 or 3',
+  '{{interview_time}}':   'Tue, Oct 6, 10:00 AM ET',
+  '{{interview_type}}':   'Video interview',
+  '{{interviewers}}':     'Elena Vasquez and David Okafor',
+  '{{meeting_link}}':     'https://meet.example.com/interview',
+  '{{link}}':             'https://careers.example.com/schedule',
+  '{{recruiter_name}}':   'Elena Vasquez',
+  '{{reason}}':           'It is less than 24 hours away.',
 }
 
 function replaceMergeFields(html: string): string {
@@ -143,6 +158,17 @@ export default function EmailTemplateEditor() {
   const [loading, setLoading] = useState(isEditMode)
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
+  /** Set when this template words a point of the candidate journey. */
+  const [journeyNote, setJourneyNote] = useState<string | null>(null)
+
+  // The candidate journey's fields come from the server, ahead of the older groups.
+  const { data: journey } = useJourney()
+  const mergeGroups: Record<string, { field: string; label: string }[]> = {
+    ...(journey
+      ? { 'Candidate journey': journey.fields.map((f) => ({ field: `{{${f.name}}}`, label: f.holds })) }
+      : {}),
+    ...MERGE_FIELDS,
+  }
 
   // Template state
   const [name, setName] = useState('')
@@ -206,6 +232,11 @@ export default function EmailTemplateEditor() {
         setFromName(t.fromName || 'Teammate Voices')
         setBodyHtml(t.bodyHtml)
         setStatus(t.status === 'ACTIVE' ? 'ACTIVE' : 'DRAFT')
+        setJourneyNote(
+          t.templateKey
+            ? `Candidate journey: sent ${(t.sentWhen ?? '').replace(/^./, (c) => c.toLowerCase())}. A journey template stays Active and cannot be deleted.`
+            : null,
+        )
         // Push content to editor — if editor isn't ready yet, pendingContent ref handles it
         if (editor) {
           editor.commands.setContent(t.bodyHtml, { emitUpdate: false })
@@ -245,8 +276,8 @@ export default function EmailTemplateEditor() {
         setTimeout(() => navigate(`/admin/communications/${created.templateId}/edit`), 1500)
       }
       setTimeout(() => setSaveMessage(''), 3000)
-    } catch {
-      setSaveMessage('Failed to save.')
+    } catch (e) {
+      setSaveMessage(`Failed to save. ${refusal(e, '')}`.trim())
     } finally {
       setSaving(false)
     }
@@ -318,6 +349,9 @@ export default function EmailTemplateEditor() {
         {/* ===== DETAILS TAB ===== */}
         {activeTab === 'details' && (
           <div className="email-editor__form">
+            {journeyNote && (
+              <div style={{ fontSize: 12.5, color: '#6e6e73', lineHeight: 1.5, marginBottom: 14 }}>{journeyNote}</div>
+            )}
             <div className="email-editor__form-row">
               <FormField label="Template Name" required>
                 <input className="email-editor__input" placeholder="e.g., Interview Confirmation" value={name} onChange={e => setName(e.target.value)} />
@@ -441,7 +475,7 @@ export default function EmailTemplateEditor() {
                 </button>
                 {mergeDropdownOpen && (
                   <div className="merge-dropdown">
-                    {Object.entries(MERGE_FIELDS).map(([group, fields]) => (
+                    {Object.entries(mergeGroups).map(([group, fields]) => (
                       <div key={group} className="merge-dropdown__group">
                         <div className="merge-dropdown__group-label">{group}</div>
                         {fields.map(f => (

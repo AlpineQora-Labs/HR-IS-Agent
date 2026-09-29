@@ -1,6 +1,6 @@
 import { Icons, SPEC } from './canvasTheme'
 import {
-  RULES, continueChoices, mainOf, ruleInWords, ruleSentence, sideOf, stepName,
+  JOURNEY, continueChoices, mainOf, ruleInWords, ruleSentence, rulesFor, sideOf, stepName,
   type Answer, type GEdge, type GNode, type Side, type WfData,
 } from './graphModel'
 
@@ -178,10 +178,13 @@ export default function RulePanel({
   onSide,
   onSelect,
   onRemove,
+  trigger,
 }: {
   rule: GNode
   nodes: GNode[]
   edges: GEdge[]
+  /** The workflow's trigger: a candidate journey is drawn with rules of its own. */
+  trigger?: string
   onCondition: (value: string) => void
   onSide: (answer: Answer, choice: SideChoice, anchor: Anchor, destId?: string) => void
   onSelect: (id: string) => void
@@ -189,7 +192,9 @@ export default function RulePanel({
 }) {
   const current = (rule.data as WfData).condition
   const chosen = ruleSentence(current)
-  const known = RULES.some((r) => r.value === current)
+  const rules = rulesFor(trigger)
+  const journey = trigger === JOURNEY
+  const known = rules.some((r) => r.value === current)
   // A rule saved before this panel existed may hold something the list no longer offers.
   const legacy = current !== undefined && current.trim() !== '' && !known && current !== 'Always' ? current : null
 
@@ -199,7 +204,7 @@ export default function RulePanel({
         <span className="wfc-rule__word">If</span>
       </div>
       <div className="wfc-choice" role="radiogroup" aria-label="What this rule checks">
-        {RULES.map((r) => (
+        {rules.map((r) => (
           <button
             key={r.value}
             role="radio"
@@ -213,7 +218,9 @@ export default function RulePanel({
         {current === 'Always' || current === undefined ? (
           <div className="wfc-choice__row is-on" aria-disabled>
             <span className="wfc-choice__name">Always</span>
-            <span className="wfc-choice__desc">Every request takes the YES side. Choose a check above to make this a real rule.</span>
+            <span className="wfc-choice__desc">
+              {journey ? 'Every candidate' : 'Every request'} takes the YES side. Choose a check above to make this a real rule.
+            </span>
           </div>
         ) : null}
         {legacy && (
@@ -240,7 +247,11 @@ export default function RulePanel({
         <div className="wfc-inspector__label">Reads as</div>
         {ruleInWords(nodes, edges, rule.id)}
       </div>
-      <div className="wfc-inspector__hint">Each request takes one side only. The rule is checked once, when the request is submitted.</div>
+      <div className="wfc-inspector__hint">
+        {journey
+          ? 'The YES side is what happens when the candidate does this. It can happen at any time, and more than once.'
+          : 'Each request takes one side only. The rule is checked once, when the request is submitted.'}
+      </div>
 
       <button className="btn btn--danger btn--sm" onClick={onRemove}>
         Remove rule
