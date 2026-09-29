@@ -8,7 +8,7 @@ import type { EmailTemplate } from './emailTemplate'
 import '@/styles/tv-comms.css'
 import { EMAIL_CATEGORIES } from './emailTemplate'
 import { AgGridReact } from 'ag-grid-react'
-import SmsTemplates from './SmsTemplates'
+import SmsTemplatesView from './SmsTemplates'
 import type { ColDef, SizeColumnsToFitGridStrategy } from 'ag-grid-community'
 import { AllCommunityModule, ModuleRegistry } from 'ag-grid-community'
 
@@ -104,6 +104,7 @@ export default function EmailTemplateList() {
   const [loading, setLoading] = useState(true)
   const [quickFilterText, setQuickFilterText] = useState<string>()
   const [activeTab, setActiveTab] = useState('all')
+  const [channel, setChannel] = useState<'email' | 'sms'>('email')
   const gridRef = useRef<AgGridReact>(null)
   const navigate = useNavigate()
 
@@ -216,11 +217,32 @@ export default function EmailTemplateList() {
     <div className="comms-library">
       <Breadcrumb items={[
         { label: 'Administration', path: '/admin' },
-        { label: 'Email Templates' },
+        { label: channel === 'email' ? 'Email Templates' : 'SMS Templates' },
       ]} />
 
-      <h1 className="comms-library__title">Email Templates</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <h1 className="comms-library__title" style={{ marginRight: 'auto' }}>
+          {channel === 'email' ? 'Email Templates' : 'SMS Templates'}
+        </h1>
+        <div className="comms-library__channel">
+          <button
+            className={`comms-library__channel-btn${channel === 'email' ? ' comms-library__channel-btn--active' : ''}`}
+            onClick={() => setChannel('email')}
+          >
+            Email
+          </button>
+          <button
+            className={`comms-library__channel-btn${channel === 'sms' ? ' comms-library__channel-btn--active' : ''}`}
+            onClick={() => setChannel('sms')}
+          >
+            SMS
+          </button>
+        </div>
+      </div>
 
+      {channel === 'sms' ? (
+        <SmsTemplatesView />
+      ) : (
       <div className="comms-library__table-card">
         <div className="comms-library__toolbar">
           <div className="comms-library__tabs">
@@ -276,7 +298,7 @@ export default function EmailTemplateList() {
           </div>
         )}
       </div>
-      <SmsTemplates />
+      )}
     </div>
   )
 }

@@ -20,7 +20,8 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/v1/sms-templates")
 public class SmsTemplateController {
 
-    public record SmsDto(UUID id, String name, String category, String body, String status) {}
+    public record SmsDto(UUID id, String name, String category, String body, String status,
+            java.time.OffsetDateTime createdAt, java.time.OffsetDateTime updatedAt) {}
 
     public record SmsSave(String name, String category, String body, String status) {}
 
@@ -78,6 +79,7 @@ public class SmsTemplateController {
     }
 
     private static SmsDto toDto(SmsTemplate t) {
-        return new SmsDto(t.getId(), t.getName(), t.getCategory(), t.getBody(), t.getStatus());
+        return new SmsDto(t.getId(), t.getName(), t.getCategory(), t.getBody(), t.getStatus(),
+                t.getCreatedAt(), t.getUpdatedAt());
     }
 }

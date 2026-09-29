@@ -7,6 +7,8 @@ export interface SmsTemplate {
   category: string
   body: string
   status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED'
+  createdAt?: string | null
+  updatedAt?: string | null
 }
 
 /* Thin client mirroring the teammate-voices api surface, pointed at the

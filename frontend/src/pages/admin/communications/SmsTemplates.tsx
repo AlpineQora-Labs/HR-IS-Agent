@@ -1,224 +1,314 @@
-import { useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { AgGridReact } from 'ag-grid-react'
+import type { ColDef, SizeColumnsToFitGridStrategy } from 'ag-grid-community'
 import { commsApi, type SmsTemplate } from './commsApi'
+import { Button } from './TvButton'
 
-/* SMS templates for the candidate journey — the text-message side of
-   Communications. Plain text + {{merge_field}} chips, a character/segment
-   counter and a live phone-bubble preview. Channel policy: web chat + SMS
-   only (never WhatsApp). Used by the workflow canvas's SMS block. */
+/* SMS templates — the text-message channel of Communications, rendered in
+   the SAME table-card + grid chrome as the email list (one page, two
+   channels). Editing swaps the grid for an inline editor inside the card.
+   Channel policy: web chat + SMS only (never WhatsApp). */
 
-const MERGE_FIELDS = [
-  'candidate_name',
-  'job_title',
-  'interview_type',
-  'interview_time',
-  'status',
-  'link',
-]
+const MERGE_FIELDS = ['candidate_name', 'job_title', 'interview_type', 'interview_time', 'status', 'link']
 
-function statusDot(status: string) {
+const formatDate = (iso?: string | null) => (iso ? iso.substring(0, 10) : '')
+
+function StatusCell({ value }: { value?: string }) {
+  const label = value ? value.charAt(0) + value.slice(1).toLowerCase() : 'Draft'
   return (
-    <span
-      style={{
-        width: 7, height: 7, borderRadius: 999, display: 'inline-block', marginRight: 8,
-        background: status === 'ACTIVE' ? '#1a9d55' : status === 'ARCHIVED' ? '#c9d1de' : '#c98a00',
-      }}
-    />
+    <span>
+      <span
+        style={{
+          width: 7, height: 7, borderRadius: 999, display: 'inline-block', marginRight: 7,
+          background: value === 'ACTIVE' ? '#1a9d55' : value === 'ARCHIVED' ? '#c9d1de' : '#c98a00',
+        }}
+      />
+      {label}
+    </span>
   )
 }
 
-function Editor({
+function SmsEditor({
   template,
   onDone,
+  onSaved,
 }: {
   template: SmsTemplate | null
   onDone: () => void
+  onSaved: () => void
 }) {
-  const qc = useQueryClient()
   const [name, setName] = useState(template?.name ?? '')
   const [status, setStatus] = useState<SmsTemplate['status']>(template?.status ?? 'ACTIVE')
   const [body, setBody] = useState(template?.body ?? '')
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setName(template?.name ?? '')
-    setStatus(template?.status ?? 'ACTIVE')
-    setBody(template?.body ?? '')
-    setError(null)
-  }, [template])
-
-  const save = useMutation({
-    mutationFn: () =>
-      template
-        ? commsApi.updateSmsTemplate(template.id, { name, status, body })
-        : commsApi.createSmsTemplate({ name, status, body }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['sms-templates'] })
-      onDone()
-    },
-    onError: (e) =>
-      setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not save.'),
-  })
+  const [busy, setBusy] = useState(false)
 
   const segments = Math.max(1, Math.ceil(body.length / 160))
 
-  return (
-    <div style={{ border: '1px solid var(--line, #e3e8f0)', borderRadius: 12, padding: 16, marginTop: 12 }}>
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <label className="field" style={{ flex: 1, minWidth: 220 }}>
-          <span className="field__label">Template name</span>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Interview reminder" />
-        </label>
-        <label className="field" style={{ width: 140 }}>
-          <span className="field__label">Status</span>
-          <select className="input" value={status} onChange={(e) => setStatus(e.target.value as SmsTemplate['status'])}>
-            <option value="ACTIVE">Active</option>
-            <option value="DRAFT">Draft</option>
-            <option value="ARCHIVED">Archived</option>
-          </select>
-        </label>
-      </div>
+  const save = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      if (template) await commsApi.updateSmsTemplate(template.id, { name, status, body })
+      else await commsApi.createSmsTemplate({ name, status, body })
+      onSaved()
+      onDone()
+    } catch (e) {
+      setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not save.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: 16, marginTop: 14 }}>
+  return (
+    <div style={{ padding: '22px 24px 26px' }}>
+      <button
+        onClick={onDone}
+        style={{ font: 'inherit', border: 'none', background: 'none', cursor: 'pointer', color: '#007aff', fontSize: 13, fontWeight: 500, padding: 0, marginBottom: 16 }}
+      >
+        ‹ All SMS templates
+      </button>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 28 }}>
         <div>
-          <div className="field__label" style={{ marginBottom: 6 }}>Message</div>
+          <div style={{ display: 'flex', gap: 14, marginBottom: 16 }}>
+            <label style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f', marginBottom: 6 }}>Template name</div>
+              <input
+                className="input"
+                style={{ width: '100%' }}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Interview reminder"
+              />
+            </label>
+            <label style={{ width: 150 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f', marginBottom: 6 }}>Status</div>
+              <select className="input" style={{ width: '100%' }} value={status} onChange={(e) => setStatus(e.target.value as SmsTemplate['status'])}>
+                <option value="ACTIVE">Active</option>
+                <option value="DRAFT">Draft</option>
+                <option value="ARCHIVED">Archived</option>
+              </select>
+            </label>
+          </div>
+
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f', marginBottom: 6 }}>Message</div>
           <textarea
             className="input"
-            style={{ width: '100%', minHeight: 110, resize: 'vertical', font: 'inherit', fontSize: 13.5, lineHeight: 1.5 }}
+            style={{ width: '100%', minHeight: 130, resize: 'vertical', font: 'inherit', fontSize: 13.5, lineHeight: 1.55 }}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Hi {{candidate_name}}, …"
           />
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
             {MERGE_FIELDS.map((f) => (
               <button
                 key={f}
-                className="btn btn--outline btn--sm"
-                style={{ fontSize: 11.5, padding: '3px 9px' }}
                 onClick={() => setBody((b) => `${b}{{${f}}}`)}
+                style={{
+                  font: 'inherit', fontSize: 11.5, cursor: 'pointer', padding: '4px 10px',
+                  border: '1px solid #d2d2d7', borderRadius: 999, background: '#fff', color: '#1d1d1f',
+                }}
               >
                 {'{{'}{f}{'}}'}
               </button>
             ))}
           </div>
-          <div style={{ fontSize: 11.5, color: body.length > 320 ? '#a33a3a' : 'var(--ink-4)', marginTop: 8 }}>
+          <div style={{ fontSize: 12, color: body.length > 320 ? '#b3261e' : '#86868b', marginTop: 10 }}>
             {body.length} characters · {segments} SMS segment{segments > 1 ? 's' : ''}
             {body.length > 320 ? ' — keep candidate texts short' : ''}
           </div>
+
+          {error && <div style={{ color: '#b3261e', fontSize: 13, marginTop: 12 }}>{error}</div>}
+          <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+            <Button variant="primary" size="sm" onClick={save} disabled={busy}>
+              {template ? 'Save changes' : 'Create template'}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={onDone}>
+              Cancel
+            </Button>
+          </div>
         </div>
 
-        {/* phone preview */}
+        {/* live phone preview */}
         <div>
-          <div className="field__label" style={{ marginBottom: 6 }}>Preview</div>
-          <div style={{ border: '1px solid var(--line, #e3e8f0)', borderRadius: 18, padding: '14px 12px', background: '#fafbfd', minHeight: 150 }}>
-            <div style={{ fontSize: 10.5, color: 'var(--ink-4)', textAlign: 'center', marginBottom: 8 }}>Bank of America Careers</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f', marginBottom: 6 }}>Preview</div>
+          <div style={{ border: '1px solid #e5e5ea', borderRadius: 22, padding: '16px 14px', background: '#fafafa' }}>
+            <div style={{ fontSize: 11, color: '#86868b', textAlign: 'center', marginBottom: 10 }}>Bank of America Careers</div>
             <div
               style={{
-                background: '#e9ebef', color: 'var(--ink-1)', borderRadius: '14px 14px 14px 4px',
-                padding: '9px 12px', fontSize: 12.5, lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                background: '#e9e9eb', color: '#1d1d1f', borderRadius: '16px 16px 16px 5px',
+                padding: '10px 13px', fontSize: 13, lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
               }}
             >
               {body || 'Your message appears here…'}
             </div>
+            <div style={{ fontSize: 10.5, color: '#a1a1a6', marginTop: 8, textAlign: 'right' }}>Delivered</div>
           </div>
         </div>
-      </div>
-
-      {error && <div style={{ color: '#a33a3a', fontSize: 12.5, marginTop: 10 }}>{error}</div>}
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <button className="btn btn--primary btn--sm" disabled={save.isPending} onClick={() => save.mutate()}>
-          {template ? 'Save changes' : 'Create template'}
-        </button>
-        <button className="btn btn--ghost btn--sm" onClick={onDone}>Cancel</button>
       </div>
     </div>
   )
 }
 
-export default function SmsTemplates() {
-  const qc = useQueryClient()
-  const { data: templates } = useQuery({ queryKey: ['sms-templates'], queryFn: commsApi.getSmsTemplates })
+/** The SMS channel view — swaps in for the email grid inside the same table card. */
+export default function SmsTemplatesView() {
+  const [templates, setTemplates] = useState<SmsTemplate[]>([])
+  const [loading, setLoading] = useState(true)
+  const [quickFilterText, setQuickFilterText] = useState<string>()
   const [editing, setEditing] = useState<SmsTemplate | null>(null)
   const [creating, setCreating] = useState(false)
 
-  const remove = useMutation({
-    mutationFn: (id: string) => commsApi.deleteSmsTemplate(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['sms-templates'] }),
-  })
+  const load = useCallback(() => {
+    commsApi.getSmsTemplates()
+      .then(setTemplates)
+      .catch(() => setTemplates([]))
+      .finally(() => setLoading(false))
+  }, [])
+  useEffect(load, [load])
 
-  return (
-    <div className="card" style={{ marginTop: 18 }}>
-      <div className="card__head" style={{ display: 'flex', alignItems: 'center' }}>
-        <div style={{ marginRight: 'auto' }}>
-          <h3 style={{ margin: 0 }}>SMS templates</h3>
-          <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 2 }}>
-            Candidate text messages for the journey workflow — status updates, confirmations, reminders. Web chat + SMS only.
-          </div>
-        </div>
-        <button
-          className="btn btn--primary btn--sm"
-          onClick={() => {
-            setCreating(true)
+  const handleDelete = useCallback(
+    async (id: string) => {
+      const t = templates.find((t) => t.id === id)
+      if (!t || !confirm(`Delete "${t.name}"? Workflows using it will need a new template.`)) return
+      try {
+        await commsApi.deleteSmsTemplate(id)
+        setTemplates((prev) => prev.filter((t) => t.id !== id))
+      } catch {
+        alert('Failed to delete template')
+      }
+    },
+    [templates],
+  )
+
+  const columnDefs = useMemo<ColDef[]>(
+    () => [
+      {
+        field: 'name',
+        headerName: 'Template Name',
+        flex: 1.2,
+        minWidth: 180,
+        onCellClicked: (params) => {
+          if (params.data) {
+            setEditing(params.data as SmsTemplate)
+            setCreating(false)
+          }
+        },
+        cellStyle: { color: '#007aff', cursor: 'pointer', fontWeight: 500 },
+      },
+      {
+        field: 'body',
+        headerName: 'Message',
+        flex: 2.4,
+        minWidth: 260,
+        cellStyle: { color: '#6e6e73' },
+      },
+      {
+        field: 'updatedAt',
+        headerName: 'Last Updated',
+        width: 140,
+        valueFormatter: (params) => formatDate(params.value),
+      },
+      {
+        field: 'status',
+        headerName: 'Status',
+        width: 120,
+        cellRenderer: (params: { value?: string }) => <StatusCell value={params.value} />,
+      },
+      {
+        headerName: 'Actions',
+        colId: 'actions',
+        width: 100,
+        sortable: false,
+        filter: false,
+        resizable: false,
+        cellRenderer: (params: { data: SmsTemplate }) => (
+          <button
+            onClick={() => handleDelete(params.data.id)}
+            style={{ font: 'inherit', fontSize: 12.5, border: 'none', background: 'none', cursor: 'pointer', color: '#b3261e' }}
+          >
+            Delete
+          </button>
+        ),
+      },
+    ],
+    [handleDelete],
+  )
+
+  const defaultColDef = useMemo<ColDef>(() => ({ sortable: true, filter: false, resizable: true }), [])
+  const autoSizeStrategy = useMemo<SizeColumnsToFitGridStrategy>(() => ({ type: 'fitGridWidth' }), [])
+
+  const onFilterTextBoxChanged = useCallback(
+    ({ target: { value } }: ChangeEvent<HTMLInputElement>) => setQuickFilterText(value),
+    [],
+  )
+
+  if (creating || editing) {
+    return (
+      <div className="comms-library__table-card">
+        <SmsEditor
+          template={editing}
+          onDone={() => {
+            setCreating(false)
             setEditing(null)
           }}
-        >
-          New SMS template
-        </button>
+          onSaved={load}
+        />
       </div>
-      <div className="card__body">
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Template</th>
-                <th>Message</th>
-                <th>Status</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {(templates ?? []).map((t) => (
-                <tr key={t.id} onClick={() => { setEditing(t); setCreating(false) }} style={{ cursor: 'pointer' }}>
-                  <td className="t-strong" style={{ whiteSpace: 'nowrap' }}>{t.name}</td>
-                  <td className="t-muted" style={{ maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {t.body}
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    {statusDot(t.status)}
-                    <span className="t-muted" style={{ fontSize: 12.5 }}>{t.status.charAt(0) + t.status.slice(1).toLowerCase()}</span>
-                  </td>
-                  <td className="t-right" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      className="btn btn--ghost btn--sm"
-                      onClick={() => {
-                        if (confirm(`Delete "${t.name}"? Workflows using it will need a new template.`)) remove.mutate(t.id)
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {(templates ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', color: 'var(--ink-4)', padding: '26px 18px' }}>
-                    No SMS templates yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+    )
+  }
+
+  return (
+    <div className="comms-library__table-card">
+      <div className="comms-library__toolbar">
+        <div style={{ fontSize: 13, color: '#86868b' }}>
+          Candidate text messages for the journey workflow. Web chat + SMS only.
         </div>
-        {(creating || editing) && (
-          <Editor
-            template={editing}
-            onDone={() => {
-              setCreating(false)
+        <div className="comms-library__toolbar-right">
+          <div className="comms-library__search-wrap">
+            <svg className="comms-library__search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path fillRule="evenodd" clipRule="evenodd" d="M11.5 7a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Zm-.82 4.74a6 6 0 1 1 1.06-1.06l2.79 2.79a.75.75 0 1 1-1.06 1.06l-2.79-2.79Z" fill="currentColor" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search templates..."
+              onInput={onFilterTextBoxChanged}
+              className="comms-library__search-input"
+            />
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              setCreating(true)
               setEditing(null)
             }}
-          />
-        )}
+          >
+            + Create Template
+          </Button>
+        </div>
       </div>
+
+      {loading ? (
+        <p style={{ textAlign: 'center', padding: 60, color: '#86868b' }}>Loading templates...</p>
+      ) : (
+        <div className="ag-theme-quartz comms-library__grid">
+          <AgGridReact
+            rowData={templates}
+            columnDefs={columnDefs}
+            defaultColDef={defaultColDef}
+            autoSizeStrategy={autoSizeStrategy}
+            pagination
+            paginationPageSize={10}
+            paginationPageSizeSelector={[10, 25, 50]}
+            quickFilterText={quickFilterText}
+            domLayout="autoHeight"
+            rowHeight={40}
+            getRowId={(params) => String((params.data as SmsTemplate).id)}
+            overlayNoRowsTemplate="<span style='padding:40px;color:#86868b;font-size:14px'>No SMS templates yet</span>"
+          />
+        </div>
+      )}
     </div>
   )
 }
