@@ -331,7 +331,7 @@ function StageCard({
   )
 }
 
-function InterviewPlans({ users }: { users: UserRow[] }) {
+function InterviewPlans({ users, refreshUsers }: { users: UserRow[]; refreshUsers: () => void }) {
   const [reqs, setReqs] = useState<Requisition[]>([])
   const [openId, setOpenId] = useState<string | null>(null)
   const [rounds, setRounds] = useState<PlanRound[]>([])
@@ -425,6 +425,20 @@ function InterviewPlans({ users }: { users: UserRow[] }) {
             Each round is scheduled against every listed interviewer's calendar — working windows, weekly preferences,
             vacations and load caps all apply. Blocked rounds notify their interviewers automatically.
           </p>
+
+          <div style={{ marginTop: 22, paddingTop: 4, borderTop: '1px solid var(--line, #edf0f4)' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: 'var(--ink-0)', margin: '16px 0 2px' }}>
+              Interviewers on this plan
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>
+              Their working windows, weekly preferences and calendars — these shape the times candidates are offered.
+            </div>
+            <InterviewerAvailability
+              users={users}
+              focusIds={[...new Set(rounds.flatMap((r) => r.members.map((m) => m.userId)))]}
+              refreshUsers={refreshUsers}
+            />
+          </div>
         </div>
       </div>
     )
@@ -476,8 +490,20 @@ function InterviewPlans({ users }: { users: UserRow[] }) {
   )
 }
 
-export default function AvailabilityPage() {
-  const [users, setUsers] = useState<UserRow[]>([])
+/* Interviewer availability — working window, weekly preferences and the week
+   calendar. Rendered INSIDE a requisition's plan view, scoped to the people
+   on that plan (falls back to everyone while the plan is empty). */
+function InterviewerAvailability({
+  users,
+  focusIds,
+  refreshUsers,
+}: {
+  users: UserRow[]
+  focusIds?: string[]
+  refreshUsers: () => void
+}) {
+  const list = focusIds && focusIds.length ? users.filter((u) => focusIds.includes(u.id)) : users
+  const listKey = list.map((u) => u.id).join(',')
   const [selected, setSelected] = useState<string | null>(null)
   const [detail, setDetail] = useState<Detail | null>(null)
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()))
@@ -492,13 +518,10 @@ export default function AvailabilityPage() {
   const [ruleTo, setRuleTo] = useState('12:00')
   const [ruleKind, setRuleKind] = useState<Rule['kind']>('NO_INTERVIEWS')
 
-  const loadUsers = useCallback(() => {
-    api.get<UserRow[]>('/availability/users').then((r) => {
-      setUsers(r.data)
-      setSelected((cur) => cur ?? r.data[0]?.id ?? null)
-    })
-  }, [])
-  useEffect(loadUsers, [loadUsers])
+  useEffect(() => {
+    setSelected((cur) => (cur && list.some((u) => u.id === cur) ? cur : (list[0]?.id ?? null)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listKey])
 
   const loadDetail = useCallback(() => {
     if (!selected) return
@@ -522,7 +545,7 @@ export default function AvailabilityPage() {
     try {
       await api.put(`/availability/${selected}/settings`, form)
       setSavedTick((t) => t + 1)
-      loadUsers()
+      refreshUsers()
       loadDetail()
     } catch (e) {
       setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not save settings.')
@@ -540,7 +563,7 @@ export default function AvailabilityPage() {
         kind: ruleKind,
       })
       loadDetail()
-      loadUsers()
+      refreshUsers()
     } catch (e) {
       setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not add rule.')
     }
@@ -549,7 +572,7 @@ export default function AvailabilityPage() {
   const deleteRule = async (id: string) => {
     await api.delete(`/availability/rules/${id}`)
     loadDetail()
-    loadUsers()
+    refreshUsers()
   }
 
   const tz = detail?.settings.timezone ?? 'America/New_York'
@@ -616,24 +639,12 @@ export default function AvailabilityPage() {
   }
 
   return (
-    <div className="page">
-      <div className="page__head">
-        <div>
-          <h1 className="page__title">Availability</h1>
-          <p className="page__sub">
-            Working windows, interviewing preferences and calendars. Rules here shape which times the scheduler offers candidates.
-          </p>
-        </div>
-      </div>
-
-      <InterviewPlans users={users} />
-
-      <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: 16, alignItems: 'start', marginTop: 16 }}>
         {/* interviewer list */}
         <div className="card">
           <div className="card__head"><h3>Interviewers</h3></div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {users.map((u) => (
+            {list.map((u) => (
               <button
                 key={u.id}
                 onClick={() => setSelected(u.id)}
@@ -837,6 +848,30 @@ export default function AvailabilityPage() {
           </div>
         )}
       </div>
+  )
+}
+
+export default function AvailabilityPage() {
+  const [users, setUsers] = useState<UserRow[]>([])
+
+  const refreshUsers = useCallback(() => {
+    api.get<UserRow[]>('/availability/users').then((r) => setUsers(r.data))
+  }, [])
+  useEffect(refreshUsers, [refreshUsers])
+
+  return (
+    <div className="page">
+      <div className="page__head">
+        <div>
+          <h1 className="page__title">Availability</h1>
+          <p className="page__sub">
+            Interview setup by requisition. Open a requisition to define its rounds and manage its interviewers'
+            working windows, weekly preferences and calendars.
+          </p>
+        </div>
+      </div>
+
+      <InterviewPlans users={users} refreshUsers={refreshUsers} />
     </div>
   )
 }
