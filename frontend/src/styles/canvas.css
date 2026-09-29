@@ -814,3 +814,77 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* ── Vertical Make-style node cards ──────────────────────────────────────── */
+.wfc-node__inner {
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 7px;
+  padding: 14px 12px 12px;
+}
+.wfc-node__icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+}
+.wfc-node__icon svg {
+  width: 21px;
+  height: 21px;
+}
+.wfc-node__kicker {
+  display: none; /* type reads from the icon tile; kicker was noise */
+}
+.wfc-node__title {
+  font-size: 12.5px;
+  text-align: center;
+  white-space: normal;
+}
+.wfc-node__sub {
+  text-align: center;
+  margin-top: 1px;
+}
+.wfc-node__chip {
+  margin: 3px auto 0;
+}
+.wfc-node__mail {
+  top: 8px;
+  right: 8px;
+}
+
+/* edge connector dots (rendered by the custom WfcEdge) */
+.wfc-edgedot {
+  position: absolute;
+  pointer-events: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1.5px solid #ccd4e0;
+  color: #7a8494;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(16, 22, 38, 0.08);
+}
+.wfc-edgedot svg {
+  width: 11px;
+  height: 11px;
+}
+.wfc-edgedot--yes,
+.wfc-edgedot--no {
+  width: auto;
+  height: auto;
+  padding: 2px 8px 3px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.wfc-edgedot--yes {
+  border-color: rgba(26, 157, 85, 0.55);
+  color: #147a44;
+}
+.wfc-edgedot--no {
+  border-color: rgba(227, 24, 55, 0.5);
+  color: #c31432;
+}

@@ -17,10 +17,15 @@ import {
   useEdgesState,
   useReactFlow,
   useUpdateNodeInternals,
+  useInternalNode,
+  BaseEdge,
+  EdgeLabelRenderer,
+  getBezierPath,
   type Node,
   type Edge,
   type Connection,
   type NodeProps,
+  type EdgeProps,
 } from '@xyflow/react'
 import { useQuery } from '@tanstack/react-query'
 import '@xyflow/react/dist/style.css'
@@ -152,6 +157,92 @@ export const Icons = {
     </svg>
   ),
 }
+
+/* Make-style FLOATING edge: attaches to whichever side of each box gives the
+   cleanest line (recomputed live as nodes move), drawn as a soft bezier with
+   a circular connector on the line — a link dot on plain edges, a YES / NO
+   pill on condition branches. Branches keep their labeled bottom ports. */
+function WfcEdge(props: EdgeProps) {
+  const sourceNode = useInternalNode(props.source)
+  const targetNode = useInternalNode(props.target)
+  const branch = props.sourceHandleId === 'yes' ? 'YES' : props.sourceHandleId === 'no' ? 'NO' : null
+
+  let sX = props.sourceX
+  let sY = props.sourceY
+  let sPos = props.sourcePosition
+  let tX = props.targetX
+  let tY = props.targetY
+  let tPos = props.targetPosition
+
+  if (sourceNode && targetNode) {
+    const box = (n: NonNullable<typeof sourceNode>) => ({
+      x: n.internals.positionAbsolute.x,
+      y: n.internals.positionAbsolute.y,
+      w: n.measured.width ?? 156,
+      h: n.measured.height ?? 100,
+    })
+    const sb = box(sourceNode)
+    const tb = box(targetNode)
+    const scx = sb.x + sb.w / 2
+    const scy = sb.y + sb.h / 2
+    const tcx = tb.x + tb.w / 2
+    const tcy = tb.y + tb.h / 2
+    const dx = tcx - scx
+    const dy = tcy - scy
+    const vertical = Math.abs(dy) >= Math.abs(dx)
+
+    if (!branch) {
+      if (vertical) {
+        sPos = dy > 0 ? Position.Bottom : Position.Top
+        sX = scx
+        sY = dy > 0 ? sb.y + sb.h : sb.y
+      } else {
+        sPos = dx > 0 ? Position.Right : Position.Left
+        sX = dx > 0 ? sb.x + sb.w : sb.x
+        sY = scy
+      }
+    }
+    if (vertical) {
+      tPos = dy > 0 ? Position.Top : Position.Bottom
+      tX = tcx
+      tY = dy > 0 ? tb.y : tb.y + tb.h
+    } else {
+      tPos = dx > 0 ? Position.Left : Position.Right
+      tX = dx > 0 ? tb.x : tb.x + tb.w
+      tY = tcy
+    }
+  }
+
+  const [path, labelX, labelY] = getBezierPath({
+    sourceX: sX,
+    sourceY: sY,
+    sourcePosition: sPos,
+    targetX: tX,
+    targetY: tY,
+    targetPosition: tPos,
+    curvature: 0.35,
+  })
+  return (
+    <>
+      <BaseEdge id={props.id} path={path} markerEnd={props.markerEnd as string | undefined} style={props.style} />
+      <EdgeLabelRenderer>
+        <div
+          className={`wfc-edgedot${branch ? ` wfc-edgedot--${branch.toLowerCase()}` : ''}`}
+          style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+        >
+          {branch ?? (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
+              <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
+            </svg>
+          )}
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  )
+}
+
+const edgeTypes = { wfc: WfcEdge }
 
 /* Floating preview of the selected Communications template — shown while
    hovering an email step on the canvas. */
@@ -425,15 +516,15 @@ const nodeTypes = {
 // Explicit dimensions so nodes are "measured" even where ResizeObserver is flaky;
 // updateNodeInternals (below) computes handle bounds so edges render on mount.
 const DIMS: Record<string, { width: number; height: number }> = {
-  trigger: { width: 184, height: 64 },
-  approval: { width: 184, height: 86 },
-  condition: { width: 184, height: 82 },
-  policy: { width: 184, height: 64 },
-  email: { width: 184, height: 72 },
-  sms: { width: 184, height: 72 },
-  step: { width: 184, height: 64 },
-  exception: { width: 184, height: 64 },
-  end: { width: 184, height: 64 },
+  trigger: { width: 156, height: 100 },
+  approval: { width: 156, height: 128 },
+  condition: { width: 156, height: 122 },
+  policy: { width: 156, height: 100 },
+  email: { width: 156, height: 112 },
+  sms: { width: 156, height: 112 },
+  step: { width: 156, height: 100 },
+  exception: { width: 156, height: 100 },
+  end: { width: 156, height: 100 },
 }
 const sized = (n: Node): Node => ({ ...n, ...DIMS[n.type as string] })
 
@@ -444,11 +535,11 @@ const decorateEdge = (e: Edge): Edge => {
   const color = branch === 'no' ? '#e31837' : branch === 'yes' ? '#1a9d55' : '#93a1b8'
   return {
     ...e,
-    type: 'default',
+    type: 'wfc',
     className: branch ? `wfc-edge--${branch}` : undefined,
-    markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color },
-    label: branch === 'yes' ? 'YES' : branch === 'no' ? 'NO' : undefined,
-    labelStyle: branch ? { fill: branch === 'no' ? '#c31432' : '#147a44', fontWeight: 700 } : undefined,
+    markerEnd: { type: MarkerType.ArrowClosed, width: 13, height: 13, color },
+    label: undefined,
+    labelStyle: undefined,
   }
 }
 
@@ -501,15 +592,34 @@ function seedGraph(w: ApprovalWorkflow, roleName: (k: string) => string): { node
  */
 function autoLayout(nodes: Node[], edges: Edge[]): Node[] {
   const CX = 320 // main-column center
-  const SP = 260 // horizontal pitch (cards are 184 wide → ≥76px clear gap)
-  const ROW = 165 // vertical pitch (tallest card is 86 → ≥79px clear gap for arrows)
+  const SP = 240 // horizontal pitch (cards are 156 wide → ≥84px clear gap)
+  const ROW = 200 // vertical pitch (tallest card is 128 → ≥72px clear gap for arrows)
   const TOP = 30
+
+  // Journeys may loop (reschedule -> back to scheduling); find the cycle
+  // back-edges with a DFS from the trigger and layer WITHOUT them, or the
+  // longest-path relaxation below never settles.
+  const out = new Map<string, Edge[]>()
+  for (const e of edges) out.set(e.source, [...(out.get(e.source) ?? []), e])
+  const back = new Set<string>()
+  const state = new Map<string, number>() // 0 unvisited · 1 on stack · 2 done
+  const dfs = (id: string) => {
+    state.set(id, 1)
+    for (const e of out.get(id) ?? []) {
+      const st = state.get(e.target) ?? 0
+      if (st === 1) back.add(e.id)
+      else if (st === 0) dfs(e.target)
+    }
+    state.set(id, 2)
+  }
+  dfs('trigger')
+  const layerEdges = edges.filter((e) => !back.has(e.id))
 
   // Longest-path depth from the trigger (relaxation; graphs are tiny).
   const depth = new Map<string, number>([['trigger', 0]])
   for (let pass = 0; pass <= nodes.length; pass++) {
     let changed = false
-    for (const e of edges) {
+    for (const e of layerEdges) {
       const ds = depth.get(e.source)
       if (ds == null) continue
       if ((depth.get(e.target) ?? -1) < ds + 1) {
@@ -1066,6 +1176,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
             onNodeClick={(_, n) => setSelId(n.id)}
             onPaneClick={() => setSelId(null)}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
             connectionRadius={38}
             fitView
