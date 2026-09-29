@@ -183,7 +183,7 @@ public class ConversationEngine {
                     startReschedule(conversation, state, emitted);
                 } else {
                     emitted.add(record(conversation, state.step,
-                            "This conversation has already wrapped up. Thanks again!"));
+                            "This conversation has already wrapped up. Thank you again."));
                 }
             }
         }

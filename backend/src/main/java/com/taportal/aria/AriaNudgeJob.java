@@ -105,7 +105,7 @@ public class AriaNudgeJob {
             // sync-on-read jumps back to the scheduling step on the next reply.
             List<com.taportal.api.InterviewDtos.SlotResponse> fresh = interviewService.reschedule(iv.getId());
             StringBuilder body = new StringBuilder(
-                    "Sorry we missed you today! No worries — it happens. Let's find a new time. "
+                    "Sorry we missed you today. It happens. Let's find a new time. "
                             + "Here are some fresh options — just reply with the one you'd like:\n");
             int i = 1;
             for (var slot : fresh) {

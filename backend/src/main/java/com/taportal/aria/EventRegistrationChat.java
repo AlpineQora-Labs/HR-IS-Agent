@@ -163,7 +163,7 @@ public class EventRegistrationChat {
             if (ex.getStatusCode().value() == HttpStatus.CONFLICT.value()) {
                 state.done = true;
                 conversation.setStatus("COMPLETED");
-                aria(conversation, "duplicate", "Good news — you're already registered for this event! "
+                aria(conversation, "duplicate", "Good news: you're already registered for this event. "
                         + "No need to do anything else. See you there.");
             } else {
                 aria(conversation, "error", "Hmm, something didn't add up: "

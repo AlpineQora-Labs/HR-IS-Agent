@@ -36,9 +36,9 @@ public class ScriptedBrain implements AssistantBrain {
             case ConversationEngine.STEP_COLLECT_NAME:
                 return "What's your full name?";
             case ConversationEngine.STEP_COLLECT_EMAIL:
-                return "Thanks! What's the best email to reach you at?";
+                return "Thank you. What's the best email to reach you at?";
             case ConversationEngine.STEP_COLLECT_PHONE:
-                return "Great. What mobile number can we text updates to? "
+                return "What mobile number can we text updates to? "
                         + "Message and data rates may apply, and you can reply STOP at any time to opt out.";
             case ConversationEngine.STEP_KNOCKOUT:
                 return question != null ? question.getPrompt() : "Just a couple of quick questions.";
@@ -53,13 +53,13 @@ public class ScriptedBrain implements AssistantBrain {
             case ConversationEngine.STEP_COLLECT_NAME:
                 return "Good to meet you, " + firstName(userText) + ".";
             case ConversationEngine.STEP_COLLECT_EMAIL:
-                return "Got it — thank you.";
+                return "Thank you.";
             case ConversationEngine.STEP_COLLECT_PHONE:
-                return "Perfect. Now just a few quick screening questions.";
+                return "Thank you. A few screening questions come next.";
             case ConversationEngine.STEP_KNOCKOUT:
                 return "Thanks for that.";
             default:
-                return "Thanks!";
+                return "Thank you.";
         }
     }
 
