@@ -325,6 +325,30 @@ class InterviewServiceTest {
         }
 
         @Test
+        @DisplayName("the job's open times are the ones still bookable: on offer, still to come, and each time once")
+        void theJobsOpenTimesAreTheOnesStillBookable() {
+            UUID jobId = application.getJobId();
+            InterviewSlot withdrawn = proposed(inDays(2, 9));
+            withdrawn.setStatus("EXPIRED");
+            InterviewSlot passed = proposed(OffsetDateTime.now().minusHours(1));
+            InterviewSlot later = proposed(inDays(4, 15));
+            InterviewSlot sooner = proposed(inDays(3, 13));
+            InterviewSlot sameTime = proposed(inDays(3, 13));
+            InterviewSlot pool = new InterviewSlot(); // the legacy per-job pool: status OPEN, no interview
+            ReflectionTestUtils.setField(pool, "id", UUID.randomUUID());
+            pool.setStartsAt(inDays(1, 10));
+            pool.setEndsAt(inDays(1, 10).plusMinutes(30));
+            when(slots.findByJobIdAndBookedFalse(jobId))
+                    .thenReturn(List.of(withdrawn, later, passed, sooner, sameTime, pool));
+
+            List<SlotResponse> open = service.openSlots(jobId);
+
+            assertThat(open).extracting(SlotResponse::id)
+                    .as("withdrawn and passed times are left out; one row per time, earliest first")
+                    .containsExactly(pool.getId(), sooner.getId(), later.getId());
+        }
+
+        @Test
         @DisplayName("an application already booked gets no second interview")
         void beginningAgainReturnsTheBooking() {
             booked(inDays(3, 14));

@@ -16,11 +16,16 @@ import com.taportal.domain.job.JobRepository;
 import com.taportal.domain.recruiter.RecruiterUser;
 import com.taportal.domain.recruiter.RecruiterUserRepository;
 import jakarta.persistence.EntityNotFoundException;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.context.ApplicationEventPublisher;
@@ -86,8 +91,27 @@ public class InterviewService {
         return interviewRepository.findByApplicationId(applicationId).stream().map(InterviewService::toResponse).toList();
     }
 
+    /** A slot in one of these states is still on offer: the legacy per-job pool, or proposed for an interview. */
+    private static final Set<String> ON_OFFER = Set.of("OPEN", "PROPOSED");
+
+    /** The job's times a recruiter can still book (see {@link #bookableSlots}). */
     public List<SlotResponse> openSlots(UUID jobId) {
-        return slotRepository.findByJobIdAndBookedFalse(jobId).stream().map(InterviewService::toSlotResponse).toList();
+        return bookableSlots(jobId).stream().map(InterviewService::toSlotResponse).toList();
+    }
+
+    /**
+     * The job's slots that can still be booked: on offer (neither selected nor
+     * withdrawn), not taken, and starting in the future — earliest first. Two
+     * rows for the same time are one choice, so only the first is kept.
+     */
+    public List<InterviewSlot> bookableSlots(UUID jobId) {
+        OffsetDateTime now = OffsetDateTime.now();
+        Map<Instant, InterviewSlot> oneEach = new LinkedHashMap<>();
+        slotRepository.findByJobIdAndBookedFalse(jobId).stream()
+                .filter(s -> ON_OFFER.contains(s.getStatus()) && s.getStartsAt().isAfter(now))
+                .sorted(Comparator.comparing(InterviewSlot::getStartsAt))
+                .forEach(s -> oneEach.putIfAbsent(s.getStartsAt().toInstant(), s));
+        return List.copyOf(oneEach.values());
     }
 
     /** Proposed slots, generating a fresh set when none exist and the interview is unbooked. */

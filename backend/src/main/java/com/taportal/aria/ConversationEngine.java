@@ -511,8 +511,9 @@ public class ConversationEngine {
     // Helpers
     // =====================================================================
 
+    /** The legacy per-job pool, by the same rule the recruiter's list uses: still on offer and still to come. */
     private List<InterviewSlot> openSlots(Job job) {
-        return slots.findByJobIdAndBookedFalse(job.getId());
+        return interviewService.bookableSlots(job.getId());
     }
 
     private Job loadJob(UUID jobId) {
