@@ -124,12 +124,14 @@ function WfcEdge(props: EdgeProps) {
     const dx = tcx - scx
     const dy = tcy - scy
     const vertical = Math.abs(dy) >= Math.abs(dx)
-    const loop = !branch && dy < -40 // target sits above: a journey loop-back
+    // Target above and a column away: the foot of one column to the head of the next (see autoLayout).
+    const climb = !branch && dy < -40 && Math.abs(dx) > 240
+    const loop = !branch && dy < -40 && !climb // target sits above: a journey loop-back
     // The auto-approve bypass runs down a lane of its own. It leaves the flow
     // sideways along the start's row and drops into the card from above; it
     // comes back into the outcome from the side — or from underneath when a
     // step sits in the way — so it never crosses the steps it skips.
-    const bypass = !branch && !loop && Math.abs(dx) > 40 && (sourceNode.type === 'policy' ? 'out' : targetNode.type === 'policy' ? 'in' : null)
+    const bypass = !branch && !loop && !climb && Math.abs(dx) > 40 && (sourceNode.type === 'policy' ? 'out' : targetNode.type === 'policy' ? 'in' : null)
 
     if (branch) {
       // Anchor on the box itself (under the YES / NO footer), flush with the
@@ -138,7 +140,15 @@ function WfcEdge(props: EdgeProps) {
       sX = sb.x + sb.w * (props.sourceHandleId === 'yes' ? 0.25 : 0.75)
       sY = sb.y + sb.h
     }
-    if (loop) {
+    if (climb) {
+      // Out of the side, up the gutter between the columns, into the side of the target.
+      sPos = dx > 0 ? Position.Right : Position.Left
+      sX = dx > 0 ? sb.x + sb.w : sb.x
+      sY = scy
+      tPos = dx > 0 ? Position.Left : Position.Right
+      tX = dx > 0 ? tb.x : tb.x + tb.w
+      tY = tcy
+    } else if (loop) {
       // Bow around the outer side on its own lane — never through the chain.
       const right = scx >= tcx
       sPos = right ? Position.Right : Position.Left
@@ -178,7 +188,7 @@ function WfcEdge(props: EdgeProps) {
       tPos = dx > 0 ? Position.Left : Position.Right
       tX = dx > 0 ? tb.x : tb.x + tb.w
       tY = tcy
-    } else if (!loop) {
+    } else if (!loop && !climb) {
       if (vertical) {
         tPos = dy > 0 ? Position.Top : Position.Bottom
         tX = tcx
@@ -282,7 +292,7 @@ function MailHover({ templateId, children }: { templateId?: string; children: Re
 }
 
 /* Make-style floating canvas toolbar: zoom, fit, arrange. */
-function CanvasToolbar({ onArrange, onUndo, canUndo }: { onArrange: () => void; onUndo: () => void; canUndo: boolean }) {
+function CanvasToolbar({ onArrange, onUndo, canUndo }: { onArrange: (columns: boolean) => void; onUndo: () => void; canUndo: boolean }) {
   const { zoomIn, zoomOut, fitView } = useReactFlow()
   const { zoom } = useViewport()
   return (
@@ -297,9 +307,12 @@ function CanvasToolbar({ onArrange, onUndo, canUndo }: { onArrange: () => void; 
       <button onClick={() => zoomIn()} aria-label="Zoom in">+</button>
       <span className="wfc-toolbar__sep" />
       <button onClick={() => fitView({ padding: 0.25, maxZoom: 1 })}>Fit</button>
-      <button onClick={onArrange}>
+      <button onClick={() => onArrange(false)} title="One column, top to bottom">
         <span style={{ display: 'inline-flex', width: 13, height: 13 }}>{Icons.arrange}</span>
         Arrange
+      </button>
+      <button onClick={() => onArrange(true)} title="In columns, so the whole drawing fits the screen">
+        Whole drawing
       </button>
     </Panel>
   )
@@ -633,7 +646,13 @@ function seedGraph(w: ApprovalWorkflow, roleName: (k: string) => string): { node
  *   widest row, so their long trigger→policy→end edge routes through empty space
  *   instead of under the chain's boxes
  */
-function autoLayout(nodes: Node[], edges: Edge[]): Node[] {
+/**
+ * Places every step. With {@code columns}, a long drawing is wrapped into
+ * columns of at most seven rows, read top to bottom then left to right, so
+ * the whole of it fits one screen; a line from the foot of one column to
+ * the head of the next runs up the gutter between them (see WfEdge).
+ */
+function autoLayout(nodes: Node[], edges: Edge[], columns = false): Node[] {
   const CX = 320 // main-flow column
   const LANE = 196 // column pitch: a card (156) and 40 clear, so neighbouring lanes never touch
   const GAP = 196 // two cards in a row are never closer than this
@@ -697,6 +716,34 @@ function autoLayout(nodes: Node[], edges: Edge[]): Node[] {
     const srcD = depth.get(edges.find((e) => e.target === n.id)?.source ?? start) ?? 0
     const tgtD = depth.get(edges.find((e) => e.source === n.id)?.target ?? 'end') ?? maxD
     pos.set(n.id, { x: laneX, y: TOP + Math.round(((srcD + tgtD) / 2) * ROW) })
+  }
+  const ROWS_PER_COLUMN = 7
+  if (columns && policy.length === 0 && maxD + 1 > ROWS_PER_COLUMN) {
+    // Rows are dealt into columns of about equal height. A rule is never the
+    // last row of a column: its answers stay under it, so the only line that
+    // climbs to the next column is the main flow's.
+    const count = Math.ceil((maxD + 1) / ROWS_PER_COLUMN)
+    const perColumn = Math.ceil((maxD + 1) / count)
+    const isRuleRow = (d: number) => (byRow.get(d) ?? []).some((n) => n.type === 'condition')
+    const columnOf = new Map<number, { column: number; row: number }>()
+    let column = 0
+    let d = 0
+    while (d <= maxD) {
+      let end = Math.min(d + perColumn - 1, maxD)
+      while (end < maxD && isRuleRow(end)) end += 1
+      for (let r = d; r <= end; r++) columnOf.set(r, { column, row: r - d })
+      d = end + 1
+      column += 1
+    }
+    const xs = main.map((n) => pos.get(n.id)?.x ?? CX)
+    const span = Math.max(...xs) + 156 - Math.min(...xs)
+    const pitch = span + LANE + 40 // a clear gutter for the line that climbs to the next column
+    for (const n of main) {
+      const at = columnOf.get(depth.get(n.id) ?? maxD + 1)
+      const p = pos.get(n.id)
+      if (!p || !at) continue
+      pos.set(n.id, { x: p.x + at.column * pitch, y: TOP + at.row * ROW })
+    }
   }
   return nodes.map((n) => ({ ...n, position: pos.get(n.id) ?? n.position }))
 }
@@ -1373,12 +1420,12 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
     if (type === 'exception') flash('Exception added — connect it from the YES or NO side of a rule')
   }
 
-  const arrange = () => {
+  const arrange = (columns = false) => {
     remember()
-    setNodes((ns) => autoLayout(ns, edges))
+    setNodes((ns) => autoLayout(ns, edges, columns))
     // Re-frame once the new positions have applied.
     setTimeout(() => fitView({ padding: 0.2, maxZoom: 1, duration: 300 }), 60)
-    flash('Auto-arranged')
+    flash(columns ? 'Arranged in columns' : 'Auto-arranged')
   }
 
   const patchData = (patch: Partial<WfData>) => {
@@ -2066,7 +2113,7 @@ function ApprovalCanvasInner({ workflow, onClose, onSaved }: { workflow: Approva
               nodeColor={(n) => SPEC[n.type as keyof typeof SPEC]?.rail ?? '#93a1b8'}
               maskColor="rgba(242, 244, 248, 0.7)"
             />
-            <CanvasToolbar onArrange={arrange} onUndo={undo} canUndo={canUndo} />
+            <CanvasToolbar onArrange={(columns) => arrange(columns)} onUndo={undo} canUndo={canUndo} />
           </ReactFlow>
         </div>
 
