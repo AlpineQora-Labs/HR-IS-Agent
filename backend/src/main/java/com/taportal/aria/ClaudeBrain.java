@@ -7,12 +7,10 @@ import com.taportal.domain.interview.Interview;
 import com.taportal.domain.interview.InterviewSlot;
 import com.taportal.domain.job.Job;
 import com.taportal.domain.job.KnockoutQuestion;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Locale;
 
 /**
- * Claude-backed "Aria" copy. Generates warm, contextual phrasing via the
+ * The assistant's wording from Claude. Generates contextual phrasing via the
  * Anthropic API; on any error (or empty output) it falls back to
  * {@link ScriptedBrain} so the funnel never breaks.
  *
@@ -23,29 +21,29 @@ import java.util.Locale;
 public class ClaudeBrain implements AssistantBrain {
 
     private static final String SYSTEM =
-            "You are Aria, a warm, professional recruiting assistant for Bank of America Careers. "
-                    + "Speak in the first person, in 1-2 short sentences — friendly but concise. "
-                    + "No markdown, no headings, at most one emoji. "
+            "You are %s, the careers assistant for Bank of America Careers. "
+                    + "Speak in the first person, in 1-2 short plain sentences. "
+                    + "No markdown, no headings, no emoji, no exclamation marks. "
                     + "Output only the message to the candidate, nothing else.";
-
-    private static final DateTimeFormatter WHEN_FMT =
-            DateTimeFormatter.ofPattern("EEE, MMM d 'at' h:mm a", Locale.ENGLISH);
 
     private final AnthropicClient client;
     private final String model;
     private final ScriptedBrain fallback;
 
-    public ClaudeBrain(AnthropicClient client, String model, ScriptedBrain fallback) {
+    private final String system;
+
+    public ClaudeBrain(AnthropicClient client, String model, ScriptedBrain fallback, String name) {
         this.client = client;
         this.model = model;
         this.fallback = fallback;
+        this.system = SYSTEM.formatted(name == null || name.isBlank() ? "Erica" : name.trim());
     }
 
     private String complete(String userPrompt, long maxTokens) {
         MessageCreateParams params = MessageCreateParams.builder()
                 .model(model)
                 .maxTokens(maxTokens)
-                .system(SYSTEM)
+                .system(system)
                 .addUserMessage(userPrompt)
                 .build();
         Message resp = client.messages().create(params);
@@ -85,7 +83,7 @@ public class ClaudeBrain implements AssistantBrain {
         try {
             return complete(
                     "The candidate just replied at the \"" + step + "\" step with: \""
-                            + safe(userText) + "\". Give a brief, warm one-line acknowledgement. "
+                            + safe(userText) + "\". Give a brief, plain one-line acknowledgement. "
                             + "Do not ask a new question.",
                     100);
         } catch (RuntimeException ex) {
@@ -111,7 +109,7 @@ public class ClaudeBrain implements AssistantBrain {
         if (slots == null || slots.isEmpty()) {
             try {
                 return complete(
-                        "Warmly congratulate the candidate on passing the screening and let them know "
+                        "Congratulate the candidate on passing the screening and let them know "
                                 + "the team will reach out shortly to set up a quick conversation.",
                         150);
             } catch (RuntimeException ex) {
@@ -122,7 +120,7 @@ public class ClaudeBrain implements AssistantBrain {
         try {
             String leadIn = complete(
                     "Congratulate the candidate on passing screening and invite them to pick a time for "
-                            + "a quick phone screen from a list you're about to show. One or two sentences; "
+                            + "their interview from a list you're about to show. One or two sentences; "
                             + "do not invent any specific times.",
                     120);
             StringBuilder sb = new StringBuilder(leadIn);
@@ -139,13 +137,14 @@ public class ClaudeBrain implements AssistantBrain {
     @Override
     public String confirmation(Job job, Interview interview) {
         String when = interview != null && interview.getScheduledAt() != null
-                ? interview.getScheduledAt().format(WHEN_FMT)
+                ? ScriptedBrain.formatWhen(interview.getScheduledAt())
                 : "your selected time";
         try {
             return complete(
-                    "Confirm warmly that the candidate's phone screen is booked for " + when + ", "
-                            + "tell them a confirmation with details will follow, and that you're excited to "
-                            + "speak with them.",
+                    "Confirm that the candidate's interview is booked for " + when + ". "
+                            + "State the date and time exactly as written, including ET. "
+                            + "Tell them a confirmation with details will follow, and that the team looks "
+                            + "forward to speaking with them.",
                     160);
         } catch (RuntimeException ex) {
             return fallback.confirmation(job, interview);

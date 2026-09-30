@@ -4,13 +4,8 @@ import MessageTimeline, { InterviewReminders } from '@/components/MessageTimelin
 import PhoneSimulator from '@/components/PhoneSimulator'
 import { useCandidate } from '../api/hooks'
 import { humanize, initials } from '../lib/format'
-
-function fitClass(score: number) {
-  if (score >= 80) return 'badge--ok'
-  if (score >= 60) return 'badge--info'
-  if (score >= 40) return 'badge--warn'
-  return 'badge--danger'
-}
+import { ASSISTANT } from '@/lib/brand'
+import { FitBadge } from '../components/FitBadge'
 
 function stageClass(stage: string) {
   const s = stage.toLowerCase()
@@ -130,7 +125,7 @@ export default function CandidateDetailPage() {
                       <span className={`badge ${stageClass(a.stage)}`}>{a.stage}</span>
                     </td>
                     <td className="t-right">
-                      <span className={`badge ${fitClass(a.fitScore)}`}>{Math.round(a.fitScore)}</span>
+                      <FitBadge score={a.fitScore} />
                     </td>
                   </tr>
                 ))}
@@ -156,7 +151,7 @@ export default function CandidateDetailPage() {
 
         <div className="card">
           <div className="card__head">
-            <h3 style={{ fontSize: 15 }}>Aria conversations</h3>
+            <h3 style={{ fontSize: 15 }}>{ASSISTANT} conversations</h3>
             <span className="eyebrow">From the career-site chat</span>
           </div>
           <div className="card__body">

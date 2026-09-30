@@ -22,6 +22,8 @@ import type { ApplicationRow, JobSummary } from '../api/types'
 import { date, initials } from '../lib/format'
 import { api } from '@/api/client'
 import { stageHue } from '@/lib/stages'
+import { ASSISTANT } from '@/lib/brand'
+import { FitBadge } from '../components/FitBadge'
 
 // Terminal stages folded into the collapsible "Closed" lane so the active board
 // fits the viewport without horizontal scrolling.
@@ -39,13 +41,6 @@ const ROW_HUES = [
 ]
 
 const titleCase = (s: string) => s.charAt(0) + s.slice(1).toLowerCase()
-
-function fitClass(score: number) {
-  if (score >= 80) return 'badge--ok'
-  if (score >= 60) return 'badge--info'
-  if (score >= 40) return 'badge--warn'
-  return 'badge--danger'
-}
 
 function stageClass(stage: string) {
   const s = stage.toLowerCase()
@@ -76,12 +71,12 @@ function CandidateCard({ app, tag, onSelect }: { app: ApplicationRow; tag?: stri
         <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink-0)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {app.candidateName}
         </span>
-        <span className={`badge ${fitClass(app.fitScore)}`}>{Math.round(app.fitScore)}</span>
+        <FitBadge score={app.fitScore} />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 7 }}>
         <span style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>{app.source}</span>
         {tag && <span className="badge">{tag}</span>}
-        {app.knockoutPassed ? null : <span className="badge badge--danger">Knockout</span>}
+        {app.knockoutPassed === false ? <span className="badge badge--danger">Knockout</span> : null}
       </div>
     </button>
   )
@@ -356,7 +351,7 @@ function AriaTranscript({ applicationId }: { applicationId: string }) {
         style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 0, cursor: 'pointer', padding: 0, color: 'var(--bofa-navy)', fontSize: 13, fontWeight: 600 }}
       >
         <span style={{ fontSize: 11 }}>{open ? '▾' : '▸'}</span>
-        Aria chat transcript
+        {ASSISTANT} chat transcript
         {msgCount > 0 && <span className="badge badge--info">{msgCount} messages</span>}
       </button>
       {open && (
@@ -364,7 +359,7 @@ function AriaTranscript({ applicationId }: { applicationId: string }) {
           {isLoading ? (
             <div style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>Loading transcript…</div>
           ) : !convo || !convo.messages || convo.messages.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>No Aria conversation for this candidate.</div>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>No {ASSISTANT} conversation for this candidate.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7, maxHeight: 280, overflowY: 'auto', padding: '2px 2px 2px 0' }}>
               {convo.messages.map((m) => {
@@ -444,7 +439,7 @@ function CandidateDrawer({
               {c?.headline || app.jobTitle}
             </div>
             <div style={{ display: 'flex', gap: 6, marginTop: 9 }}>
-              <span className={`badge ${fitClass(app.fitScore)}`}>Fit {Math.round(app.fitScore)}</span>
+              <FitBadge score={app.fitScore} label="Fit" />
               <span className={`badge ${stageClass(stage)}`}>{titleCase(stage)}</span>
             </div>
           </div>
@@ -464,10 +459,12 @@ function CandidateDrawer({
           <div style={{ marginTop: 18 }}>
             <Fact label="Source">{app.source}</Fact>
             <Fact label="Screening">
-              {app.knockoutPassed ? (
+              {app.knockoutPassed === true ? (
                 <span style={{ color: 'var(--ok-ink, #1f7a4d)' }}>Passed knockout</span>
-              ) : (
+              ) : app.knockoutPassed === false ? (
                 <span className="badge badge--danger">Knockout failed</span>
+              ) : (
+                <span style={{ color: 'var(--ink-4)' }}>Not screened yet</span>
               )}
             </Fact>
             {isLoading ? (
@@ -507,8 +504,9 @@ function CandidateDrawer({
           <div style={{ marginTop: 18, background: 'var(--app-sunken)', borderRadius: 'var(--ra-2)', padding: '12px 14px' }}>
             <div className="eyebrow" style={{ marginBottom: 4 }}>Why this fit</div>
             <div style={{ fontSize: 12.5, color: 'var(--ink-3)', lineHeight: 1.55 }}>
-              Fit {Math.round(app.fitScore)} from the matching engine — based on skills and experience
-              against {app.jobTitle}. Open the full profile for the scored breakdown.
+              {app.fitScore == null
+                ? `Not scored yet. The matching engine scores skills and experience against ${app.jobTitle}.`
+                : `Fit ${Math.round(app.fitScore)} from the matching engine, based on skills and experience against ${app.jobTitle}. Open the full profile for the scored breakdown.`}
             </div>
           </div>
 
@@ -859,7 +857,7 @@ export default function PipelinePage() {
                         <td>
                           <span className={`badge ${tag === 'Rejected' ? 'badge--danger' : 'badge--purple'}`}>{tag}</span>
                         </td>
-                        <td className="t-num t-right">{card.fitScore}</td>
+                        <td className="t-num t-right">{card.fitScore ?? '–'}</td>
                         <td className="t-muted">{date(card.appliedAt)}</td>
                         <td className="t-muted">{date(card.updatedAt)}</td>
                       </tr>

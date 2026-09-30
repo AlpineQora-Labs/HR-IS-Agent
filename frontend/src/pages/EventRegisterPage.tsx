@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { api } from '@/api/client'
 import { DISPLAY_TYPES, fieldVisible, flattenIntake, normalizeIntake, type IntakeField, type IntakeForm } from './admin/FormBuilder'
 import { IntakeInput, answerText, type Answer } from './admin/IntakeInput'
+import { ASSISTANT } from '@/lib/brand'
 
 /* The public event-registration surface — what the QR code on the booth banner
    opens. Shell-less (no recruiter chrome). One form definition
@@ -70,12 +71,12 @@ export default function EventRegisterPage() {
         <div style={{ width: '100%', maxWidth: 620 }}>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, margin: '0 0 4px' }}>Register for this event</h1>
           <p style={{ margin: '0 0 14px', fontSize: 13.5, color: 'var(--ink-4)' }}>
-            Fill the quick form — or just chat with Aria. Same questions, your choice.
+            Fill in the form, or chat with {ASSISTANT}. The questions are the same.
           </p>
 
           <div className="segmented" role="group" aria-label="Mode" style={{ marginBottom: 16 }}>
             <button aria-pressed={mode === 'form'} onClick={() => setMode('form')}>Form</button>
-            <button aria-pressed={mode === 'chat'} onClick={() => setMode('chat')}>Chat with Aria</button>
+            <button aria-pressed={mode === 'chat'} onClick={() => setMode('chat')}>Chat with {ASSISTANT}</button>
           </div>
 
           {mode === 'form'
@@ -104,7 +105,7 @@ function RegisterForm({ eventId, form }: { eventId: string; form: IntakeForm }) 
       .map((f) => ({ fieldId: f.id, label: f.label || 'Untitled', value: answerText(answers[f.id]) }))
       .filter((a) => a.value.trim() !== '')
     api.post(`/events/${eventId}/register-form`, { answers: JSON.stringify(payload) })
-      .then(() => setOutcome({ kind: 'ok', message: "You're registered! Check your email for what's next — and come say hi at the booth." }))
+      .then(() => setOutcome({ kind: 'ok', message: "You're registered. Check your email for what comes next, and come say hello at the booth." }))
       .catch((e: { response?: { status?: number; data?: { message?: string } } }) => {
         if (e.response?.status === 409) setOutcome({ kind: 'dup', message: "You're already registered for this event — no need to do anything else." })
         else setOutcome({ kind: 'err', message: e.response?.data?.message ?? 'Something went wrong — please try again.' })
@@ -115,9 +116,8 @@ function RegisterForm({ eventId, form }: { eventId: string; form: IntakeForm }) 
   if (outcome && outcome.kind !== 'err') {
     return (
       <div className="card" style={{ padding: '30px 24px', textAlign: 'center' }}>
-        <div style={{ fontSize: 34 }}>{outcome.kind === 'ok' ? '🎉' : '👋'}</div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, margin: '8px 0 4px' }}>
-          {outcome.kind === 'ok' ? 'See you there!' : 'Already on the list'}
+          {outcome.kind === 'ok' ? 'See you there' : 'Already on the list'}
         </div>
         <p style={{ fontSize: 13.5, color: 'var(--ink-3)', margin: 0 }}>{outcome.message}</p>
       </div>

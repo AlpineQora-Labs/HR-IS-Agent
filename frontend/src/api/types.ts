@@ -95,8 +95,10 @@ export interface ApplicationRow {
   jobTitle: string
   stage: string
   source: string
-  fitScore: number
-  knockoutPassed: boolean
+  /** Empty until the matching engine has scored the application. */
+  fitScore: number | null
+  /** Empty until the screening questions have been answered. */
+  knockoutPassed: boolean | null
   appliedAt: string
   updatedAt: string
 }

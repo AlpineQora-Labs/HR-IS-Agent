@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,6 +67,8 @@ public class EventRegistrationChat {
     private final CampusService campusService;
     private final RecruitingEventRepository events;
     private final ObjectMapper objectMapper;
+    /** The name the assistant introduces itself by. */
+    private final String name;
 
     public EventRegistrationChat(
             ConversationRepository conversations,
@@ -74,7 +77,9 @@ public class EventRegistrationChat {
             FormLogicService formLogic,
             CampusService campusService,
             RecruitingEventRepository events,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            @Value("${app.assistant-name:Erica}") String name) {
+        this.name = name == null || name.isBlank() ? "Erica" : name.trim();
         this.conversations = conversations;
         this.messages = messages;
         this.formDefinitions = formDefinitions;
@@ -102,7 +107,7 @@ public class EventRegistrationChat {
 
         String when = event.getStartsAt() == null ? ""
                 : " on " + event.getStartsAt().atZoneSameInstant(ZONE).format(WHEN);
-        aria(conversation, "greeting", "Hello, I'm Aria. Good to see you at " + event.getName() + when
+        aria(conversation, "greeting", "Hello, I'm " + name + ". Good to see you at " + event.getName() + when
                 + ". Let's get you registered — it takes under a minute.");
 
         FormLogicService.Field first = nextUnanswered(state);

@@ -27,6 +27,11 @@ app:
   # Where candidate-facing links point, and the name messages are sent under.
   public-base-url: ${PUBLIC_BASE_URL:http://localhost:5177}
   company-name: ${COMPANY_NAME:Bank of America Careers}
+  # The name the assistant introduces itself by in chat (ScriptedBrain, ClaudeBrain,
+  # EventRegistrationChat). The screens carry the same name as ASSISTANT in
+  # frontend/src/lib/brand.ts; the two are changed together, in code, so there is
+  # no environment override. Stored text was renamed once, by V27.
+  assistant-name: Erica
   messaging:
     # 'simulated' records every text and email and delivers none. A real
     # provider is a class implementing SmsGateway / EmailGateway; its

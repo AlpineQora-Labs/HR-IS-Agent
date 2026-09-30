@@ -4,17 +4,29 @@ import com.taportal.domain.interview.Interview;
 import com.taportal.domain.interview.InterviewSlot;
 import com.taportal.domain.job.Job;
 import com.taportal.domain.job.KnockoutQuestion;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 
 /**
- * Deterministic, warm "Aria" copy. No external API calls — the default
+ * The assistant's scripted wording. No external API calls — the default
  * {@link AssistantBrain} and the fallback for {@link ClaudeBrain}. Wired by
  * {@link AriaConfig}. Steps mirror {@link ConversationEngine}.
  */
 public class ScriptedBrain implements AssistantBrain {
+
+    /** The name the assistant introduces itself by. */
+    private final String name;
+
+    public ScriptedBrain(String name) {
+        this.name = name == null || name.isBlank() ? "Erica" : name.trim();
+    }
+
+    public ScriptedBrain() {
+        this("Erica");
+    }
 
     /** All candidate-facing times are rendered in ET, whatever offset the DB returns. */
     private static final ZoneId ZONE = ZoneId.of("America/New_York");
@@ -24,7 +36,7 @@ public class ScriptedBrain implements AssistantBrain {
     @Override
     public String greeting(Job job, String language) {
         String title = job != null ? job.getTitle() : "this role";
-        return "Hello, I'm Aria, your recruiting assistant. "
+        return "Hello, I'm " + name + ", the careers assistant. "
                 + "Thank you for your interest in the " + title + " role. "
                 + "I'll ask a few questions to start your application. It takes about a minute. "
                 + "To begin, what's your full name?";
@@ -79,7 +91,7 @@ public class ScriptedBrain implements AssistantBrain {
         }
         StringBuilder sb = new StringBuilder();
         sb.append("Good news: you're through to the next step. ")
-                .append("Let's put a phone screen on the calendar. ")
+                .append("Let's put your interview on the calendar. ")
                 .append("These times work for the hiring team. Reply with the one you would like:\n");
         int i = 1;
         for (InterviewSlot slot : slots) {
@@ -91,16 +103,21 @@ public class ScriptedBrain implements AssistantBrain {
     @Override
     public String confirmation(Job job, Interview interview) {
         String when = interview != null && interview.getScheduledAt() != null
-                ? interview.getScheduledAt().atZoneSameInstant(ZONE).format(SLOT_FMT) + " ET"
+                ? formatWhen(interview.getScheduledAt())
                 : "your selected time";
-        return "You're all set. Your phone screen is booked for " + when + ". "
+        return "You're all set. Your interview is booked for " + when + ". "
                 + "A confirmation with the details is on its way. "
                 + "Thank you for applying. We look forward to speaking with you.";
     }
 
     /** Shared so the engine can render slot quick-reply options identically. */
     static String formatSlot(InterviewSlot slot) {
-        return slot.getStartsAt().atZoneSameInstant(ZONE).format(SLOT_FMT) + " ET";
+        return formatWhen(slot.getStartsAt());
+    }
+
+    /** A time as the candidate reads it: Eastern Time, in the form of the slot list. */
+    static String formatWhen(OffsetDateTime at) {
+        return at.atZoneSameInstant(ZONE).format(SLOT_FMT) + " ET";
     }
 
     private static String firstName(String text) {

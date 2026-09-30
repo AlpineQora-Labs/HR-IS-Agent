@@ -9,9 +9,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Wires Aria's brain + interpreter. When {@code app.aria.enabled} is true AND an
- * {@code ANTHROPIC_API_KEY} is present in the environment, Aria is LLM-powered
- * (Claude copy + free-text understanding). Otherwise it runs fully offline on
+ * Wires the assistant's brain + interpreter. "Aria" is the module's name in
+ * the code; the name a candidate reads is {@code app.assistant-name}.
+ *
+ * <p>When {@code app.aria.enabled} is true AND an {@code ANTHROPIC_API_KEY} is
+ * present in the environment, the assistant is LLM-powered (Claude copy +
+ * free-text understanding). Otherwise it runs fully offline on
  * the scripted implementations — so the funnel works with no key and never
  * depends on a network call to complete.
  */
@@ -23,11 +26,12 @@ public class AriaConfig {
     @Bean
     public AssistantBrain assistantBrain(
             @Value("${app.aria.enabled:true}") boolean enabled,
-            @Value("${app.aria.model:claude-opus-4-8}") String model) {
-        ScriptedBrain scripted = new ScriptedBrain();
+            @Value("${app.aria.model:claude-opus-4-8}") String model,
+            @Value("${app.assistant-name:Erica}") String name) {
+        ScriptedBrain scripted = new ScriptedBrain(name);
         if (enabled && hasKey()) {
             log.info("Aria copy: Claude-powered (model={})", model);
-            return new ClaudeBrain(client(), model, scripted);
+            return new ClaudeBrain(client(), model, scripted, name);
         }
         log.info("Aria copy: scripted (ai-enabled={}, key-present={})", enabled, hasKey());
         return scripted;

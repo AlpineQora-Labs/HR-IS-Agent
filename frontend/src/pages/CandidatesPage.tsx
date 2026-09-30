@@ -6,6 +6,8 @@ import AriaConversations from '@/components/AriaConversations'
 import MessageTimeline from '@/components/MessageTimeline'
 import type { CandidateSummary } from '../api/types'
 import { date, humanize, initials } from '../lib/format'
+import { ASSISTANT } from '@/lib/brand'
+import { FitBadge } from '../components/FitBadge'
 
 // Split-view pilot: the candidate list docks left, the record lives on the
 // right — no overlay, no open/close ceremony. ↑/↓ moves the selection, the
@@ -33,13 +35,6 @@ function lifecycleClass(lifecycle: string) {
   if (s.includes('reject') || s.includes('declin') || s.includes('withdraw')) return 'badge--neutral'
   if (s.includes('nurtur') || s.includes('passive')) return 'badge--purple'
   return 'badge--neutral'
-}
-
-function fitClass(score: number) {
-  if (score >= 80) return 'badge--ok'
-  if (score >= 60) return 'badge--info'
-  if (score >= 40) return 'badge--warn'
-  return 'badge--danger'
 }
 
 function stageClass(stage: string) {
@@ -83,7 +78,7 @@ function CandidateDetailPane({ summary, tab, setTab, frameless = false }: {
     { key: 'applications', label: 'Applications', count: apps.length },
     { key: 'interviews', label: 'Interviews', count: interviews.length },
     { key: 'messages', label: 'Messages' },
-    { key: 'aria', label: 'Aria chat' },
+    { key: 'aria', label: `${ASSISTANT} chat` },
   ]
 
   return (
@@ -215,7 +210,7 @@ function CandidateDetailPane({ summary, tab, setTab, frameless = false }: {
                   </span>
                   <span style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                     <span className={`badge ${stageClass(a.stage)}`}>{a.stage}</span>
-                    <span className={`badge ${fitClass(a.fitScore)}`}>{Math.round(a.fitScore)}</span>
+                    <FitBadge score={a.fitScore} />
                   </span>
                 </Link>
               ))}

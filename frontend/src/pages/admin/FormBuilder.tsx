@@ -4,6 +4,7 @@ import { useCreateForm, useDeleteForm, useFormDefById, useFormsList, useMakeDefa
 import type { FormMeta } from '@/api/types'
 import { uid } from './builderStore'
 import { IntakeInput, answerText, type Answer } from './IntakeInput'
+import { ASSISTANT } from '@/lib/brand'
 
 // Event-intake form builder — drag & drop redesign.
 // LEFT: a palette of field types (dropdown, type-ahead, single/multiple
@@ -652,7 +653,7 @@ function LivePreview({ form }: { form: IntakeForm }) {
 // ── Main builder ────────────────────────────────────────────────────────────
 const KINDS = [
   { key: 'EVENT_INTAKE', label: 'Event intake', hint: 'Used by Campus · New event', fallback: defaultIntakeForm },
-  { key: 'EVENT_REGISTRATION', label: 'Student registration', hint: 'What students fill in (and Aria asks) to register', fallback: defaultRegistrationForm },
+  { key: 'EVENT_REGISTRATION', label: 'Student registration', hint: `What students fill in (and ${ASSISTANT} asks) to register`, fallback: defaultRegistrationForm },
 ] as const
 
 export default function FormBuilder() {

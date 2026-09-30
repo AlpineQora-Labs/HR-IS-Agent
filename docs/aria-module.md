@@ -34,6 +34,10 @@ it will then embed Aria the same way any other surface does.
    goes behind these interfaces — callers never know which brain is active.
 5. **Channel policy:** WhatsApp is not allowed (client compliance). Web chat and
    SMS only.
+6. **"Aria" is the module's name, not the assistant's.** What a candidate or a
+   recruiter reads is the name in `app.assistant-name` (Erica). The screens take
+   the same name from `frontend/src/lib/brand.ts`; the two are changed together.
+   No wording, label or template spells the module's name.
 
 ## Quick checks
 
@@ -54,4 +58,5 @@ grep -rn "import com\.taportal\.api" src/main/java/com/taportal/aria && echo VIO
 | Copy generation (scripted / Claude) | `aria/ScriptedBrain`, `aria/ClaudeBrain` behind `aria/AssistantBrain` |
 | Free-text understanding | `aria/ScriptedInterpreter`, `aria/ClaudeInterpreter` behind `aria/AnswerInterpreter` |
 | Brain selection | `aria/AriaConfig` (`app.aria.enabled`, `app.aria.model`, `app.aria.nlu-model`) |
+| The assistant's name | `app.assistant-name` (backend), `lib/brand.ts` (screens) |
 | Public API | `api/ChatController` → `/v1/chat/**`, DTOs in `aria/ChatDtos` |
