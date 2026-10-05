@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { api } from '@/api/client'
-import { DISPLAY_TYPES, fieldVisible, flattenIntake, normalizeIntake, type IntakeField, type IntakeForm } from './admin/FormBuilder'
+import { DISPLAY_TYPES, effectiveValue, fieldVisible, flattenIntake, normalizeIntake, resolveField, type IntakeField, type IntakeForm } from './admin/FormBuilder'
 import { IntakeInput, answerText, type Answer } from './admin/IntakeInput'
 import { ASSISTANT } from '@/lib/brand'
 
@@ -20,6 +20,22 @@ interface EventInfo {
   startsAt: string
   endsAt: string | null
   timezone: string
+  /** OPEN: there is a seat. WAITLIST: full, taking names. FULL / CLOSED: not taking registrations. */
+  registration: 'OPEN' | 'WAITLIST' | 'FULL' | 'CLOSED'
+  /** Seats still free; null when the event has no limit. */
+  seatsLeft: number | null
+  registrationClosesAt: string | null
+  /** The words the student agrees to before their details are kept. */
+  consentText: string
+}
+
+/** Who can still register, in a line: "12 seats left · register by Oct 12". */
+const seatsLine = (e: EventInfo) => {
+  const by = e.registrationClosesAt
+    ? `registration closes ${new Date(e.registrationClosesAt).toLocaleString('en-US', { timeZone: e.timezone || 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}`
+    : null
+  const seats = e.registration === 'WAITLIST' ? 'Every seat is taken. You can join the waitlist' : e.seatsLeft !== null ? `${e.seatsLeft} ${e.seatsLeft === 1 ? 'seat' : 'seats'} left` : null
+  return [seats, by].filter(Boolean).join(' · ')
 }
 
 interface ChatTurn {
@@ -47,7 +63,8 @@ export default function EventRegisterPage() {
   useEffect(() => {
     if (!eventId) return
     api.get<EventInfo>(`/events/${eventId}/public`).then((r) => setEvent(r.data)).catch(() => setEvent(null))
-    api.get<{ schema: string }>('/forms/EVENT_REGISTRATION').then((r) => {
+    // The event's own form (or the default), with its School question listing the schools on record.
+    api.get<{ schema: string }>(`/events/${eventId}/registration-form`).then((r) => {
       try {
         setForm(normalizeIntake(JSON.parse(r.data.schema)))
       } catch {
@@ -69,19 +86,41 @@ export default function EventRegisterPage() {
 
       <main style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '26px 16px' }}>
         <div style={{ width: '100%', maxWidth: 620 }}>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, margin: '0 0 4px' }}>Register for this event</h1>
-          <p style={{ margin: '0 0 14px', fontSize: 13.5, color: 'var(--ink-4)' }}>
-            Fill in the form, or chat with {ASSISTANT}. The questions are the same.
-          </p>
+          {event && (event.registration === 'CLOSED' || event.registration === 'FULL') ? (
+            <div className="card" style={{ padding: '30px 24px', textAlign: 'center' }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, margin: '8px 0 4px' }}>
+                {event.registration === 'FULL' ? 'This event is full' : 'Registration has closed'}
+              </div>
+              <p style={{ fontSize: 13.5, color: 'var(--ink-3)', margin: '0 0 14px' }}>
+                {event.registration === 'FULL'
+                  ? 'Every seat for this event has been taken.'
+                  : 'This event is no longer taking registrations.'}{' '}
+                Have a look at our other events.
+              </p>
+              <a className="btn btn--outline btn--sm" href="/careers/events">See all events</a>
+            </div>
+          ) : (
+            <>
+              <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, margin: '0 0 4px' }}>
+                {event?.registration === 'WAITLIST' ? 'Join the waitlist' : 'Register for this event'}
+              </h1>
+              <p style={{ margin: '0 0 14px', fontSize: 13.5, color: 'var(--ink-4)' }}>
+                Fill in the form, or chat with {ASSISTANT}. The questions are the same.
+              </p>
+              {event && seatsLine(event) && (
+                <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--ink-2)', fontWeight: 600 }}>{seatsLine(event)}.</p>
+              )}
 
-          <div className="segmented" role="group" aria-label="Mode" style={{ marginBottom: 16 }}>
-            <button aria-pressed={mode === 'form'} onClick={() => setMode('form')}>Form</button>
-            <button aria-pressed={mode === 'chat'} onClick={() => setMode('chat')}>Chat with {ASSISTANT}</button>
-          </div>
+              <div className="segmented" role="group" aria-label="Mode" style={{ marginBottom: 16 }}>
+                <button aria-pressed={mode === 'form'} onClick={() => setMode('form')}>Form</button>
+                <button aria-pressed={mode === 'chat'} onClick={() => setMode('chat')}>Chat with {ASSISTANT}</button>
+              </div>
 
-          {mode === 'form'
-            ? (eventId && form ? <RegisterForm eventId={eventId} form={form} /> : <p className="muted">Loading…</p>)
-            : (eventId ? <AriaRegisterChat eventId={eventId} /> : null)}
+              {mode === 'form'
+                ? (eventId && form && event ? <RegisterForm eventId={eventId} form={form} event={event} /> : <p className="muted">Loading…</p>)
+                : (eventId ? <AriaRegisterChat eventId={eventId} /> : null)}
+            </>
+          )}
         </div>
       </main>
     </div>
@@ -89,25 +128,38 @@ export default function EventRegisterPage() {
 }
 
 /* ── Web-form renderer: rules mirrored client-side, enforced server-side ──── */
-function RegisterForm({ eventId, form }: { eventId: string; form: IntakeForm }) {
+function RegisterForm({ eventId, form, event }: { eventId: string; form: IntakeForm; event: EventInfo }) {
   const [answers, setAnswers] = useState<Record<string, Answer>>({})
   const [busy, setBusy] = useState(false)
-  const [outcome, setOutcome] = useState<{ kind: 'ok' | 'dup' | 'err'; message: string } | null>(null)
+  // Nothing is sent, and nothing is kept, until the student has agreed.
+  const [consent, setConsent] = useState(false)
+  const [outcome, setOutcome] = useState<{ kind: 'ok' | 'wait' | 'dup' | 'gone' | 'err'; message: string } | null>(null)
 
-  const isVisible = (f: IntakeField) => fieldVisible(form, f.id, (id) => answerText(answers[id]))
-  const visibleFields = flattenIntake(form).filter(isVisible)
-  const valid = visibleFields.every((f) => DISPLAY_TYPES.includes(f.type) || !f.required || answerText(answers[f.id]).trim() !== '')
+  // An answer counts as the form counts it: one its question no longer offers (the country was
+  // changed after the school was picked) is no answer. Rules can also make a question required.
+  const raw = (id: string) => answerText(answers[id])
+  const val = (id: string) => effectiveValue(form, id, raw)
+  const isVisible = (f: IntakeField) => fieldVisible(form, f.id, val)
+  const visibleFields = flattenIntake(form).filter(isVisible).map((f) => resolveField(form, f, val))
+  const valid = visibleFields.every((f) => DISPLAY_TYPES.includes(f.type) || !f.required || val(f.id).trim() !== '')
 
   const submit = () => {
     setBusy(true)
     const payload = visibleFields
       .filter((f) => !DISPLAY_TYPES.includes(f.type))
-      .map((f) => ({ fieldId: f.id, label: f.label || 'Untitled', value: answerText(answers[f.id]) }))
+      .map((f) => ({ fieldId: f.id, label: f.label || 'Untitled', value: val(f.id) }))
       .filter((a) => a.value.trim() !== '')
-    api.post(`/events/${eventId}/register-form`, { answers: JSON.stringify(payload) })
-      .then(() => setOutcome({ kind: 'ok', message: "You're registered. Check your email for what comes next, and come say hello at the booth." }))
+    api.post<{ status: string; waitlistPosition: number | null }>(`/events/${eventId}/register-form`, { answers: JSON.stringify(payload), consent })
+      .then((r) =>
+        setOutcome(
+          r.data.status === 'WAITLISTED'
+            ? { kind: 'wait', message: `Every seat is taken for now, so you are number ${r.data.waitlistPosition ?? 1} on the waitlist. If a seat comes free it is yours, and our team will be in touch.` }
+            : { kind: 'ok', message: "You're registered. Come and say hello at the booth." },
+        ),
+      )
       .catch((e: { response?: { status?: number; data?: { message?: string } } }) => {
-        if (e.response?.status === 409) setOutcome({ kind: 'dup', message: "You're already registered for this event — no need to do anything else." })
+        if (e.response?.status === 410) setOutcome({ kind: 'gone', message: `${e.response?.data?.message ?? 'Registration has closed'}. Nothing was saved.` })
+        else if (e.response?.status === 409) setOutcome({ kind: 'dup', message: "You're already registered for this event — no need to do anything else." })
         else setOutcome({ kind: 'err', message: e.response?.data?.message ?? 'Something went wrong — please try again.' })
       })
       .finally(() => setBusy(false))
@@ -117,7 +169,7 @@ function RegisterForm({ eventId, form }: { eventId: string; form: IntakeForm }) 
     return (
       <div className="card" style={{ padding: '30px 24px', textAlign: 'center' }}>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, margin: '8px 0 4px' }}>
-          {outcome.kind === 'ok' ? 'See you there' : 'Already on the list'}
+          {outcome.kind === 'ok' ? 'See you there' : outcome.kind === 'wait' ? "You're on the waitlist" : outcome.kind === 'gone' ? 'Sorry, you just missed it' : 'Already on the list'}
         </div>
         <p style={{ fontSize: 13.5, color: 'var(--ink-3)', margin: 0 }}>{outcome.message}</p>
       </div>
@@ -133,7 +185,7 @@ function RegisterForm({ eventId, form }: { eventId: string; form: IntakeForm }) 
           return (
             <div key={row.id} style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(shown.length, 1)}, minmax(0, 1fr))`, gap: 12 }}>
               {shown.map((f) => (
-                <IntakeInput key={f.id} f={f} value={answers[f.id]} onChange={(v) => setAnswers((prev) => ({ ...prev, [f.id]: v }))} />
+                <IntakeInput key={f.id} f={resolveField(form, f, val)} value={val(f.id) === '' && raw(f.id) !== '' ? undefined : answers[f.id]} onChange={(v) => setAnswers((prev) => ({ ...prev, [f.id]: v }))} />
               ))}
             </div>
           )
@@ -142,8 +194,12 @@ function RegisterForm({ eventId, form }: { eventId: string; form: IntakeForm }) 
       {outcome?.kind === 'err' && (
         <p style={{ fontSize: 12.5, color: 'var(--bofa-red, #c41230)', margin: '12px 0 0' }}>{outcome.message}</p>
       )}
-      <button className="btn btn--primary" style={{ marginTop: 16, width: '100%' }} disabled={!valid || busy} onClick={submit}>
-        {busy ? 'Registering…' : 'Register'}
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 16, fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+        <input type="checkbox" checked={consent} style={{ marginTop: 3 }} onChange={(e) => setConsent(e.target.checked)} />
+        <span>{event.consentText}</span>
+      </label>
+      <button className="btn btn--primary" style={{ marginTop: 14, width: '100%' }} disabled={!valid || !consent || busy} onClick={submit}>
+        {busy ? 'Registering…' : event.registration === 'WAITLIST' ? 'Join the waitlist' : 'Register'}
       </button>
     </div>
   )

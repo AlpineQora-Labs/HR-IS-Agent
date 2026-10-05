@@ -64,6 +64,59 @@ public class RecruitingEvent {
     @Column(nullable = false)
     private int hires;
 
+    /** The most students it seats; null for no limit. See {@link EventSeats}. */
+    @Setter
+    @Column
+    private Integer capacity;
+
+    /** When registration ends; null keeps it open until the event starts. */
+    @Setter
+    @Column(name = "registration_closes_at")
+    private OffsetDateTime registrationClosesAt;
+
+    /** Whether a full event takes names for a waitlist. */
+    @Setter
+    @Column(name = "waitlist_enabled", nullable = false)
+    private boolean waitlistEnabled;
+
+    /** The template it was created from; null for an event started blank. */
+    @Setter
+    @Column(name = "template_id")
+    private UUID templateId;
+
+    /** ISO country code it is held in (from its template); null when not said. */
+    @Setter
+    @Column(length = 2)
+    private String country;
+
+    /** IN_PERSON | VIRTUAL | HYBRID; null on events older than the setting. */
+    @Setter
+    @Column
+    private String format;
+
+    /** What a student agrees to when registering; null for the standard wording. */
+    @Setter
+    @Column(name = "consent_text")
+    private String consentText;
+
+    /** It must be approved before students can see it. True for every event created since the rule. */
+    @Setter
+    @Column(name = "approval_required", nullable = false)
+    private boolean approvalRequired;
+
+    /**
+     * When it goes on the careers site. It must be approved as well: approved, it shows from this
+     * moment; not approved, never. Null: as soon as it is approved.
+     */
+    @Setter
+    @Column(name = "publish_at")
+    private OffsetDateTime publishAt;
+
+    /** The form students fill in to register (null = the default Student registration form). */
+    @Setter
+    @Column(name = "registration_form_id")
+    private UUID registrationFormId;
+
     /** The intake form this event was created with (null = kind default). */
     @Setter
     @Column(name = "intake_form_id")

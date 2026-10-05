@@ -8,4 +8,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface RecruitingEventRepository extends JpaRepository<RecruitingEvent, UUID> {
 
     List<RecruitingEvent> findByOrderByStartsAtDesc();
+
+    long countByTemplateId(UUID templateId);
+
+    /** Events starting in a stretch of time: the ones a reminder or a note afterwards could be due for. */
+    java.util.List<RecruitingEvent> findByStartsAtBetween(java.time.OffsetDateTime from, java.time.OffsetDateTime to);
 }

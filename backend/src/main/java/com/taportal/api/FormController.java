@@ -70,11 +70,14 @@ public class FormController {
     private final FormDefinitionRepository definitions;
     private final FormResponseRepository responses;
     private final FormLogicService formLogic;
+    private final com.taportal.domain.engagement.CampusService campusService;
 
     public FormController(
             FormDefinitionRepository definitions,
             FormResponseRepository responses,
-            FormLogicService formLogic) {
+            FormLogicService formLogic,
+            com.taportal.domain.engagement.CampusService campusService) {
+        this.campusService = campusService;
         this.definitions = definitions;
         this.responses = responses;
         this.formLogic = formLogic;
@@ -212,6 +215,11 @@ public class FormController {
         r.setSubjectId(request.subjectId());
         r.setAnswers(answers);
         r = responses.save(r);
+        // An event's intake answers carry its seat settings (capacity, deadline, waitlist):
+        // they are read onto the event, so registration keeps to them.
+        if ("EVENT_INTAKE".equals(purpose) && "EVENT".equals(request.subjectType()) && request.subjectId() != null) {
+            campusService.seatSettingsFromIntake(request.subjectId(), answers);
+        }
         return new FormResponseDto(r.getId(), r.getFormPurpose(), r.getAnswers(), r.getCreatedAt());
     }
 

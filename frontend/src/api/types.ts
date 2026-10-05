@@ -315,6 +315,71 @@ export interface EventRow {
   registrations: number
   attended: number
   hires: number
+  /** The most it seats; null for no limit. */
+  capacity: number | null
+  /** When registration ends; null keeps it open until the event starts. */
+  registrationClosesAt: string | null
+  waitlistEnabled: boolean
+  waitlisted: number
+  shortlisted: number
+  /** The form students register with; null for the default Student registration form. */
+  registrationFormId: string | null
+  /** The template it was created from; null for an event started blank. */
+  templateId: string | null
+  country: string | null
+  /** IN_PERSON | VIRTUAL | HYBRID; null on older events. */
+  format: string | null
+  /** When it goes on the careers site, once approved; null for as soon as approved. */
+  publishAt: string | null
+  /** Whether students can see it now: approved, and its publishing moment has come. */
+  published: boolean
+}
+
+/** Everything that is the same for a kind of event; a new event starts from one. */
+export interface EventTemplate {
+  id: string
+  name: string
+  eventType: string
+  format: string
+  country: string | null
+  timezone: string
+  intakeFormId: string | null
+  registrationFormId: string | null
+  capacity: number | null
+  waitlistEnabled: boolean
+  /** Registration closes this many days before the event; null for when it starts. */
+  closeDaysBefore: number | null
+  /** An approved event goes on the careers site this many days before it starts; null for as soon as approved. */
+  publishDaysBefore: number | null
+  consentText: string | null
+  active: boolean
+  eventsMade: number
+}
+
+/** How many an event seats, when registration ends, and whether it keeps a waitlist. */
+export interface EventSeatSettings {
+  capacity: number | null
+  registrationClosesAt: string | null
+  waitlistEnabled: boolean
+  /** The form students register with; null for the default. */
+  registrationFormId: string | null
+  /** When the event goes on the careers site, once approved; null for as soon as approved. */
+  publishAt: string | null
+}
+
+/** How one school has done across every event. */
+export interface SchoolReportRow {
+  schoolId: string
+  name: string
+  location: string | null
+  tier: string
+  country: string | null
+  events: number
+  registered: number
+  attended: number
+  shortlisted: number
+  putForward: number
+  hired: number
 }
 
 // ---- Campus: schools + event rosters ----
@@ -324,6 +389,8 @@ export interface School {
   name: string
   location: string | null
   tier: string
+  /** ISO country code; null when not said. */
+  country: string | null
 }
 
 export interface EventRegistration {
@@ -337,8 +404,22 @@ export interface EventRegistration {
   major: string | null
   gradYear: number | null
   source: string
+  /** REGISTERED | CHECKED_IN | NO_SHOW | WAITLISTED | CANCELLED */
   status: string
   checkedInAt: string | null
+  /** Their place on the waitlist, from 1; null when not waitlisted. */
+  waitlistPosition: number | null
+  /** A second address the student gave: their own, beside the school one. */
+  personalEmail: string | null
+  consentAt: string | null
+  /** The recruiter's rating at the booth, 1 to 5. */
+  rating: number | null
+  notes: string | null
+  shortlisted: boolean
+  /** The application made when they were put forward for a job. */
+  applicationId: string | null
+  jobTitle: string | null
+  applicationStage: string | null
 }
 
 export interface RegisterAttendeeInput {
@@ -348,6 +429,8 @@ export interface RegisterAttendeeInput {
   major?: string
   gradYear?: number
   walkIn?: boolean
+  /** The student agreed to their details being kept. Required. */
+  consent: boolean
 }
 
 export interface EventCreate {
@@ -358,6 +441,14 @@ export interface EventCreate {
   endsAt?: string
   timezone?: string
   intakeFormId?: string
+  /** The form students register with; left out for the default. */
+  registrationFormId?: string
+  /** The template to start from. */
+  templateId?: string
+  /** IN_PERSON | VIRTUAL | HYBRID */
+  format?: string
+  /** When it goes on the careers site, once approved; left out for the template's default (or as soon as approved). */
+  publishAt?: string
   /** Route this event down the workflow's flagged/exception path. */
   flaggedCritical?: boolean
 }

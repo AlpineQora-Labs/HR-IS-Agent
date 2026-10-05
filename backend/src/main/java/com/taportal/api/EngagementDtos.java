@@ -42,7 +42,23 @@ public final class EngagementDtos {
             String approvalStatus,
             int registrations,
             int attended,
-            int hires) {}
+            int hires,
+            /** Seat settings: the most it seats (null = no limit), when registration ends, waitlist on or off. */
+            Integer capacity,
+            OffsetDateTime registrationClosesAt,
+            boolean waitlistEnabled,
+            int waitlisted,
+            int shortlisted,
+            /** The form students register with; null for the default. */
+            UUID registrationFormId,
+            /** The template it was created from, and what it took from it. */
+            UUID templateId,
+            String country,
+            String format,
+            /** When it goes on the careers site, once approved; null for as soon as approved. */
+            OffsetDateTime publishAt,
+            /** Whether students can see it now: approved, and its publishing moment has come. */
+            boolean published) {}
 
     /** Create payload for a new recruiting event. */
     public record EventCreate(
@@ -53,6 +69,14 @@ public final class EngagementDtos {
             OffsetDateTime endsAt,
             String timezone,
             UUID intakeFormId,
+            /** The form students register with; null for the default Student registration form. */
+            UUID registrationFormId,
+            /** The template to start from: the event takes its country, forms, seats and consent wording. */
+            UUID templateId,
+            /** IN_PERSON | VIRTUAL | HYBRID */
+            String format,
+            /** When it goes on the careers site, once approved; null for as soon as approved (or the template's default). */
+            OffsetDateTime publishAt,
             /** Route this event down the workflow's flagged/exception path. */
             Boolean flaggedCritical) {}
 

@@ -8,4 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface SchoolRepository extends JpaRepository<School, UUID> {
 
     List<School> findByOrderByName();
+
+    boolean existsByNameIgnoreCase(String name);
 }

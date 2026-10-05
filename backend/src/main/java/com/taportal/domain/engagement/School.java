@@ -38,6 +38,11 @@ public class School {
     @Column(nullable = false)
     private String tier = "TARGET";
 
+    /** ISO country code the school is in; null when not said. */
+    @Setter
+    @Column(length = 2)
+    private String country;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;

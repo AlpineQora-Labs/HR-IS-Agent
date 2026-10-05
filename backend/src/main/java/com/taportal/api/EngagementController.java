@@ -47,6 +47,12 @@ public class EngagementController {
         return engagementService.createEvent(request);
     }
 
+    /** Sends an event for approval again: after a rejection, or when no workflow was on when it was created. */
+    @PostMapping("/events/{id}/send-for-approval")
+    public EventRow sendForApproval(@org.springframework.web.bind.annotation.PathVariable java.util.UUID id) {
+        return engagementService.sendForApproval(id);
+    }
+
     @GetMapping("/surveys")
     public List<SurveyRow> surveys() {
         return engagementService.surveys();

@@ -8,6 +8,9 @@ import type {
   FormResponseRow,
   School,
   EventRegistration,
+  EventSeatSettings,
+  EventTemplate,
+  SchoolReportRow,
   RegisterAttendeeInput,
   AnalyticsSummary,
   ApplicationRow,
@@ -302,6 +305,57 @@ export function useSchools() {
   })
 }
 
+// ---- Event templates ----
+
+export function useEventTemplates() {
+  return useQuery({ queryKey: ['event-templates'], queryFn: () => api.get<EventTemplate[]>('/event-templates').then((r) => r.data) })
+}
+
+export function useSaveEventTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (t: EventTemplate) => (t.id ? api.put(`/event-templates/${t.id}`, t) : api.post('/event-templates', t)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['event-templates'] }),
+  })
+}
+
+export function useDeleteEventTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/event-templates/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['event-templates'] }),
+  })
+}
+
+/** Sends an event for approval again: after a rejection, or when no workflow was on when it was created. */
+export function useSendEventForApproval() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (eventId: string) => api.post(`/events/${eventId}/send-for-approval`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }),
+  })
+}
+
+/** Adds a school to the list students choose from. */
+export function useAddSchool() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (s: { name: string; location?: string; tier: string; country?: string }) => api.post('/schools', s),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['schools'] })
+      qc.invalidateQueries({ queryKey: ['event-roster'] })
+    },
+  })
+}
+
+/** How each school has done across every event. */
+export function useSchoolReport() {
+  return useQuery({
+    queryKey: ['event-roster', 'school-report'],
+    queryFn: () => api.get<SchoolReportRow[]>('/schools/report').then((r) => r.data),
+  })
+}
+
 export function useEventRoster(eventId: string | undefined) {
   return useQuery({
     enabled: !!eventId,
@@ -332,6 +386,24 @@ export function useRegisterAttendee() {
 export function useRegistrationTransition() {
   return useRosterMutation(({ registrationId, status }: { registrationId: string; status: string }) =>
     api.post(`/event-registrations/${registrationId}/transition`, { status }))
+}
+
+/** What the recruiter made of a student at the booth: rating, notes, shortlist. */
+export function useEvaluateRegistration() {
+  return useRosterMutation(({ registrationId, ...body }: { registrationId: string; rating: number | null; notes: string | null; shortlisted: boolean }) =>
+    api.post(`/event-registrations/${registrationId}/evaluation`, body))
+}
+
+/** Put a student forward for a job: makes their application, from this event. */
+export function usePutForward() {
+  return useRosterMutation(({ registrationId, jobId }: { registrationId: string; jobId: string }) =>
+    api.post(`/event-registrations/${registrationId}/apply`, { jobId }))
+}
+
+/** How many the event seats, when registration ends, and whether it keeps a waitlist. */
+export function useEventSeats() {
+  return useRosterMutation(({ eventId, settings }: { eventId: string; settings: EventSeatSettings }) =>
+    api.put(`/events/${eventId}/seats`, settings))
 }
 
 // Pipelines for many jobs at once (jobs×stages matrix). /pipeline is per-job,

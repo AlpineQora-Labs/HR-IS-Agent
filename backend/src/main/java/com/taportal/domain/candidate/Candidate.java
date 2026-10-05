@@ -36,6 +36,14 @@ public class Candidate {
     @Column(nullable = false)
     private String email;
 
+    /**
+     * A second address that is also this person's: a student's own email beside their school
+     * one. Someone who turns up under either address is this candidate.
+     */
+    @Setter
+    @Column(name = "alt_email")
+    private String altEmail;
+
     /** As the candidate gave it. Set through {@link #setPhone}. */
     @Column
     private String phone;

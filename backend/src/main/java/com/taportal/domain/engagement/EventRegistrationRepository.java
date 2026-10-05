@@ -14,4 +14,14 @@ public interface EventRegistrationRepository extends JpaRepository<EventRegistra
     long countByEventIdAndStatus(UUID eventId, String status);
 
     boolean existsByEventIdAndEmailIgnoreCase(UUID eventId, String email);
+
+    long countByEventIdAndStatusIn(UUID eventId, java.util.Collection<String> statuses);
+
+    long countByEventIdAndShortlistedTrue(UUID eventId);
+
+    /** Whether this candidate already holds a live registration for the event, under whichever address. */
+    boolean existsByEventIdAndCandidateIdAndStatusNot(UUID eventId, UUID candidateId, String status);
+
+    /** The waitlist in the order students joined it. */
+    List<EventRegistration> findByEventIdAndStatusOrderByCreatedAt(UUID eventId, String status);
 }

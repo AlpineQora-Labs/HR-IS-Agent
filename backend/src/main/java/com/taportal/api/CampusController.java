@@ -48,7 +48,25 @@ public class CampusController {
      */
     @PostMapping("/v1/events/{id}/register-form")
     public RegistrationRow registerForm(@PathVariable UUID id, @Valid @RequestBody RegisterFormRequest request) {
-        return campusService.registerFromForm(id, request.answers());
+        return campusService.registerFromForm(id, request.answers(), Boolean.TRUE.equals(request.consent()));
+    }
+
+    /** The form a student fills in for this event, with its School question listing the schools. */
+    @GetMapping("/v1/events/{id}/registration-form")
+    public com.taportal.api.CampusDtos.RegistrationForm registrationForm(@PathVariable UUID id) {
+        return campusService.publicRegistrationForm(id);
+    }
+
+    @PostMapping("/v1/schools")
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+    public SchoolRow addSchool(@Valid @RequestBody com.taportal.api.CampusDtos.SchoolCreate request) {
+        return campusService.addSchool(request);
+    }
+
+    /** How each school has done across every event. */
+    @GetMapping("/v1/schools/report")
+    public List<com.taportal.api.CampusDtos.SchoolReportRow> schoolReport() {
+        return campusService.schoolReport();
     }
 
     @GetMapping("/v1/schools")
@@ -64,6 +82,26 @@ public class CampusController {
     @PostMapping("/v1/events/{id}/registrations")
     public RegistrationRow register(@PathVariable UUID id, @Valid @RequestBody RegisterRequest request) {
         return campusService.register(id, request);
+    }
+
+    /** What the recruiter made of a student at the booth. */
+    @PostMapping("/v1/event-registrations/{id}/evaluation")
+    public RegistrationRow evaluate(
+            @PathVariable UUID id, @Valid @RequestBody com.taportal.api.CampusDtos.EvaluationRequest request) {
+        return campusService.evaluate(id, request);
+    }
+
+    /** Put a student forward for a job. */
+    @PostMapping("/v1/event-registrations/{id}/apply")
+    public RegistrationRow apply(
+            @PathVariable UUID id, @Valid @RequestBody com.taportal.api.CampusDtos.ApplyRequest request) {
+        return campusService.apply(id, request.jobId());
+    }
+
+    /** How many the event seats, when registration ends, and whether it keeps a waitlist. */
+    @org.springframework.web.bind.annotation.PutMapping("/v1/events/{id}/seats")
+    public void seats(@PathVariable UUID id, @Valid @RequestBody com.taportal.api.CampusDtos.SeatSettings request) {
+        campusService.seatSettings(id, request);
     }
 
     @PostMapping("/v1/event-registrations/{id}/transition")

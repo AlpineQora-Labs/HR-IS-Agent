@@ -15,6 +15,9 @@ interface PublicEvent {
   startsAt: string
   endsAt: string | null
   timezone: string
+  /** OPEN: there is a seat. WAITLIST: full, taking names. FULL / CLOSED: not taking registrations. */
+  registration: 'OPEN' | 'WAITLIST' | 'FULL' | 'CLOSED'
+  seatsLeft: number | null
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -136,15 +139,28 @@ export default function CareersEventsPage() {
                     <span>{TYPE_LABEL[e.type] ?? e.type}</span>
                   </div>
                 </div>
-                <Link
-                  to={`/register/${e.id}`}
-                  style={{
-                    flexShrink: 0, padding: '8px 16px', borderRadius: 999, fontSize: 13, fontWeight: 600,
-                    background: 'var(--bofa-navy, #012169)', color: '#fff', textDecoration: 'none',
-                  }}
-                >
-                  Register
-                </Link>
+                {e.registration === 'OPEN' && e.seatsLeft !== null && e.seatsLeft <= 10 && (
+                  <span style={{ flexShrink: 0, fontSize: 12, color: 'var(--ink-3)' }}>
+                    {e.seatsLeft} {e.seatsLeft === 1 ? 'seat' : 'seats'} left
+                  </span>
+                )}
+                {e.registration === 'FULL' || e.registration === 'CLOSED' ? (
+                  <span style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 999, fontSize: 13, fontWeight: 600, background: 'var(--app-sunken, #f0f2f5)', color: 'var(--ink-4)' }}>
+                    {e.registration === 'FULL' ? 'Full' : 'Registration closed'}
+                  </span>
+                ) : (
+                  <Link
+                    to={`/register/${e.id}`}
+                    style={{
+                      flexShrink: 0, padding: '8px 16px', borderRadius: 999, fontSize: 13, fontWeight: 600,
+                      background: e.registration === 'WAITLIST' ? '#fff' : 'var(--bofa-navy, #012169)',
+                      color: e.registration === 'WAITLIST' ? 'var(--bofa-navy, #012169)' : '#fff',
+                      border: '1px solid var(--bofa-navy, #012169)', textDecoration: 'none',
+                    }}
+                  >
+                    {e.registration === 'WAITLIST' ? 'Join waitlist' : 'Register'}
+                  </Link>
+                )}
               </div>
             ))}
             {events !== null && filtered.length === 0 && (

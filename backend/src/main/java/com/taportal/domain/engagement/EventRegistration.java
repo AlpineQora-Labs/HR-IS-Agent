@@ -63,7 +63,7 @@ public class EventRegistration {
     @Column(nullable = false)
     private String source = "REGISTERED";
 
-    /** REGISTERED | CHECKED_IN | NO_SHOW */
+    /** REGISTERED | CHECKED_IN | NO_SHOW | WAITLISTED (no seat yet) | CANCELLED (gave the seat up) */
     @Setter
     @Column(nullable = false)
     private String status = "REGISTERED";
@@ -71,6 +71,44 @@ public class EventRegistration {
     @Setter
     @Column(name = "checked_in_at")
     private OffsetDateTime checkedInAt;
+
+    /** A second address the student gave (their own, beside the school one). */
+    @Setter
+    @Column(name = "personal_email")
+    private String personalEmail;
+
+    /** The phone number as the student gave it. */
+    @Setter
+    @Column
+    private String phone;
+
+    /** When the student agreed to their details being kept. Null for rows older than the rule. */
+    @Setter
+    @Column(name = "consent_at")
+    private OffsetDateTime consentAt;
+
+    /** What the recruiter made of them at the booth: 1 (weak) to 5 (strong). */
+    @Setter
+    @Column
+    private Integer rating;
+
+    @Setter
+    @Column
+    private String notes;
+
+    /** Picked out to be followed up after the event. */
+    @Setter
+    @Column(nullable = false)
+    private boolean shortlisted;
+
+    @Setter
+    @Column(name = "evaluated_at")
+    private OffsetDateTime evaluatedAt;
+
+    /** The application made for them when they were put forward for a job. */
+    @Setter
+    @Column(name = "application_id")
+    private UUID applicationId;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

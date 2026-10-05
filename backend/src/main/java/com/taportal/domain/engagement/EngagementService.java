@@ -20,6 +20,8 @@ public class EngagementService {
     private final com.taportal.domain.approval.ApprovalRequestService approvals;
     private final com.taportal.domain.approval.ApprovalRequestRepository approvalRequests;
     private final SurveyRepository surveyRepository;
+    private final CampusService campus;
+    private final EventTemplateService eventTemplates;
 
     public EngagementService(
             NurtureCampaignRepository campaignRepository,
@@ -28,7 +30,11 @@ public class EngagementService {
             SurveyRepository surveyRepository,
             EventRegistrationRepository eventRegistrations,
             com.taportal.domain.approval.ApprovalRequestService approvals,
-            com.taportal.domain.approval.ApprovalRequestRepository approvalRequests) {
+            com.taportal.domain.approval.ApprovalRequestRepository approvalRequests,
+            CampusService campus,
+            EventTemplateService eventTemplates) {
+        this.campus = campus;
+        this.eventTemplates = eventTemplates;
         this.campaignRepository = campaignRepository;
         this.referralRepository = referralRepository;
         this.eventRepository = eventRepository;
@@ -76,7 +82,8 @@ public class EngagementService {
     public List<EventRow> events() {
         java.util.Map<String, String> approvalByEvent = latestEventApprovals();
         return eventRepository.findByOrderByStartsAtDesc().stream()
-                .map((e) -> toEventRow(e, approvalByEvent.get(e.getId().toString())))
+                .map((e) -> toEventRow(e, approvalByEvent.getOrDefault(
+                        e.getId().toString(), e.isApprovalRequired() ? "NOT_SENT" : null)))
                 .toList();
     }
 
@@ -89,17 +96,28 @@ public class EngagementService {
         return byEvent;
     }
 
-    /** Events with roster rows compute their funnel live; legacy rows keep their counters. */
+    /**
+     * Events with roster rows compute their funnel live; legacy rows keep their counters.
+     * Registered counts everyone who signed up and did not cancel, waitlist included; hires are
+     * the students whose application from the event reached HIRED.
+     */
     private EventRow toEventRow(RecruitingEvent e, String approvalStatus) {
         long rosterSize = eventRegistrations.countByEventId(e.getId());
-        int registered = rosterSize > 0 ? (int) rosterSize : e.getRegistrations();
+        long cancelled = eventRegistrations.countByEventIdAndStatus(e.getId(), "CANCELLED");
+        int registered = rosterSize > 0 ? (int) (rosterSize - cancelled) : e.getRegistrations();
         int attended = rosterSize > 0
                 ? (int) eventRegistrations.countByEventIdAndStatus(e.getId(), "CHECKED_IN")
                 : e.getAttended();
+        int hires = rosterSize > 0 ? Math.max(campus.hires(e.getId()), e.getHires()) : e.getHires();
         return new EventRow(
                 e.getId(), e.getName(), e.getType(), e.getLocation(), e.getStartsAt(),
                 e.getEndsAt(), e.getTimezone(), approvalStatus,
-                registered, attended, e.getHires());
+                registered, attended, hires,
+                e.getCapacity(), e.getRegistrationClosesAt(), e.isWaitlistEnabled(),
+                (int) eventRegistrations.countByEventIdAndStatus(e.getId(), "WAITLISTED"),
+                (int) eventRegistrations.countByEventIdAndShortlistedTrue(e.getId()),
+                e.getRegistrationFormId(), e.getTemplateId(), e.getCountry(), e.getFormat(),
+                e.getPublishAt(), campus.isPublic(e, approvalStatus));
     }
 
     @Transactional
@@ -118,37 +136,78 @@ public class EngagementService {
         e.setEndsAt(req.endsAt());
         e.setTimezone(req.timezone() != null && !req.timezone().isBlank() ? req.timezone() : "America/New_York");
         e.setIntakeFormId(req.intakeFormId());
+        e.setRegistrationFormId(req.registrationFormId());
+        e.setFormat(req.format());
+        if (req.publishAt() != null && req.startsAt() != null && !req.publishAt().isBefore(req.startsAt())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,
+                    "The event must be published before it starts");
+        }
+        e.setPublishAt(req.publishAt());
+        // Started from a template: the event takes the template's settings, and they are then its own.
+        if (req.templateId() != null) {
+            eventTemplates.applyTo(e, req.templateId());
+            if (req.format() != null) {
+                e.setFormat(req.format());
+            }
+        }
         e.setRegistrations(0);
         e.setAttended(0);
         e.setHires(0);
+        // Every event created here must be approved before students can see it.
+        e.setApprovalRequired(true);
         RecruitingEvent saved = eventRepository.save(e);
+        return toEventRow(saved, sendForApproval(saved, req.flaggedCritical()));
+    }
 
-        // Every new event routes through the Event-approval workflow (goes to the
-        // approvals queue for hiring-manager sign-off). itemRef = event id so the
-        // request links back to the event.
+    /**
+     * Routes an event through the Event approval workflow: it goes to the approvals queue, and
+     * the request links back to the event by its id.
+     *
+     * @return the request's status, or NOT_SENT when no workflow is switched on for events, in
+     *         which case the event stays off the careers site until one is and it is sent again
+     */
+    private String sendForApproval(RecruitingEvent saved, Boolean flaggedCritical) {
         // Real event context for the workflow's conditions: format, lead time, flag.
-        boolean virtual = saved.getLocation() != null
-                && saved.getLocation().toLowerCase().matches(".*(virtual|online|remote).*");
+        boolean virtual = "VIRTUAL".equals(saved.getFormat()) || (saved.getLocation() != null
+                && saved.getLocation().toLowerCase().matches(".*(virtual|online|remote).*"));
         Double daysNotice = saved.getStartsAt() == null ? null
                 : (double) java.time.Duration.between(java.time.OffsetDateTime.now(), saved.getStartsAt()).toDays();
-        approvals.submit(new com.taportal.api.ApprovalDtos.SubmitApprovalRequest(
+        var request = approvals.submit(new com.taportal.api.ApprovalDtos.SubmitApprovalRequest(
                 "Event", "EVENT", saved.getId().toString(),
                 saved.getName(),
                 saved.getLocation() + " · " + (saved.getStartsAt() == null ? "" : saved.getStartsAt().toLocalDate()),
-                virtual ? "VIRTUAL" : "IN_PERSON", daysNotice, req.flaggedCritical()));
+                virtual ? "VIRTUAL" : "IN_PERSON", daysNotice, flaggedCritical));
+        return request == null ? "NOT_SENT" : String.valueOf(request.status());
+    }
 
-        return new EventRow(
-                saved.getId(),
-                saved.getName(),
-                saved.getType(),
-                saved.getLocation(),
-                saved.getStartsAt(),
-                saved.getEndsAt(),
-                saved.getTimezone(),
-                "PENDING",
-                saved.getRegistrations(),
-                saved.getAttended(),
-                saved.getHires());
+    /**
+     * Sends an event for approval again: after it was rejected and changed, or when no workflow
+     * was switched on at the time it was created. Refused while a request is waiting or once it
+     * is approved.
+     */
+    @Transactional
+    public EventRow sendForApproval(java.util.UUID eventId) {
+        RecruitingEvent e = eventRepository.findById(eventId)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("Event not found: " + eventId));
+        String latest = latestEventApprovals().get(eventId.toString());
+        if ("PENDING".equals(latest)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT, "This event is already waiting for approval");
+        }
+        if ("APPROVED".equals(latest) || "AUTO_APPROVED".equals(latest)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT, "This event is already approved");
+        }
+        e.setApprovalRequired(true);
+        eventRepository.save(e);
+        String status = sendForApproval(e, null);
+        if ("NOT_SENT".equals(status)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    "No approval workflow is switched on for events. Switch one on under Settings, Workflow, then send this again.");
+        }
+        return toEventRow(e, status);
     }
 
     public List<SurveyRow> surveys() {

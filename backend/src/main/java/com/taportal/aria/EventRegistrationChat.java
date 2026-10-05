@@ -58,6 +58,9 @@ public class EventRegistrationChat {
         public UUID eventId;
         public Map<String, String> answers = new HashMap<>();
         public boolean done;
+        /** The student has been shown what they agree to, and has agreed. Nobody is registered before both. */
+        public boolean consentAsked;
+        public boolean consented;
     }
 
     private final ConversationRepository conversations;
@@ -107,8 +110,22 @@ public class EventRegistrationChat {
 
         String when = event.getStartsAt() == null ? ""
                 : " on " + event.getStartsAt().atZoneSameInstant(ZONE).format(WHEN);
+        // An event that is not taking registrations says so before asking anything.
+        String registration = campusService.publicInfo(eventId).registration();
+        if ("CLOSED".equals(registration) || "FULL".equals(registration)) {
+            state.done = true;
+            conversation.setStatus("COMPLETED");
+            aria(conversation, "closed", "Hello, I'm " + name + ". " + ("FULL".equals(registration)
+                    ? event.getName() + " is full, so I can't register you for it."
+                    : "Registration for " + event.getName() + " has closed, so I can't register you for it.")
+                    + " Have a look at our other events on the careers site.");
+            persist(conversation, state);
+            return turn(conversation, state);
+        }
         aria(conversation, "greeting", "Hello, I'm " + name + ". Good to see you at " + event.getName() + when
-                + ". Let's get you registered — it takes under a minute.");
+                + ". Let's get you registered — it takes under a minute."
+                + ("WAITLIST".equals(registration)
+                        ? " Every seat is taken for now, so this puts you on the waitlist." : ""));
 
         FormLogicService.Field first = nextUnanswered(state);
         if (first != null) {
@@ -132,6 +149,19 @@ public class EventRegistrationChat {
         student(conversation, text);
 
         FormLogicService.Field current = nextUnanswered(state);
+        if (current == null && state.consentAsked && !state.consented) {
+            // The one answer that is not a form question: do they agree to their details being kept?
+            String said = text == null ? "" : text.trim().toLowerCase(java.util.Locale.ROOT);
+            if (said.matches("^(yes|y|yeah|yep|ok|okay|sure|i agree|agree|agreed)\\b.*")) {
+                state.consented = true;
+            } else {
+                aria(conversation, "consent.reask", "I can't register you without that. "
+                        + "If you're happy for us to keep your details, reply Yes. Otherwise you can close this chat "
+                        + "and nothing is saved.");
+                persist(conversation, state);
+                return turn(conversation, state);
+            }
+        }
         if (current != null) {
             String value = interpret(current, text);
             if (value == null) {
@@ -155,17 +185,37 @@ public class EventRegistrationChat {
             return turn(conversation, state);
         }
 
-        // No questions left → the one authoritative registration path.
+        // No questions left. Nothing is saved until the student has agreed to it being kept.
+        if (!state.consented) {
+            state.consentAsked = true;
+            aria(conversation, "consent", "One last thing before I save this. " + campusService.consentQuestion(state.eventId)
+                    + " Reply Yes to agree.");
+            persist(conversation, state);
+            return turn(conversation, state);
+        }
+
+        // Agreed → the one authoritative registration path.
         try {
-            RegistrationRow row = campusService.registerFromForm(state.eventId, answersJson(state));
+            RegistrationRow row = campusService.registerFromForm(state.eventId, answersJson(state), true);
             state.done = true;
             conversation.setStatus("COMPLETED");
             conversation.setCandidateId(row.candidateId());
-            aria(conversation, "confirm", "You're registered, " + firstName(row.name()) + ". "
-                    + "We've saved your details — swing by the Bank of America booth and we'll take it from there. "
-                    + "Keep an eye on " + row.email() + " for what's next.");
+            aria(conversation, "confirm", "WAITLISTED".equals(row.status())
+                    ? "You're on the waitlist, " + firstName(row.name()) + ", at number " + row.waitlistPosition()
+                            + ". Every seat is taken for now. If one comes free it is yours, and our team will reach you at "
+                            + row.email() + "."
+                    : "You're registered, " + firstName(row.name()) + ". "
+                            + "We've saved your details — swing by the Bank of America booth and we'll take it from there. "
+                            + "We'll reach you at " + row.email() + " if anything changes.");
         } catch (ResponseStatusException ex) {
-            if (ex.getStatusCode().value() == HttpStatus.CONFLICT.value()) {
+            if (ex.getStatusCode().value() == HttpStatus.GONE.value()) {
+                // Full, or closed, since the chat began.
+                state.done = true;
+                conversation.setStatus("COMPLETED");
+                aria(conversation, "closed", "I'm sorry: " + (ex.getReason() != null
+                        ? Character.toLowerCase(ex.getReason().charAt(0)) + ex.getReason().substring(1) : "registration has closed")
+                        + ", so I couldn't register you. Nothing was saved.");
+            } else if (ex.getStatusCode().value() == HttpStatus.CONFLICT.value()) {
                 state.done = true;
                 conversation.setStatus("COMPLETED");
                 aria(conversation, "duplicate", "Good news: you're already registered for this event. "
@@ -183,9 +233,8 @@ public class EventRegistrationChat {
 
     /** The first visible, answerable, still-unanswered question — rules decide. */
     private FormLogicService.Field nextUnanswered(State state) {
-        String schema = formDefinitions.findFirstByPurposeAndDefaultForKindTrueAndTemplateFalse("EVENT_REGISTRATION")
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "No registration form is configured"))
-                .getSchema();
+        // The event's own form, with its School question listing the schools: the same one the web form shows.
+        String schema = campusService.registrationForm(state.eventId).schema();
         return formLogic.visibleAnswerableFields(schema, state.answers).stream()
                 .filter(f -> !state.answers.containsKey(f.id()))
                 .findFirst().orElse(null);
@@ -260,7 +309,7 @@ public class EventRegistrationChat {
     }
 
     private String answersJson(State state) {
-        String schema = formDefinitions.findFirstByPurposeAndDefaultForKindTrueAndTemplateFalse("EVENT_REGISTRATION").orElseThrow().getSchema();
+        String schema = campusService.registrationForm(state.eventId).schema();
         var arr = objectMapper.createArrayNode();
         for (FormLogicService.Field f : formLogic.fields(schema)) {
             String v = state.answers.get(f.id());
@@ -295,7 +344,8 @@ public class EventRegistrationChat {
                 .map(m -> new MessageView(m.getSender(), m.getBody()))
                 .toList();
         FormLogicService.Field current = state.done ? null : nextUnanswered(state);
-        List<String> options = current == null ? List.of()
+        List<String> options = current == null
+                ? (!state.done && state.consentAsked && !state.consented ? List.of("Yes", "No") : List.of())
                 : current.type().equals("yesno") ? List.of("Yes", "No") : current.options();
         return new Turn(conversation.getId(), state.done, transcript, options);
     }
