@@ -110,6 +110,16 @@ const GROUP_PILL_LABELS: Record<string, string> = {
   'Platform': 'Platform',
 }
 
+/* The icon each top-menu pill carries. */
+const GROUP_PILL_ICONS: Record<string, string> = {
+  'Recruiting': 'jobs',
+  'Interview': 'interviews',
+  'Offer & Hire': 'offers',
+  'Talent Intelligence': 'matching',
+  'Engagement': 'crm',
+  'Platform': 'analytics',
+}
+
 /* Admin's rail shows its sections (the page has no in-page tabs). */
 // No 'Overview' entry: the locked Settings item at the rail's bottom already
 // navigates to the Admin hub — a second gear at the top duplicated it.
@@ -117,6 +127,7 @@ const ADMIN_SECTIONS: { tab: string | null; label: string; icon: string }[] = [
   { tab: 'users', label: 'Users & Access', icon: 'candidates' },
   { tab: 'communications', label: 'Communication', icon: 'campaigns' },
   { tab: 'forms', label: 'Forms', icon: 'offers' },
+  { tab: 'events', label: 'Event templates', icon: 'events' },
   { tab: 'workflow', label: 'Workflow', icon: 'pipeline' },
   { tab: 'config', label: 'Configuration', icon: 'integrations' },
 ]
@@ -126,6 +137,7 @@ function AdminRailNav() {
   const cur = new URLSearchParams(location.search).get('tab')
   return (
     <nav className="app__side">
+      <div className="nav-title">Settings</div>
       {ADMIN_SECTIONS.map(({ tab, label, icon }) => {
         const Icon = ICONS[icon]
         // Communications is a real sub-route (lifted component set); the other
@@ -167,9 +179,10 @@ function RailFoot() {
 
 /* The contextual rail: only the ACTIVE group's modules, labeled. Short by
    design — no scrolling, no collapse. */
-function RailNav({ keys }: { keys: string[] }) {
+function RailNav({ keys, title }: { keys: string[]; title: string }) {
   return (
     <nav className="app__side">
+      <div className="nav-title">{title}</div>
       {keys.map((k) => (
         <Item key={k} to={ROUTES[k]} Icon={ICONS[k]} label={MODULES.find((m) => m.key === k)!.label} />
       ))}
@@ -290,17 +303,23 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Brand collapsed={false} onToggle={() => navigate('/')} />
         </div>
         <nav className="topnav" aria-label="Sections">
-          {pillGroups.map((g) => (
-            <button
-              key={g.group}
-              className={g.group === activeGroup.group ? 'topnav__pill topnav__pill--active' : 'topnav__pill'}
-              onClick={() => navigate(ROUTES[g.keys[0]])}
-            >
-              {GROUP_PILL_LABELS[g.group] ?? g.group}
-            </button>
-          ))}
+          <div className="topnav__pills">
+            {pillGroups.map((g) => {
+              const Icon = ICONS[GROUP_PILL_ICONS[g.group] ?? g.keys[0]]
+              return (
+                <button
+                  key={g.group}
+                  className={g.group === activeGroup.group ? 'topnav__pill topnav__pill--active' : 'topnav__pill'}
+                  aria-current={g.group === activeGroup.group ? 'page' : undefined}
+                  onClick={() => navigate(ROUTES[g.keys[0]])}
+                >
+                  {Icon && <Icon className="ic" />}
+                  {GROUP_PILL_LABELS[g.group] ?? g.group}
+                </button>
+              )
+            })}
+          </div>
         </nav>
-        <div className="spacer" />
         <button className="btn btn--ghost btn--icon" onClick={() => setPaletteOpen(true)} aria-label="Search (⌘K)" title="Search (⌘K)">
           <IconSearch className="ic" />
         </button>
@@ -309,17 +328,20 @@ export function AppShell({ children }: { children: ReactNode }) {
           <IconArrowRight className="ic" />
         </a>
         <NotificationsBell />
-        <div className="avatar" title={currentUser?.name ?? 'Account'}>
-          {currentUser?.initials ?? 'OA'}
+        <div className="app__user" title={currentUser?.name ?? 'Account'}>
+          <div className="avatar">{currentUser?.initials ?? 'OA'}</div>
+          <div className="app__user-text">
+            <strong>{currentUser?.name ?? 'Account'}</strong>
+            {currentUser?.roleKey && <small>{currentUser.roleKey.replace(/[-_]/g, ' ')}</small>}
+          </div>
         </div>
       </div>
-
       {/* Contextual rail: just the active group's modules. */}
       <div className="app__rail">
         {activeGroup.group === 'Admin' ? (
           <AdminRailNav />
         ) : (
-          <RailNav keys={activeGroup.keys} />
+          <RailNav keys={activeGroup.keys} title={GROUP_PILL_LABELS[activeGroup.group] ?? activeGroup.group} />
         )}
         <button
           className="app__collapse-handle"

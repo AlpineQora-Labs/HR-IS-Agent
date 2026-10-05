@@ -445,3 +445,213 @@ button.card:hover {
   color: var(--bofa-navy);
   width: 18px;
 }
+
+
+/* ══ Rounded shell ═════════════════════════════════════════════════════════
+   The same chrome as the AlpineOrion app: nothing is a band. The logo, the
+   menu and each action are white capsules sitting on the page, and the side
+   menu is a white rounded card whose current page is a filled pill.
+   Kept last so it settles what the earlier shell rules above started. */
+.app {
+  grid-template-rows: 76px 1fr;
+  --shell-chrome-h: 76px;
+}
+.app__top {
+  background: transparent;
+  border-bottom: 0;
+  padding: 0 12px;
+  gap: 10px;
+}
+/* The logo capsule is exactly as wide as the side menu under it. */
+.app__topbrand {
+  width: 220px;
+  height: 48px;
+  margin-right: 0;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--app-panel);
+  box-shadow: 0 1px 2px rgba(14, 26, 51, 0.05);
+}
+.app__topbrand .brand-logo {
+  height: 17px;
+}
+
+/* One capsule holds the whole menu; the section you are in is the filled pill. */
+.topnav {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  justify-content: center;
+}
+.topnav__pills {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--app-panel);
+  box-shadow: 0 1px 2px rgba(14, 26, 51, 0.05);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.topnav__pills::-webkit-scrollbar {
+  display: none;
+}
+.topnav__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.topnav__pill .ic {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* Actions: round white buttons, and a capsule for who is signed in. */
+.app__top > .btn,
+.app__top > .notif > .btn,
+.app__top .btn--ghost {
+  height: 48px;
+  background: var(--app-panel);
+  border: 0;
+  box-shadow: 0 1px 2px rgba(14, 26, 51, 0.05);
+}
+.app__top .btn--ghost:hover {
+  background: var(--navy-050);
+  color: var(--bofa-navy);
+}
+.app__top .btn--icon {
+  width: 48px;
+}
+.app__top a.btn--ghost {
+  padding: 0 18px;
+  font-weight: 600;
+}
+.app__user {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 18px 0 6px;
+  border-radius: 999px;
+  background: var(--app-panel);
+  box-shadow: 0 1px 2px rgba(14, 26, 51, 0.05);
+  flex: none;
+}
+.app__user .avatar {
+  width: 36px;
+  height: 36px;
+  background: var(--bofa-navy);
+  color: #fff;
+}
+.app__user-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.app__user-text strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-0);
+  white-space: nowrap;
+}
+.app__user-text small {
+  font-size: 11.5px;
+  color: var(--ink-4);
+  text-transform: capitalize;
+}
+
+/* Side menu: a white card; the page you are on is a filled pill. */
+.app__rail .app__side {
+  background: var(--app-panel);
+  margin: 0 0 12px 12px;
+  padding: 16px 10px 12px;
+  border-radius: 24px;
+  gap: 2px;
+  box-shadow: 0 1px 2px rgba(14, 26, 51, 0.05);
+}
+.app__side .nav-title {
+  padding: 4px 14px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.app__side .nav-item {
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: var(--ink-2);
+}
+.app__side .nav-item .ic {
+  color: var(--ink-4);
+}
+.app__side .nav-item:hover {
+  background: var(--app-sunken);
+  color: var(--ink-0);
+}
+.app__side .nav-item:hover .ic {
+  color: var(--ink-2);
+}
+.app__side .nav-item[aria-current="page"] {
+  background: var(--bofa-navy);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: none;
+}
+.app__side .nav-item[aria-current="page"] .ic {
+  color: #fff;
+}
+.app__side .nav-item .count {
+  background: var(--app-sunken);
+  color: var(--ink-3);
+}
+.app__side .nav-item[aria-current="page"] .count {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+.app__side .nav-foot {
+  border-top: 1px solid var(--line);
+}
+.app--collapsed .app__side .nav-title {
+  display: none;
+}
+.app--collapsed .app__rail .app__side {
+  padding: 12px 8px;
+}
+/* Collapsed, the current page is a round button, as in the top menu. */
+.app--collapsed .app__side .nav-item {
+  width: 42px;
+  padding: 0;
+  margin: 0 auto;
+}
+
+/* The page sits beside the menu at the same top line, with the same corners. */
+.app__main {
+  margin: 0 12px 12px 12px;
+  border-radius: 24px;
+  border: 0;
+  box-shadow: 0 1px 2px rgba(14, 26, 51, 0.05);
+}
+.app__collapse-handle {
+  top: 28px;
+  border: 0;
+}
+
+/* Narrow windows: the name goes first, then the words on the actions. */
+@media (max-width: 1240px) {
+  .app__user-text {
+    display: none;
+  }
+  .app__user {
+    padding: 0 6px;
+  }
+}
