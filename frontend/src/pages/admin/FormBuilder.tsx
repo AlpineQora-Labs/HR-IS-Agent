@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import FormRulesCanvas from './FormRulesCanvas'
 import ConfirmButton from '@/components/ConfirmButton'
 import { useCreateForm, useDeleteForm, useFormDefById, useFormsList, useMakeDefaultForm, useSaveAsTemplate, useUpdateFormDef } from '@/api/hooks'
 import type { FormMeta } from '@/api/types'
@@ -39,20 +40,40 @@ export interface IntakeRow {
   slots: (IntakeField | null)[] // length 1 or 2
 }
 
-/** Conditional logic: show/hide a question based on another question's answer. */
-export interface FormRule {
-  id: string
-  action: 'show' | 'hide'
-  targetId: string
+/** One comparison: a question's answer against a value. */
+export interface FormCondition {
   sourceId: string
   op: 'equals' | 'not_equals' | 'contains'
   value: string
+}
+
+/**
+ * Conditional logic: show, hide or require a question based on other answers. The rule matches
+ * when its own condition holds and every further one in `also` does too.
+ */
+export interface FormRule extends FormCondition {
+  id: string
+  action: 'show' | 'hide' | 'require'
+  targetId: string
+  also?: FormCondition[]
+}
+
+/**
+ * A choice question whose options depend on another question's answer: for each answer of the
+ * source, the options the target then offers. Country → School, say.
+ */
+export interface FormChoice {
+  id: string
+  targetId: string
+  sourceId: string
+  options: Record<string, string[]>
 }
 
 export interface IntakeForm {
   title: string
   rows: IntakeRow[]
   rules?: FormRule[]
+  choices?: FormChoice[]
   updatedAt: string
 }
 
@@ -208,7 +229,7 @@ export function defaultRegistrationForm(): IntakeForm {
 /** Old flat-fields shape → row shape (one field per row). */
 export function normalizeIntake(raw: Partial<IntakeForm> & { fields?: IntakeField[] }): IntakeForm {
   if (Array.isArray(raw.rows)) {
-    return { title: raw.title ?? 'Event intake', rows: raw.rows, rules: raw.rules ?? [], updatedAt: raw.updatedAt ?? new Date().toISOString() }
+    return { title: raw.title ?? 'Event intake', rows: raw.rows, rules: raw.rules ?? [], choices: raw.choices ?? [], updatedAt: raw.updatedAt ?? new Date().toISOString() }
   }
   if (Array.isArray(raw.fields)) {
     return {
@@ -223,30 +244,82 @@ export function normalizeIntake(raw: Partial<IntakeForm> & { fields?: IntakeFiel
 export const flattenIntake = (form: IntakeForm): IntakeField[] =>
   form.rows.flatMap((r) => r.slots.filter((s): s is IntakeField => s !== null))
 
+/* The rules below mirror the server's FormLogicService, which is the authority: the screen
+   evaluates them only so the form reacts as it is filled in. Keep the two in step. */
+
+const holds = (c: FormCondition, val: (id: string) => string) => {
+  const v = (val(c.sourceId) ?? '').trim().toLowerCase()
+  const want = c.value.trim().toLowerCase()
+  if (c.op === 'equals') return v === want || v.split(', ').includes(want)
+  if (c.op === 'not_equals') return v !== want && !v.split(', ').includes(want)
+  return v.includes(want)
+}
+
+/** A rule's own condition and every further one. A further condition left unfinished asks nothing. */
+const ruleMatches = (r: FormRule, val: (id: string) => string) =>
+  holds(r, val) && (r.also ?? []).filter((c) => c.sourceId && c.value !== '').every((c) => holds(c, val))
+
+/** Rules that can be judged: ones naming a deleted question are ignored whole (same guard as the server). */
+function liveRules(form: IntakeForm): FormRule[] {
+  const known = new Set(flattenIntake(form).map((f) => f.id))
+  return (form.rules ?? []).filter((r) => known.has(r.targetId) && known.has(r.sourceId) && (r.also ?? []).every((c) => known.has(c.sourceId)))
+}
+
 /**
- * Evaluate the form's if/then rules for one field. `val` returns the current
+ * Evaluate the form's show/hide rules for one field. `val` returns the current
  * answer text of a field id. Semantics: a field with show-rules starts hidden
  * until one matches; any matching hide-rule hides it.
  */
 export function fieldVisible(form: IntakeForm, fieldId: string, val: (id: string) => string): boolean {
-  // Rules referencing deleted questions are ignored (same guard as the server's
-  // FormLogicService) — a stale show-rule must not hide its target forever.
-  const known = new Set(flattenIntake(form).map((f) => f.id))
-  const rules = (form.rules ?? []).filter((r) => known.has(r.targetId) && known.has(r.sourceId))
-  const mine = rules.filter((r) => r.targetId === fieldId && r.sourceId && r.value !== '')
+  const mine = liveRules(form).filter((r) => r.targetId === fieldId && r.sourceId && r.value !== '' && r.action !== 'require')
   if (mine.length === 0) return true
-  const matches = (r: FormRule) => {
-    const v = (val(r.sourceId) ?? '').trim().toLowerCase()
-    const want = r.value.trim().toLowerCase()
-    if (r.op === 'equals') return v === want || v.split(', ').includes(want)
-    if (r.op === 'not_equals') return v !== want && !v.split(', ').includes(want)
-    return v.includes(want)
-  }
   const showRules = mine.filter((r) => r.action === 'show')
   const hideRules = mine.filter((r) => r.action === 'hide')
-  if (showRules.length > 0 && !showRules.some(matches)) return false
-  if (hideRules.some(matches)) return false
+  if (showRules.length > 0 && !showRules.some((r) => ruleMatches(r, val))) return false
+  if (hideRules.some((r) => ruleMatches(r, val))) return false
   return true
+}
+
+/** Marked required, or made so by a require-rule that matches. */
+export function fieldRequired(form: IntakeForm, f: IntakeField, val: (id: string) => string): boolean {
+  return f.required || liveRules(form).some((r) => r.action === 'require' && r.targetId === f.id && r.value !== '' && ruleMatches(r, val))
+}
+
+/**
+ * The options a dependent choice is narrowed to by the answers so far; null when it is not
+ * narrowed (it depends on nothing, its source is unanswered, or nothing is listed for that
+ * answer), in which case its own options stand.
+ */
+export function narrowedOptions(form: IntakeForm, fieldId: string, val: (id: string) => string): string[] | null {
+  const known = new Set(flattenIntake(form).map((f) => f.id))
+  for (const c of form.choices ?? []) {
+    if (c.targetId !== fieldId || !known.has(c.sourceId) || c.sourceId === c.targetId) continue
+    const answer = (val(c.sourceId) ?? '').trim().toLowerCase()
+    if (!answer) continue
+    const key = Object.keys(c.options).find((k) => k.trim().toLowerCase() === answer)
+    const options = key ? c.options[key].filter((o) => o.trim() !== '') : []
+    if (options.length > 0) return options
+  }
+  return null
+}
+
+/**
+ * An answer as the form counts it: what was given, unless the question's options have since
+ * been narrowed to a list that no longer includes it (the country was changed after the school
+ * was picked), in which case it counts as unanswered.
+ */
+export function effectiveValue(form: IntakeForm, fieldId: string, raw: (id: string) => string): string {
+  const given = raw(fieldId) ?? ''
+  const allowed = narrowedOptions(form, fieldId, raw)
+  if (!allowed || given.trim() === '') return given
+  return allowed.some((o) => o.toLowerCase() === given.trim().toLowerCase()) ? given : ''
+}
+
+/** A field as it stands for the answers so far: required when a rule makes it so, offering only the options allowed. */
+export function resolveField(form: IntakeForm, f: IntakeField, val: (id: string) => string): IntakeField {
+  const options = narrowedOptions(form, f.id, val)
+  const required = fieldRequired(form, f, val)
+  return options || required !== f.required ? { ...f, required, options: options ?? f.options } : f
 }
 
 // ── Drag payload helpers (native HTML5 DnD) ─────────────────────────────────
@@ -537,82 +610,362 @@ function EmptySlot({ onDropField, wide }: { onDropField: (t: IntakeFieldType) =>
 }
 
 // ── Configuration: if/then rules per question ───────────────────────────────
-function RulesEditor({ form, onRules }: { form: IntakeForm; onRules: (rules: FormRule[]) => void }) {
-  const fields = flattenIntake(form)
-  const answerable = fields.filter((f) => !DISPLAY_TYPES.includes(f.type))
-  const rules = form.rules ?? []
-  const label = (f: IntakeField) => f.label || TYPE_LABEL[f.type]
+const CHOICE_FIELD_TYPES: IntakeFieldType[] = ['dropdown', 'single', 'typeahead']
 
-  const addRule = () =>
-    onRules([
-      ...rules,
-      { id: uid(), action: 'show', targetId: fields[0]?.id ?? '', sourceId: answerable[0]?.id ?? '', op: 'equals', value: '' },
-    ])
-  const patch = (id: string, p: Partial<FormRule>) => onRules(rules.map((r) => (r.id === id ? { ...r, ...p } : r)))
-  const remove = (id: string) => onRules(rules.filter((r) => r.id !== id))
-
+/** One "question · is · value" comparison, as a row of three controls. */
+function ConditionControls({ c, fields, answerable, onChange }: { c: FormCondition; fields: IntakeField[]; answerable: IntakeField[]; onChange: (p: Partial<FormCondition>) => void }) {
   const sel = { fontSize: 12.5, width: 'auto', minWidth: 130 } as const
-
+  const label = (f: IntakeField) => f.label || TYPE_LABEL[f.type]
+  const source = fields.find((f) => f.id === c.sourceId)
+  const sourceOptions = source?.options ?? (source?.type === 'yesno' ? ['Yes', 'No'] : null)
   return (
-    <div className="card" style={{ padding: '16px 18px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-        <span className="eyebrow">If / then rules</span>
-        <span style={{ flex: 1 }} />
-        <button className="btn btn--outline btn--sm" onClick={addRule} disabled={answerable.length === 0}>+ Add rule</button>
-      </div>
-      <p className="muted" style={{ fontSize: 12.5, margin: '0 0 14px' }}>
-        Show or hide a question based on another answer — the form adapts as people fill it. Tip: for
-        regional or school-specific questions, condition on the School (or region) question.
-      </p>
+    <>
+      <select className="select" style={{ ...sel, minWidth: 170 }} value={c.sourceId} onChange={(e) => onChange({ sourceId: e.target.value, value: '' })}>
+        {answerable.map((f) => <option key={f.id} value={f.id}>{label(f)}</option>)}
+      </select>
+      <select className="select" style={sel} value={c.op} onChange={(e) => onChange({ op: e.target.value as FormCondition['op'] })}>
+        <option value="equals">is</option>
+        <option value="not_equals">is not</option>
+        <option value="contains">contains</option>
+      </select>
+      {sourceOptions ? (
+        <select className="select" style={{ ...sel, minWidth: 150 }} value={c.value} onChange={(e) => onChange({ value: e.target.value })}>
+          <option value="">Choose value…</option>
+          {sourceOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      ) : (
+        <input className="input" style={{ fontSize: 12.5, width: 150 }} placeholder="Value" value={c.value} onChange={(e) => onChange({ value: e.target.value })} />
+      )}
+    </>
+  )
+}
 
-      {rules.length === 0 && (
-        <div style={{ border: '2px dashed var(--line)', borderRadius: 'var(--ra-2)', padding: '26px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--ink-4)' }}>
-          No rules yet — every question always shows. Add a rule to make the form dynamic.
+const OP_WORDS: Record<FormCondition['op'], string> = { equals: 'is', not_equals: 'is not', contains: 'contains' }
+const ACTION_WORDS: Record<FormRule['action'], string> = { show: 'Shown', hide: 'Hidden', require: 'Required' }
+
+/* Configuration: the form's questions on the left; click one to set its rules in a pop-up.
+   On the right, every rule in the form as a sentence, so the whole behaviour reads in one place. */
+function RulesEditor({ form, registration, onRules, onChoices }: { form: IntakeForm; /** A student registration form: its School question follows its Country question by itself. */ registration: boolean; onRules: (rules: FormRule[]) => void; onChoices: (choices: FormChoice[]) => void }) {
+  const fields = flattenIntake(form)
+  const rules = form.rules ?? []
+  const choices = form.choices ?? []
+  // On a registration form School follows Country from the Schools list without being set up
+  // here. It counts as a rule all the same, so the list, the panel and the drawing show
+  // everything the form does.
+  const school = fields.find((f) => CHOICE_FIELD_TYPES.includes(f.type) && /school/i.test(f.label))
+  const country = fields.find((f) => CHOICE_FIELD_TYPES.includes(f.type) && /country/i.test(f.label))
+  const AUTO = 'schools-by-country'
+  const drawnChoices: FormChoice[] =
+    registration && school && country
+      ? [...choices.filter((c) => c.targetId !== school.id), { id: AUTO, targetId: school.id, sourceId: country.id, options: {} }]
+      : choices
+  // Clicking a question selects it: the panel beside the list shows what it has. The pop-up
+  // opens only from that panel's button (or from a box on the canvas).
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selected = fields.find((f) => f.id === selectedId) ?? null
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [canvas, setCanvas] = useState(false)
+  const open = fields.find((f) => f.id === openId) ?? null
+  const nameOf = useCallback((f: IntakeField) => f.label || TYPE_LABEL[f.type], [])
+  const kindOf = useCallback((f: IntakeField) => TYPE_LABEL[f.type], [])
+  const openField = useCallback((id: string) => setOpenId(id), [])
+  const label = (id: string) => {
+    const f = fields.find((x) => x.id === id)
+    return f ? f.label || TYPE_LABEL[f.type] : 'a deleted question'
+  }
+  const condition = (c: FormCondition) => `${label(c.sourceId)} ${OP_WORDS[c.op]} ${c.value || '…'}`
+  const sentence = (r: FormRule) => `${ACTION_WORDS[r.action]} when ${[r, ...(r.also ?? [])].map(condition).join(' and ')}`
+  // What each question has: rules that act on it, a dependency it follows, and questions that look at its answer.
+  const rulesOn = (id: string) => rules.filter((r) => r.targetId === id)
+  const followOf = (id: string) => drawnChoices.find((c) => c.targetId === id)
+  const usedBy = (id: string) =>
+    new Set([
+      ...rules.filter((r) => r.targetId !== id && [r, ...(r.also ?? [])].some((c) => c.sourceId === id)).map((r) => r.targetId),
+      ...drawnChoices.filter((c) => c.sourceId === id && c.targetId !== id).map((c) => c.targetId),
+    ]).size
+  const configured = fields.filter((f) => rulesOn(f.id).length > 0 || followOf(f.id))
+
+  const ruleCount = rules.length + drawnChoices.length
+  return (
+    <div>
+    {/* Always in the same place, whatever is selected below. */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+      <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>
+        {ruleCount === 0 ? 'This form has no rules yet.' : `${ruleCount} ${ruleCount === 1 ? 'rule' : 'rules'} on ${configured.length} ${configured.length === 1 ? 'question' : 'questions'}.`}
+      </span>
+      <span style={{ flex: 1 }} />
+      <button className="btn btn--primary btn--sm" onClick={() => setCanvas(true)}>Open canvas</button>
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 340px) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+      <div className="card" style={{ padding: '14px 12px' }}>
+        <div className="eyebrow" style={{ padding: '0 6px 8px' }}>Questions · {fields.length}</div>
+        {fields.length === 0 && <div className="muted" style={{ fontSize: 12.5, padding: '10px 6px' }}>Add questions in the Builder tab first.</div>}
+        {fields.map((f) => {
+          const n = rulesOn(f.id).length
+          const follows = followOf(f.id)
+          const used = usedBy(f.id)
+          return (
+            <button key={f.id} type="button" aria-pressed={selectedId === f.id} onClick={() => setSelectedId(selectedId === f.id ? null : f.id)}
+              style={{ display: 'block', width: '100%', textAlign: 'left', font: 'inherit', cursor: 'pointer', padding: '9px 10px', marginBottom: 4, borderRadius: 'var(--ra-2)', border: `1px solid ${selectedId === f.id ? 'var(--bofa-navy)' : 'transparent'}`, background: selectedId === f.id ? 'var(--navy-050)' : 'transparent' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <FieldIcon kind={f.type} />
+                <span className="t-strong" style={{ fontSize: 13, color: 'var(--ink-0)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.label || TYPE_LABEL[f.type]}</span>
+                <span className={n > 0 || follows ? 'badge badge--info' : 'badge'} style={{ fontSize: 10, opacity: n > 0 || follows ? 1 : 0.6 }}>
+                  {n + (follows ? 1 : 0) === 0 ? 'No rules' : `${n + (follows ? 1 : 0)} ${n + (follows ? 1 : 0) === 1 ? 'rule' : 'rules'}`}
+                </span>
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--ink-4)', marginTop: 3, paddingLeft: 23 }}>
+                {[TYPE_LABEL[f.type], follows ? `follows ${label(follows.sourceId)}` : null, used > 0 ? `${used} ${used === 1 ? 'question depends' : 'questions depend'} on it` : null].filter(Boolean).join(' · ')}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="card" style={{ padding: '16px 18px' }}>
+        {selected ? (
+          /* One question: what it has, and what looks at its answer. */
+          (() => {
+            const own = rulesOn(selected.id)
+            const follows = followOf(selected.id)
+            const name = selected.label || TYPE_LABEL[selected.type]
+            // Rules on other questions that look at this one's answer.
+            const deciding = rules.filter((r) => r.targetId !== selected.id && [r, ...(r.also ?? [])].some((c) => c.sourceId === selected.id))
+            const narrowing = drawnChoices.filter((c) => c.sourceId === selected.id && c.targetId !== selected.id)
+            return (
+              <>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="eyebrow">{TYPE_LABEL[selected.type]}{selected.required ? ' · always required' : ''}</div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, color: 'var(--ink-0)', marginTop: 2 }}>{name}</div>
+                  </div>
+                  <span style={{ flex: 1 }} />
+                  <button className="btn btn--ghost btn--sm" onClick={() => setSelectedId(null)}>All rules</button>
+                  <button className="btn btn--primary btn--sm" onClick={() => setOpenId(selected.id)}>
+                    {own.length > 0 || follows ? 'Edit rules' : 'Add a rule'}
+                  </button>
+                </div>
+
+                <div className="eyebrow" style={{ margin: '18px 0 8px' }}>
+                  Its rules · {own.length + (follows ? 1 : 0)}
+                </div>
+                {own.length === 0 && !follows ? (
+                  <div style={{ border: '2px dashed var(--line)', borderRadius: 'var(--ra-2)', padding: '20px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--ink-4)' }}>
+                    No rules. “{name}” always shows{selected.required ? ' and is always required' : ''}{CHOICE_FIELD_TYPES.includes(selected.type) ? ', with all its options' : ''}.
+                  </div>
+                ) : (
+                  <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {own.map((r) => (
+                      <li key={r.id} style={{ padding: '9px 12px', border: '1px solid var(--line)', borderRadius: 'var(--ra-2)', fontSize: 13, color: 'var(--ink-1)' }}>{sentence(r)}</li>
+                    ))}
+                    {follows && (
+                      <li style={{ padding: '9px 12px', border: '1px solid var(--line)', borderRadius: 'var(--ra-2)', fontSize: 13, color: 'var(--ink-1)' }}>Its options follow {label(follows.sourceId)}{follows.id === AUTO ? ', from the Schools list' : ''}</li>
+                    )}
+                  </ul>
+                )}
+
+                <div className="eyebrow" style={{ margin: '18px 0 8px' }}>
+                  What its answer decides · {deciding.length + narrowing.length}
+                </div>
+                {deciding.length + narrowing.length === 0 ? (
+                  <div className="muted" style={{ fontSize: 12.5, margin: 0 }}>Nothing else in the form looks at this answer.</div>
+                ) : (
+                  <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {deciding.map((r) => (
+                      <li key={r.id}>
+                        <button type="button" onClick={() => setSelectedId(r.targetId)}
+                          style={{ display: 'block', width: '100%', textAlign: 'left', font: 'inherit', cursor: 'pointer', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: 'var(--ra-2)', background: 'var(--app-panel)', fontSize: 13, color: 'var(--ink-1)' }}>
+                          <strong>{label(r.targetId)}</strong>: {sentence(r).charAt(0).toLowerCase() + sentence(r).slice(1)}
+                        </button>
+                      </li>
+                    ))}
+                    {narrowing.map((c) => (
+                      <li key={c.id}>
+                        <button type="button" onClick={() => setSelectedId(c.targetId)}
+                          style={{ display: 'block', width: '100%', textAlign: 'left', font: 'inherit', cursor: 'pointer', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: 'var(--ra-2)', background: 'var(--app-panel)', fontSize: 13, color: 'var(--ink-1)' }}>
+                          <strong>{label(c.targetId)}</strong>: its options follow this answer
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )
+          })()
+        ) : (
+          <>
+        <div className="eyebrow" style={{ marginBottom: 4 }}>How this form behaves</div>
+        <p className="muted" style={{ fontSize: 12.5, margin: '0 0 14px' }}>
+          Pick a question on the left to see its rules and add or change them. Every question with a rule is listed here.
+          Open canvas, above, draws them as boxes and arrows.
+        </p>
+        {configured.length === 0 ? (
+          <div style={{ border: '2px dashed var(--line)', borderRadius: 'var(--ra-2)', padding: '26px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--ink-4)' }}>
+            No rules yet — every question always shows, with all its options.
+          </div>
+        ) : (
+          configured.map((f) => {
+            const follows = followOf(f.id)
+            return (
+              <button key={f.id} type="button" onClick={() => setSelectedId(f.id)}
+                style={{ display: 'block', width: '100%', textAlign: 'left', font: 'inherit', cursor: 'pointer', padding: '10px 12px', marginBottom: 8, borderRadius: 'var(--ra-2)', border: '1px solid var(--line)', background: 'var(--app-panel)' }}>
+                <div className="t-strong" style={{ fontSize: 13.5, color: 'var(--ink-0)' }}>{f.label || TYPE_LABEL[f.type]}</div>
+                <ul style={{ margin: '6px 0 0', padding: '0 0 0 16px', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.6 }}>
+                  {rulesOn(f.id).map((r) => <li key={r.id}>{sentence(r)}</li>)}
+                  {follows && <li>Its options follow {label(follows.sourceId)}{follows.id === AUTO ? ', from the Schools list' : ''}</li>}
+                </ul>
+              </button>
+            )
+          })
+        )}
+          </>
+        )}
+      </div>
+
+    </div>
+      {canvas && (
+        /* The full-screen canvas, set where the workflow canvas sits: under the top menu, beside the side menu. */
+        <div role="dialog" aria-modal="true" aria-label="Rules canvas"
+          style={{ position: 'fixed', zIndex: 150, top: 'calc(var(--shell-chrome-h, 0px) + 0px)', left: 'calc(var(--shell-rail-w, 0px) + 12px)', right: 12, bottom: 12, background: 'var(--app-panel)', borderRadius: 24, boxShadow: '0 10px 40px rgba(16, 22, 38, 0.18)', display: 'flex', flexDirection: 'column', padding: '16px 18px', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <div className="eyebrow">Rules canvas</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, color: 'var(--ink-0)' }}>{form.title || 'This form'}</div>
+            </div>
+            <span style={{ flex: 1 }} />
+            <span className="muted" style={{ fontSize: 12.5, margin: 0 }}>Click a box to change its rules.</span>
+            <button className="btn btn--primary btn--sm" onClick={() => setCanvas(false)}>Back to the list</button>
+          </div>
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <FormRulesCanvas fill fields={fields} rules={rules} choices={drawnChoices} labelOf={nameOf} kindOf={kindOf} onOpen={openField} />
+          </div>
         </div>
       )}
+      {open && <FieldRulesDialog key={open.id} form={form} field={open} onRules={onRules} onChoices={onChoices} onClose={() => setOpenId(null)} />}
+    </div>
+  )
+}
 
-      {rules.map((r) => {
-        const source = fields.find((f) => f.id === r.sourceId)
-        const target = fields.find((f) => f.id === r.targetId)
-        const broken = !source || !target
-        const sourceOptions = source?.options ?? (source?.type === 'yesno' ? ['Yes', 'No'] : null)
-        return (
-          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '10px 12px', border: broken ? '1.5px solid var(--bofa-red, #c41230)' : '1px solid var(--line)', borderRadius: 'var(--ra-2)', marginBottom: 8, background: 'var(--app-panel)' }}>
-            {broken && (
-              <span className="badge badge--danger" style={{ fontSize: 10 }}>
-                References a deleted question — this rule is ignored
-              </span>
-            )}
-            <select className="select" style={sel} value={r.action} onChange={(e) => patch(r.id, { action: e.target.value as FormRule['action'] })}>
-              <option value="show">Show</option>
-              <option value="hide">Hide</option>
-            </select>
-            <select className="select" style={{ ...sel, minWidth: 170 }} value={r.targetId} onChange={(e) => patch(r.id, { targetId: e.target.value })}>
-              {fields.map((f) => <option key={f.id} value={f.id}>{label(f)}</option>)}
-            </select>
-            <span style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>when</span>
-            <select className="select" style={{ ...sel, minWidth: 170 }} value={r.sourceId} onChange={(e) => patch(r.id, { sourceId: e.target.value, value: '' })}>
-              {answerable.map((f) => <option key={f.id} value={f.id}>{label(f)}</option>)}
-            </select>
-            <select className="select" style={sel} value={r.op} onChange={(e) => patch(r.id, { op: e.target.value as FormRule['op'] })}>
-              <option value="equals">is</option>
-              <option value="not_equals">is not</option>
-              <option value="contains">contains</option>
-            </select>
-            {sourceOptions ? (
-              <select className="select" style={{ ...sel, minWidth: 150 }} value={r.value} onChange={(e) => patch(r.id, { value: e.target.value })}>
-                <option value="">Choose value…</option>
-                {sourceOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
-            ) : (
-              <input className="input" style={{ fontSize: 12.5, width: 150 }} placeholder="Value" value={r.value}
-                onChange={(e) => patch(r.id, { value: e.target.value })} />
-            )}
+/* The pop-up for one question: its if/then rules, and (for a choice question) the question its
+   options follow. Changes apply to the form as they are made; the builder's Save stores them. */
+function FieldRulesDialog({ form, field, onRules, onChoices, onClose }: { form: IntakeForm; field: IntakeField; onRules: (rules: FormRule[]) => void; onChoices: (choices: FormChoice[]) => void; onClose: () => void }) {
+  const fields = flattenIntake(form)
+  // A question's rules look at other questions' answers, never its own.
+  const answerable = fields.filter((f) => !DISPLAY_TYPES.includes(f.type) && f.id !== field.id)
+  const rules = form.rules ?? []
+  const mine = rules.filter((r) => r.targetId === field.id)
+  const choices = form.choices ?? []
+  const follow = choices.find((c) => c.targetId === field.id) ?? null
+  const isDisplay = DISPLAY_TYPES.includes(field.type)
+  const isChoice = CHOICE_FIELD_TYPES.includes(field.type)
+  const sources = fields.filter((f) => CHOICE_FIELD_TYPES.includes(f.type) && f.id !== field.id)
+  const followSource = follow ? fields.find((f) => f.id === follow.sourceId) : undefined
+  const name = field.label || TYPE_LABEL[field.type]
+  const label = (f: IntakeField) => f.label || TYPE_LABEL[f.type]
+  const sel = { fontSize: 12.5, width: 'auto', minWidth: 120 } as const
+
+  const patch = (id: string, p: Partial<FormRule>) => onRules(rules.map((r) => (r.id === id ? { ...r, ...p } : r)))
+  const add = () => onRules([...rules, { id: uid(), action: 'show', targetId: field.id, sourceId: answerable[0]?.id ?? '', op: 'equals', value: '' }])
+  const setFollow = (sourceId: string) =>
+    onChoices(sourceId === '' ? choices.filter((c) => c.targetId !== field.id) : follow ? choices.map((c) => (c.targetId === field.id ? { ...c, sourceId, options: {} } : c)) : [...choices, { id: uid(), targetId: field.id, sourceId, options: {} }])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="scrim" style={{ zIndex: 200 }} onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 880, maxHeight: '86vh', display: 'flex', flexDirection: 'column' }} role="dialog" aria-modal="true" aria-label={`Rules for ${name}`} onClick={(e) => e.stopPropagation()}>
+        <div className="modal__head" style={{ paddingBottom: 14, borderBottom: '1px solid var(--line)' }}>
+          <div className="eyebrow">{TYPE_LABEL[field.type]}</div>
+          <h3 style={{ fontSize: 21 }}>Rules for “{name}”</h3>
+        </div>
+
+        <div className="modal__body" style={{ overflowY: 'auto', flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <span className="eyebrow">If / then</span>
             <span style={{ flex: 1 }} />
-            <button className="btn btn--ghost btn--sm" aria-label="Delete rule" onClick={() => remove(r.id)}>×</button>
+            <button className="btn btn--outline btn--sm" onClick={add} disabled={answerable.length === 0}>+ Add rule</button>
           </div>
-        )
-      })}
+          {mine.length === 0 && (
+            <div style={{ border: '2px dashed var(--line)', borderRadius: 'var(--ra-2)', padding: '20px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--ink-4)' }}>
+              {answerable.length === 0 ? 'Add another question first: a rule looks at another question\'s answer.' : `No rules: “${name}” always shows${field.required ? ' and is always required' : ''}.`}
+            </div>
+          )}
+          {mine.map((r) => {
+            const also = r.also ?? []
+            const broken = [r, ...also].some((c) => !fields.some((f) => f.id === c.sourceId))
+            const setAlso = (i: number, p: Partial<FormCondition>) => patch(r.id, { also: also.map((c, j) => (j === i ? { ...c, ...p } : c)) })
+            return (
+              <div key={r.id} style={{ padding: '10px 12px', border: broken ? '1.5px solid var(--bofa-red, #c41230)' : '1px solid var(--line)', borderRadius: 'var(--ra-2)', marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {broken && <span className="badge badge--danger" style={{ fontSize: 10 }}>References a deleted question — this rule is ignored</span>}
+                  <select className="select" style={sel} value={r.action} aria-label="What the rule does" onChange={(e) => patch(r.id, { action: e.target.value as FormRule['action'] })}>
+                    <option value="show">Show it</option>
+                    <option value="hide">Hide it</option>
+                    {!isDisplay && <option value="require">Require it</option>}
+                  </select>
+                  <span style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>when</span>
+                  <ConditionControls c={r} fields={fields} answerable={answerable} onChange={(p) => patch(r.id, p)} />
+                  <span style={{ flex: 1 }} />
+                  <button className="btn btn--ghost btn--sm" aria-label="Delete rule" onClick={() => onRules(rules.filter((x) => x.id !== r.id))}>×</button>
+                </div>
+                {also.map((c, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                    <span style={{ fontSize: 12.5, color: 'var(--ink-4)', minWidth: 166, textAlign: 'right' }}>and</span>
+                    <ConditionControls c={c} fields={fields} answerable={answerable} onChange={(p) => setAlso(i, p)} />
+                    <button className="btn btn--ghost btn--sm" aria-label="Remove this condition" onClick={() => patch(r.id, { also: also.filter((_, j) => j !== i) })}>×</button>
+                  </div>
+                ))}
+                <button className="btn btn--ghost btn--sm" style={{ marginTop: 6, fontSize: 12 }}
+                  onClick={() => patch(r.id, { also: [...also, { sourceId: answerable[0]?.id ?? '', op: 'equals', value: '' }] })}>
+                  + and another answer
+                </button>
+              </div>
+            )
+          })}
+          {mine.length > 0 && (
+            <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
+              With a Show rule the question starts hidden and appears when any Show rule matches. A matching Hide rule always wins. It is only required while it is shown.
+            </p>
+          )}
+
+          {isChoice && (
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
+              <div className="eyebrow" style={{ marginBottom: 8 }}>Options that follow another answer</div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: 'var(--ink-2)', flexWrap: 'wrap' }}>
+                The options of “{name}” depend on
+                <select className="select" style={{ ...sel, minWidth: 190 }} value={follow?.sourceId ?? ''} onChange={(e) => setFollow(e.target.value)}>
+                  <option value="">nothing: always the full list</option>
+                  {sources.map((f) => <option key={f.id} value={f.id}>{label(f)}</option>)}
+                </select>
+              </label>
+              {follow && followSource && (followSource.options ?? []).length === 0 && (
+                <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>Give “{label(followSource)}” some options first.</div>
+              )}
+              {follow && followSource && (followSource.options ?? []).map((answer) => (
+                <label key={answer} style={{ display: 'grid', gridTemplateColumns: '190px 1fr', gap: 10, alignItems: 'start', marginTop: 8, fontSize: 12.5, color: 'var(--ink-2)' }}>
+                  <span style={{ paddingTop: 7 }}>When it is <strong>{answer}</strong>, offer</span>
+                  <textarea className="input" rows={2} style={{ fontSize: 12.5 }} placeholder="One option per line (leave empty for the full list)"
+                    value={(follow.options[answer] ?? []).join('\n')}
+                    onChange={(e) => onChoices(choices.map((c) => (c.id === follow.id ? { ...c, options: { ...c.options, [answer]: e.target.value.split('\n') } } : c)))} />
+                </label>
+              ))}
+              {/school/i.test(name) && (
+                <p className="muted" style={{ fontSize: 12, margin: '10px 0 0' }}>
+                  On an event registration form, a School question follows a Country question by itself, from the Schools list. Nothing needs listing here for that.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="modal__foot">
+          <button className="btn btn--primary btn--sm" onClick={onClose}>Done</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -620,8 +973,9 @@ function RulesEditor({ form, onRules }: { form: IntakeForm; onRules: (rules: For
 // ── Live preview: interactive, rules evaluated as you answer ────────────────
 function LivePreview({ form }: { form: IntakeForm }) {
   const [answers, setAnswers] = useState<Record<string, Answer>>({})
-  const val = (id: string) => answerText(answers[id])
-  const ruleCount = (form.rules ?? []).length
+  const raw = (id: string) => answerText(answers[id])
+  const val = (id: string) => effectiveValue(form, id, raw)
+  const ruleCount = (form.rules ?? []).length + (form.choices ?? []).length
   return (
     <div className="card" style={{ maxWidth: 680, margin: '0 auto', overflow: 'hidden' }}>
       <div style={{ background: 'var(--bofa-navy)', color: '#fff', padding: '14px 18px' }}>
@@ -639,7 +993,7 @@ function LivePreview({ form }: { form: IntakeForm }) {
           return (
             <div key={r.id} style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(shown.length, 1)}, minmax(0, 1fr))`, gap: 14 }}>
               {shown.map((sl) => (
-                <IntakeInput key={sl.id} f={sl} value={answers[sl.id]} onChange={(v) => setAnswers((prev) => ({ ...prev, [sl.id]: v }))} />
+                <IntakeInput key={sl.id} f={resolveField(form, sl, val)} value={val(sl.id) === '' && raw(sl.id) !== '' ? undefined : answers[sl.id]} onChange={(v) => setAnswers((prev) => ({ ...prev, [sl.id]: v }))} />
               ))}
             </div>
           )
@@ -953,8 +1307,13 @@ export default function FormBuilder() {
       {mode === 'config' && (
         <RulesEditor
           form={form}
+          registration={meta.key === 'EVENT_REGISTRATION'}
           onRules={(rules) => {
             setForm((prev) => ({ ...normalizeIntake(prev ?? meta.fallback()), rules, updatedAt: new Date().toISOString() }))
+            setDirty(true)
+          }}
+          onChoices={(choices) => {
+            setForm((prev) => ({ ...normalizeIntake(prev ?? meta.fallback()), choices, updatedAt: new Date().toISOString() }))
             setDirty(true)
           }}
         />

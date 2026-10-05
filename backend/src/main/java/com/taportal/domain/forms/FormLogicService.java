@@ -41,7 +41,18 @@ import org.springframework.web.server.ResponseStatusException;
  *   <li>Any matching HIDE rule hides the field, overriding shows</li>
  *   <li>Operators: equals / not_equals (case-insensitive; multi-answers are
  *       "a, b" joined and match per-option) and contains (substring)</li>
+ *   <li>A rule can carry further conditions ({@code also}); it matches only when its first
+ *       condition and every further one hold ("School is X <em>and</em> Year is 2027")</li>
+ *   <li>A REQUIRE rule makes its target required while it matches. A question is required
+ *       when it is marked required or any of its require-rules matches, and only while visible</li>
  * </ul>
+ *
+ * <h3>Choices that depend on another answer</h3>
+ * <p>A form can say that a choice question's options depend on another question's answer
+ * ({@code choices}: target, source, and the options for each answer of the source). While the
+ * source has an answer the form lists options for, the target offers those and accepts only
+ * those; otherwise it offers its own full list. So "Country → School" shows only that
+ * country's schools.</p>
  *
  * @see FormDefinition
  * @see com.taportal.api.FormController
@@ -65,7 +76,14 @@ public class FormLogicService {
      */
     public record Field(String id, String label, String type, boolean required, List<String> options) {}
 
-    private record Rule(String action, String targetId, String sourceId, String op, String value) {}
+    /** One comparison: a question's answer against a value. */
+    private record Cond(String sourceId, String op, String value) {}
+
+    /** {@code also}: further conditions that must hold as well. */
+    private record Rule(String action, String targetId, String sourceId, String op, String value, List<Cond> also) {}
+
+    /** A choice question whose options depend on another question's answer. Keys are lower-cased answers. */
+    private record Choice(String targetId, String sourceId, Map<String, List<String>> options) {}
 
     /**
      * Validate a submission against the form's rules and return the sanitized
@@ -110,13 +128,23 @@ public class FormLogicService {
             visible.put(f.id(), isVisible(f.id(), rules, valueById));
         }
 
-        // Required-if-visible: fail fast with the question named in the message.
+        // Required-if-visible: fail fast with the question named in the message. A question is
+        // required when it is marked so, or while one of its require-rules matches.
+        List<Choice> choices = validChoices(readChoices(schema), fields);
         for (Field f : fields) {
             boolean isDisplay = DISPLAY_TYPES.contains(f.type());
-            if (!isDisplay && f.required() && visible.get(f.id())
+            if (!isDisplay && isRequired(f, rules, valueById) && visible.get(f.id())
                     && valueById.getOrDefault(f.id(), "").isBlank()) {
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "Required question has no answer: " + f.label());
+            }
+            // A choice that depends on another answer accepts only the options that answer allows.
+            List<String> allowed = narrowed(f, choices, valueById);
+            String given = valueById.getOrDefault(f.id(), "").trim();
+            if (allowed != null && visible.get(f.id()) && !given.isEmpty()
+                    && allowed.stream().noneMatch(o -> o.equalsIgnoreCase(given))) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "“" + given + "” is not one of the choices for " + f.label());
             }
         }
 
@@ -148,13 +176,50 @@ public class FormLogicService {
         fields.forEach(f -> known.add(f.id()));
         return rules.stream()
                 .filter(r -> known.contains(r.targetId()) && known.contains(r.sourceId()))
+                // A further condition on a deleted question cannot be judged: the rule is ignored whole,
+                // not quietly made broader.
+                .filter(r -> r.also().stream().allMatch(c -> known.contains(c.sourceId())))
                 .toList();
+    }
+
+    private List<Choice> validChoices(List<Choice> choices, List<Field> fields) {
+        Set<String> known = new java.util.HashSet<>();
+        fields.forEach(f -> known.add(f.id()));
+        return choices.stream()
+                .filter(c -> known.contains(c.targetId()) && known.contains(c.sourceId()) && !c.targetId().equals(c.sourceId()))
+                .toList();
+    }
+
+    /** Marked required, or made so by a require-rule that matches. */
+    private boolean isRequired(Field f, List<Rule> rules, Map<String, String> valueById) {
+        return f.required() || rules.stream()
+                .filter(r -> r.action().equals("require") && r.targetId().equals(f.id()) && !r.value().isEmpty())
+                .anyMatch(r -> matches(r, valueById));
+    }
+
+    /**
+     * The options a dependent choice is narrowed to by the answers so far; null when it is not
+     * narrowed (it depends on nothing, its source is unanswered, or the form lists nothing for
+     * that answer), in which case its own options stand.
+     */
+    private List<String> narrowed(Field f, List<Choice> choices, Map<String, String> valueById) {
+        for (Choice c : choices) {
+            if (c.targetId().equals(f.id())) {
+                String answer = valueById.getOrDefault(c.sourceId(), "").trim().toLowerCase(Locale.ROOT);
+                List<String> options = c.options().get(answer);
+                if (!answer.isEmpty() && options != null && !options.isEmpty()) {
+                    return options;
+                }
+            }
+        }
+        return null;
     }
 
     /** Mirror of the client's fieldVisible(): show-rules gate, hide-rules override. */
     private boolean isVisible(String fieldId, List<Rule> rules, Map<String, String> valueById) {
         List<Rule> mine = rules.stream()
                 .filter(r -> r.targetId().equals(fieldId) && !r.sourceId().isEmpty() && !r.value().isEmpty())
+                .filter(r -> r.action().equals("show") || r.action().equals("hide"))
                 .toList();
         if (mine.isEmpty()) {
             return true;
@@ -167,7 +232,15 @@ public class FormLogicService {
         return hides.stream().noneMatch(r -> matches(r, valueById));
     }
 
+    /** The rule's first condition and every further one. A further condition left unfinished asks nothing. */
     private boolean matches(Rule r, Map<String, String> valueById) {
+        return holds(new Cond(r.sourceId(), r.op(), r.value()), valueById)
+                && r.also().stream()
+                        .filter(c -> !c.sourceId().isEmpty() && !c.value().isEmpty())
+                        .allMatch(c -> holds(c, valueById));
+    }
+
+    private boolean holds(Cond r, Map<String, String> valueById) {
         String v = valueById.getOrDefault(r.sourceId(), "").trim().toLowerCase(Locale.ROOT);
         String want = r.value().trim().toLowerCase(Locale.ROOT);
         // Multi-select answers arrive joined as "a, b" — equals matches per option.
@@ -184,14 +257,24 @@ public class FormLogicService {
         return readFields(parse(schemaJson, "form schema"));
     }
 
-    /** Answerable fields currently visible given the in-progress answers, in form order. */
+    /**
+     * Answerable fields currently visible given the in-progress answers, in form order, each as
+     * it stands for those answers: required when a require-rule makes it so, and offering only
+     * the options its dependency allows.
+     */
     public List<Field> visibleAnswerableFields(String schemaJson, Map<String, String> answers) {
         JsonNode schema = parse(schemaJson, "form schema");
         List<Field> all = readFields(schema);
         List<Rule> rules = validRules(readRules(schema), all);
+        List<Choice> choices = validChoices(readChoices(schema), all);
         return all.stream()
                 .filter(f -> !DISPLAY_TYPES.contains(f.type()))
                 .filter(f -> isVisible(f.id(), rules, answers))
+                .map(f -> {
+                    List<String> narrowed = narrowed(f, choices, answers);
+                    return new Field(f.id(), f.label(), f.type(), isRequired(f, rules, answers),
+                            narrowed != null ? narrowed : f.options());
+                })
                 .toList();
     }
 
@@ -219,12 +302,35 @@ public class FormLogicService {
     private List<Rule> readRules(JsonNode schema) {
         List<Rule> out = new ArrayList<>();
         for (JsonNode r : schema.path("rules")) {
+            List<Cond> also = new ArrayList<>();
+            for (JsonNode c : r.path("also")) {
+                also.add(new Cond(c.path("sourceId").asText(""), c.path("op").asText("equals"), c.path("value").asText("")));
+            }
             out.add(new Rule(
                     r.path("action").asText("show"),
                     r.path("targetId").asText(""),
                     r.path("sourceId").asText(""),
                     r.path("op").asText("equals"),
-                    r.path("value").asText("")));
+                    r.path("value").asText(""),
+                    also));
+        }
+        return out;
+    }
+
+    private List<Choice> readChoices(JsonNode schema) {
+        List<Choice> out = new ArrayList<>();
+        for (JsonNode c : schema.path("choices")) {
+            Map<String, List<String>> options = new HashMap<>();
+            c.path("options").fields().forEachRemaining(e -> {
+                List<String> list = new ArrayList<>();
+                e.getValue().forEach(o -> {
+                    if (!o.asText("").isBlank()) {
+                        list.add(o.asText().trim());
+                    }
+                });
+                options.put(e.getKey().trim().toLowerCase(Locale.ROOT), list);
+            });
+            out.add(new Choice(c.path("targetId").asText(""), c.path("sourceId").asText(""), options));
         }
         return out;
     }
