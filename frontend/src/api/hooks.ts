@@ -10,6 +10,7 @@ import type {
   EventRegistration,
   EventSeatSettings,
   EventTemplate,
+  EventUpdate,
   SchoolReportRow,
   RegisterAttendeeInput,
   AnalyticsSummary,
@@ -232,7 +233,11 @@ export function useSubmitFormResponse() {
   return useMutation({
     mutationFn: ({ purpose, subjectType, subjectId, answers, formId }: { purpose: string; subjectType: string; subjectId: string; answers: string; formId?: string }) =>
       api.post(`/forms/${purpose}/responses`, { subjectType, subjectId, answers, formId }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['form-responses'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['form-responses'] })
+      // An event's intake answers set its seats, deadline and waitlist on the server.
+      qc.invalidateQueries({ queryKey: ['events'] })
+    },
   })
 }
 
@@ -324,6 +329,15 @@ export function useDeleteEventTemplate() {
   return useMutation({
     mutationFn: (id: string) => api.delete(`/event-templates/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['event-templates'] }),
+  })
+}
+
+/** Changes an event's details. Moving it (date, time, place, format) sends an approved event back for approval. */
+export function useUpdateEvent() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ eventId, input }: { eventId: string; input: EventUpdate }) => api.put<EventRow>(`/events/${eventId}`, input).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }),
   })
 }
 

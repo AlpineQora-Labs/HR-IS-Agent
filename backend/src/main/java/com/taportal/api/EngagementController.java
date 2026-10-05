@@ -47,6 +47,14 @@ public class EngagementController {
         return engagementService.createEvent(request);
     }
 
+    /** Changes an event's details. A change to when or where it is held sends an approved event back for approval. */
+    @org.springframework.web.bind.annotation.PutMapping("/events/{id}")
+    public EventRow updateEvent(
+            @org.springframework.web.bind.annotation.PathVariable java.util.UUID id,
+            @RequestBody com.taportal.api.EngagementDtos.EventUpdate request) {
+        return engagementService.updateEvent(id, request);
+    }
+
     /** Sends an event for approval again: after a rejection, or when no workflow was on when it was created. */
     @PostMapping("/events/{id}/send-for-approval")
     public EventRow sendForApproval(@org.springframework.web.bind.annotation.PathVariable java.util.UUID id) {

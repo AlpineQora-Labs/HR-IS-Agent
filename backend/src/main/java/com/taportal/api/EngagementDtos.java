@@ -60,6 +60,19 @@ public final class EngagementDtos {
             /** Whether students can see it now: approved, and its publishing moment has come. */
             boolean published) {}
 
+    /**
+     * What can be changed about an event after it is created. Changing when or where it is held
+     * (date, time, timezone, place, format) sends an approved event back for approval.
+     */
+    public record EventUpdate(
+            String name,
+            String type,
+            String location,
+            OffsetDateTime startsAt,
+            OffsetDateTime endsAt,
+            String timezone,
+            String format) {}
+
     /** Create payload for a new recruiting event. */
     public record EventCreate(
             String name,

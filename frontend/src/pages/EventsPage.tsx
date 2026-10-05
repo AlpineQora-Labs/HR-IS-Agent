@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { useStore } from '@/state/store'
 import SlideOver from '@/components/SlideOver'
-import { useCreateEvent, useEvents, useEventRoster, useRegisterAttendee, useRegistrationTransition, useSchools, useFormResponses, useSubmitFormResponse, useFormDefById, useFormsList, useEvaluateRegistration, usePutForward, useEventSeats, useJobs, useSchoolReport, useEventTemplates, useSendEventForApproval, useAddSchool } from '@/api/hooks'
+import { useCreateEvent, useEvents, useEventRoster, useRegisterAttendee, useRegistrationTransition, useSchools, useFormResponses, useSubmitFormResponse, useFormDefById, useFormsList, useEvaluateRegistration, usePutForward, useEventSeats, useJobs, useSchoolReport, useEventTemplates, useSendEventForApproval, useAddSchool, useUpdateEvent } from '@/api/hooks'
 import { date } from '@/lib/format'
 import type { EventRow, EventRegistration } from '@/api/types'
 import { DISPLAY_TYPES, effectiveValue, fieldVisible, INTAKE_KEY, defaultIntakeForm, flattenIntake, normalizeIntake, resolveField, type IntakeField, type IntakeForm } from './admin/FormBuilder'
@@ -132,6 +132,7 @@ function Meter({ label, pct, color }: { label: string; pct: number; color: strin
 }
 
 function EventDetail({ e, onClose }: { e: EventRow; onClose: () => void }) {
+  const [editing, setEditing] = useState(false)
   const { data: serverResponses } = useFormResponses('EVENT', e.id)
   const intakeDetails = useMemo(() => {
     const fromServer = (serverResponses ?? []).flatMap((r) => {
@@ -141,7 +142,11 @@ function EventDetail({ e, onClose }: { e: EventRow; onClose: () => void }) {
         return []
       }
     })
-    return fromServer.length > 0 ? fromServer : readResponses(e.id)
+    // Seats, the deadline and the waitlist are settings of the event now, shown (and changed)
+    // under Seats below: the answer first typed for them is not repeated here, where it could
+    // disagree with what the event has since been set to.
+    const seatAnswer = (label: string) => /capacity|deadline|waitlist/i.test(label)
+    return (fromServer.length > 0 ? fromServer : readResponses(e.id)).filter((r) => !seatAnswer(r.label))
   }, [serverResponses, e.id])
   return (
     <SlideOver label={`${e.name} details`} onClose={onClose} width={480}>
@@ -150,12 +155,15 @@ function EventDetail({ e, onClose }: { e: EventRow; onClose: () => void }) {
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, color: 'var(--ink-0)', lineHeight: 1.2 }}>{e.name}</div>
           <button type="button" onClick={onClose} aria-label="Close" style={{ border: 0, background: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--ink-4)' }}>×</button>
         </div>
-        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+        <div style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }}>
           <span className={`badge ${typeBadge(e.type)}`}>{typeLabel(e.type)}</span>
           <span className="badge">{formatOf(e)}</span>
+          <span style={{ flex: 1 }} />
+          {!editing && <button className="btn btn--outline btn--sm" style={{ fontSize: 11.5, padding: '2px 10px' }} onClick={() => setEditing(true)}>Edit details</button>}
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+        {editing && <EditDetails e={e} onDone={() => setEditing(false)} />}
         <Fact label="When">{`${date(e.startsAt)} · ${timeRange(e)}`}</Fact>
         <Fact label={formatOf(e) === 'Virtual' ? 'Link' : 'Location'}>{e.location || '—'}</Fact>
         <Fact label="Status">{isUpcoming(e.startsAt) ? 'Upcoming' : 'Past'}</Fact>
@@ -216,6 +224,104 @@ function RegistrationQr({ eventId }: { eventId: string }) {
   )
 }
 
+/* Changing an event after it is created. What an approver signed off is when and where it is
+   held, so moving it sends an approved event back for approval and takes it off the careers site
+   until it is approved again. Its name and kind can be corrected freely. */
+function EditDetails({ e, onDone }: { e: EventRow; onDone: () => void }) {
+  const update = useUpdateEvent()
+  const tz0 = e.timezone || 'America/New_York'
+  const start = partsIn(e.startsAt, tz0)
+  const end = e.endsAt ? partsIn(e.endsAt, tz0) : null
+  const [d, setD] = useState({
+    name: e.name, type: e.type.toUpperCase(), format: e.format ?? (formatOf(e) === 'Virtual' ? 'VIRTUAL' : 'IN_PERSON'),
+    location: e.location ?? '', day: start.day, time: start.time, endTime: end?.time ?? '', timezone: tz0,
+  })
+  const set = (patch: Partial<typeof d>) => setD((prev) => ({ ...prev, ...patch }))
+  const endAfterStart = !d.endTime || d.endTime > d.time
+  const approved = e.approvalStatus === 'APPROVED' || e.approvalStatus === 'AUTO_APPROVED' || e.approvalStatus === null
+  const startsAt = d.day && d.time ? zonedToIso(d.day, d.time, d.timezone) : ''
+  const endsAt = d.day && d.endTime ? zonedToIso(d.day, d.endTime, d.timezone) : undefined
+  // The same test the server applies: is it being moved, or only renamed?
+  const moved =
+    startsAt !== '' &&
+    (new Date(startsAt).getTime() !== new Date(e.startsAt).getTime() ||
+      (endsAt ? new Date(endsAt).getTime() : null) !== (e.endsAt ? new Date(e.endsAt).getTime() : null) ||
+      d.timezone !== tz0 ||
+      d.location.trim() !== (e.location ?? '').trim() ||
+      (e.format !== null && d.format !== e.format))
+  const valid = d.name.trim() !== '' && d.day !== '' && d.time !== '' && endAfterStart
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px', border: '1px solid var(--line)', borderRadius: 'var(--ra-2)', marginBottom: 14 }}>
+      <div className="eyebrow">Edit details</div>
+      <label style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>
+        Event name
+        <input className="input" value={d.name} onChange={(ev) => set({ name: ev.target.value })} />
+      </label>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <label style={{ flex: 1, fontSize: 11.5, color: 'var(--ink-4)' }}>
+          Type
+          <select className="select" value={d.type} onChange={(ev) => set({ type: ev.target.value })}>
+            {TYPE_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </label>
+        <label style={{ flex: 1, fontSize: 11.5, color: 'var(--ink-4)' }}>
+          Format
+          <select className="select" value={d.format} onChange={(ev) => set({ format: ev.target.value })}>
+            <option value="IN_PERSON">In-person</option>
+            <option value="VIRTUAL">Virtual</option>
+            <option value="HYBRID">Hybrid</option>
+          </select>
+        </label>
+      </div>
+      <label style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>
+        {d.format === 'VIRTUAL' ? 'Meeting link' : 'Location / campus'}
+        <input className="input" value={d.location} onChange={(ev) => set({ location: ev.target.value })} />
+      </label>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <label style={{ flex: 1.3, fontSize: 11.5, color: 'var(--ink-4)' }}>
+          Date
+          <input className="input" type="date" value={d.day} onChange={(ev) => set({ day: ev.target.value })} />
+        </label>
+        <label style={{ flex: 1, fontSize: 11.5, color: 'var(--ink-4)' }}>
+          Start
+          <input className="input" type="time" value={d.time} onChange={(ev) => set({ time: ev.target.value })} />
+        </label>
+        <label style={{ flex: 1, fontSize: 11.5, color: 'var(--ink-4)' }}>
+          End
+          <input className="input" type="time" value={d.endTime} onChange={(ev) => set({ endTime: ev.target.value })} />
+        </label>
+      </div>
+      <label style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>
+        Timezone
+        <select className="select" value={d.timezone} onChange={(ev) => set({ timezone: ev.target.value })}>
+          {!TIMEZONES.some((t) => t.value === d.timezone) && <option value={d.timezone}>{d.timezone}</option>}
+          {TIMEZONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
+      </label>
+      {!endAfterStart && <div style={{ fontSize: 12, color: 'var(--danger-fg, #b3261e)' }}>The end time must be after the start time.</div>}
+      {moved && approved && (
+        <div style={{ fontSize: 12.5, lineHeight: 1.5, padding: '8px 10px', borderRadius: 'var(--ra-2)', background: 'var(--warn-bg, #fdf3dc)', color: 'var(--ink-1)' }}>
+          You are changing when or where this event is held. Saving sends it back for approval, and it comes off the careers site until it is approved again.
+          {e.registrations > 0 ? ` ${e.registrations} ${e.registrations === 1 ? 'student is' : 'students are'} registered and will not be told by this change: let them know yourself.` : ''}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn btn--primary btn--sm" disabled={!valid || update.isPending}
+          onClick={() => update.mutate({ eventId: e.id, input: { name: d.name.trim(), type: d.type, location: d.location.trim(), startsAt, endsAt, timezone: d.timezone, format: d.format } }, { onSuccess: onDone })}>
+          {update.isPending ? 'Saving…' : moved && approved ? 'Save and send for approval' : 'Save'}
+        </button>
+        <button className="btn btn--ghost btn--sm" onClick={onDone}>Cancel</button>
+      </div>
+      {update.isError && (
+        <div style={{ fontSize: 12, color: 'var(--c-red, #c41230)' }}>
+          {(update.error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not save. Try again.'}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* An event that was rejected, or created while no approval workflow was switched on, is sent
    for approval from here. It cannot go on the careers site any other way. */
 function SendForApproval({ e }: { e: EventRow }) {
@@ -253,6 +359,8 @@ function Seats({ e }: { e: EventRow }) {
   const [editing, setEditing] = useState(false)
   const [capacity, setCapacity] = useState('')
   const [closeDay, setCloseDay] = useState('')
+  // The deadline is a moment, shown here as a day. Unless the day is changed, the moment is kept as it was.
+  const [closeDayWas, setCloseDayWas] = useState('')
   const [waitlist, setWaitlist] = useState(false)
   const [formId, setFormId] = useState('')
   const [publishDay, setPublishDay] = useState('')
@@ -268,7 +376,9 @@ function Seats({ e }: { e: EventRow }) {
   const open = () => {
     setCapacity(e.capacity === null ? '' : String(e.capacity))
     // Registration closes at the end of the chosen day, so the day shown is the one before the instant.
-    setCloseDay(e.registrationClosesAt ? dayIn(new Date(new Date(e.registrationClosesAt).getTime() - 60_000).toISOString(), tz) : '')
+    const day = e.registrationClosesAt ? dayIn(new Date(new Date(e.registrationClosesAt).getTime() - 60_000).toISOString(), tz) : ''
+    setCloseDay(day)
+    setCloseDayWas(day)
     setWaitlist(e.waitlistEnabled)
     setFormId(e.registrationFormId ?? '')
     const at = e.publishAt ? partsIn(e.publishAt, tz) : null
@@ -280,7 +390,9 @@ function Seats({ e }: { e: EventRow }) {
     const n = capacity.trim() === '' ? null : Number(capacity)
     if (n !== null && (!Number.isInteger(n) || n < 1)) return
     let closesAt: string | null = null
-    if (closeDay) {
+    if (closeDay && closeDay === closeDayWas) {
+      closesAt = e.registrationClosesAt
+    } else if (closeDay) {
       const next = new Date(`${closeDay}T00:00:00Z`)
       next.setUTCDate(next.getUTCDate() + 1)
       closesAt = zonedToIso(next.toISOString().slice(0, 10), '00:00', tz)
@@ -772,7 +884,26 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
     if (t.intakeFormId) setIntakeFormId(t.intakeFormId)
     setRegistrationFormId(t.registrationFormId ?? '')
     setAnswers({})
+    setPrefillFrom(t.id)
   }
+  // Where the intake form asks for seats and the waitlist, the template's answers are filled in
+  // to start with: there is one number on the event, and the intake form is where it is typed.
+  const [prefillFrom, setPrefillFrom] = useState<string | null>(null)
+  useEffect(() => {
+    const t = templates.find((x) => x.id === prefillFrom)
+    if (!t || !intakeDef) return
+    const filled: Record<string, Answer> = {}
+    for (const f of flattenIntake(intake)) {
+      const label = f.label.toLowerCase()
+      if (f.type === 'number' && label.includes('capacity') && t.capacity !== null) filled[f.id] = String(t.capacity)
+      if (f.type === 'yesno' && label.includes('waitlist')) filled[f.id] = t.waitlistEnabled ? 'Yes' : 'No'
+    }
+    setAnswers((prev) => ({ ...filled, ...prev }))
+    setPrefillFrom(null)
+    // Runs once per template pick, when that template's intake form has loaded.
+  }, [prefillFrom, intakeDef])
+  // Seats are shown once on the Review step: from the intake form when it asks, else from the template.
+  const intakeAsksSeats = flattenIntake(intake).some((f) => f.type === 'number' && f.label.toLowerCase().includes('capacity'))
   const publishBeforeStart = !d.publishDay || !d.day || d.publishDay <= d.day
 
   const endAfterStart = !d.endTime || !d.time || d.endTime > d.time
@@ -986,7 +1117,7 @@ function CreateEventWizard({ onClose, onCreated }: { onClose: () => void; onCrea
                   ? `${template.publishDaysBefore} days before the event, once approved`
                   : 'As soon as it is approved'}
             </Fact>
-            {template && templateFacts(template).slice(1, 3).map((f) => <Fact key={f} label="From the template">{f}</Fact>)}
+            {template && templateFacts(template).slice(intakeAsksSeats ? 2 : 1, 3).map((f) => <Fact key={f} label="From the template">{f}</Fact>)}
             <div style={{ fontSize: 11.5, color: 'var(--ink-4)', marginTop: 12, lineHeight: 1.5 }}>
               Creating the event sends it for review and approval. Students cannot see it until it is approved and its careers-site date has come.
             </div>

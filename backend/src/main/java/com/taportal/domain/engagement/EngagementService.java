@@ -182,6 +182,87 @@ public class EngagementService {
     }
 
     /**
+     * Changes an event's details.
+     *
+     * <p>Rule: what was approved is when and where the event is held. So changing its date,
+     * time, timezone, place or format after approval sends it back for approval, and it comes
+     * off the careers site until it is approved again. Its name and kind can be corrected
+     * without that. A registration deadline or publishing moment that the new start time makes
+     * impossible (it would now fall on or after the start) is cleared, not silently kept.
+     *
+     * @return the event as it now stands, with its approval status
+     */
+    @Transactional
+    public EventRow updateEvent(java.util.UUID eventId, com.taportal.api.EngagementDtos.EventUpdate in) {
+        RecruitingEvent e = eventRepository.findById(eventId)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("Event not found: " + eventId));
+        if (in.name() == null || in.name().isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "Give the event a name");
+        }
+        if (in.startsAt() == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "Give the event a date and start time");
+        }
+        if (in.endsAt() != null && !in.endsAt().isAfter(in.startsAt())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "Event end time must be after the start time");
+        }
+        String timezone = in.timezone() != null && !in.timezone().isBlank() ? in.timezone() : e.getTimezone();
+        String format = in.format() != null && !in.format().isBlank() ? in.format() : e.getFormat();
+        String location = in.location() == null ? null : in.location().trim();
+        boolean moved = whenOrWhereChanged(e, in.startsAt(), in.endsAt(), timezone, location, format);
+
+        e.setName(in.name().trim());
+        if (in.type() != null && !in.type().isBlank()) {
+            e.setType(in.type());
+        }
+        e.setLocation(location);
+        e.setStartsAt(in.startsAt());
+        e.setEndsAt(in.endsAt());
+        e.setTimezone(timezone);
+        e.setFormat(format);
+        if (e.getRegistrationClosesAt() != null && e.getRegistrationClosesAt().isAfter(e.getStartsAt())) {
+            e.setRegistrationClosesAt(null);
+        }
+        if (e.getPublishAt() != null && !e.getPublishAt().isBefore(e.getStartsAt())) {
+            e.setPublishAt(null);
+        }
+        eventRepository.save(e);
+
+        String latest = latestEventApprovals().getOrDefault(eventId.toString(), e.isApprovalRequired() ? "NOT_SENT" : null);
+        boolean wasApproved = "APPROVED".equals(latest) || "AUTO_APPROVED".equals(latest)
+                // An event from before approval was required counts as approved until it is moved.
+                || (latest == null && !e.isApprovalRequired());
+        if (moved && wasApproved) {
+            e.setApprovalRequired(true);
+            eventRepository.save(e);
+            return toEventRow(e, sendForApproval(e, null));
+        }
+        return toEventRow(e, latest);
+    }
+
+    /** Whether a change is to when or where the event is held: the part an approver signed off. */
+    static boolean whenOrWhereChanged(
+            RecruitingEvent e, java.time.OffsetDateTime startsAt, java.time.OffsetDateTime endsAt,
+            String timezone, String location, String format) {
+        return !sameInstant(e.getStartsAt(), startsAt)
+                || !sameInstant(e.getEndsAt(), endsAt)
+                || !java.util.Objects.equals(e.getTimezone(), timezone)
+                || !java.util.Objects.equals(blankToNull(e.getLocation()), blankToNull(location))
+                // An event from before formats were recorded has none: giving it one is not moving it.
+                || (e.getFormat() != null && !java.util.Objects.equals(e.getFormat(), format));
+    }
+
+    private static boolean sameInstant(java.time.OffsetDateTime a, java.time.OffsetDateTime b) {
+        return a == null ? b == null : b != null && a.toInstant().equals(b.toInstant());
+    }
+
+    private static String blankToNull(String text) {
+        return text == null || text.isBlank() ? null : text.trim();
+    }
+
+    /**
      * Sends an event for approval again: after it was rejected and changed, or when no workflow
      * was switched on at the time it was created. Refused while a request is waiting or once it
      * is approved.

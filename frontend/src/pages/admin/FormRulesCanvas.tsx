@@ -159,11 +159,22 @@ export default function FormRulesCanvas({
     }
     involved.forEach((f) => depthOf(f.id, new Set()))
 
-    const rowsUsed = new Map<number, number>()
+    // Within a column, a question sits level with the questions it depends on (the average of
+    // their rows), so arrows run across and cross as little as possible.
+    const rowOf = new Map<string, number>()
+    const columns = [...new Set(involved.map((f) => depth.get(f.id) ?? 0))].sort((x, y) => x - y)
+    for (const col of columns) {
+      const inCol = involved.filter((f) => (depth.get(f.id) ?? 0) === col)
+      const pull = (id: string) => {
+        const from = links.filter((l) => l.to === id && rowOf.has(l.from)).map((l) => rowOf.get(l.from)!)
+        return from.length === 0 ? Number.MAX_SAFE_INTEGER : from.reduce((x, y) => x + y, 0) / from.length
+      }
+      const ordered = col === 0 ? inCol : [...inCol].sort((x, y) => pull(x.id) - pull(y.id) || involved.indexOf(x) - involved.indexOf(y))
+      ordered.forEach((f, row) => rowOf.set(f.id, row))
+    }
     const nodes: Node<BoxData>[] = involved.map((f) => {
       const col = depth.get(f.id) ?? 0
-      const row = rowsUsed.get(col) ?? 0
-      rowsUsed.set(col, row + 1)
+      const row = rowOf.get(f.id) ?? 0
       const acts = [
         ...new Set(live.filter((r) => r.targetId === f.id).map((r) => (r.action === 'show' ? 'shown when…' : r.action === 'hide' ? 'hidden when…' : 'required when…'))),
         ...(follows.some((c) => c.targetId === f.id) ? ['options follow…'] : []),

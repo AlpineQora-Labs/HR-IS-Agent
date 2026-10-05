@@ -433,6 +433,17 @@ export interface RegisterAttendeeInput {
   consent: boolean
 }
 
+/** What can be changed about an event after it is created. */
+export interface EventUpdate {
+  name: string
+  type: string
+  location: string
+  startsAt: string
+  endsAt?: string
+  timezone: string
+  format: string
+}
+
 export interface EventCreate {
   name: string
   type: string
