@@ -303,7 +303,7 @@ function EditDetails({ e, onDone }: { e: EventRow; onDone: () => void }) {
       {moved && approved && (
         <div style={{ fontSize: 12.5, lineHeight: 1.5, padding: '8px 10px', borderRadius: 'var(--ra-2)', background: 'var(--warn-bg, #fdf3dc)', color: 'var(--ink-1)' }}>
           You are changing when or where this event is held. Saving sends it back for approval, and it comes off the careers site until it is approved again.
-          {e.registrations > 0 ? ` ${e.registrations} ${e.registrations === 1 ? 'student is' : 'students are'} registered and will not be told by this change: let them know yourself.` : ''}
+          {e.registrations > 0 ? ` ${e.registrations} ${e.registrations === 1 ? 'student is' : 'students are'} registered: they are emailed the new details once the change is approved.` : ''}
         </div>
       )}
       <div style={{ display: 'flex', gap: 8 }}>

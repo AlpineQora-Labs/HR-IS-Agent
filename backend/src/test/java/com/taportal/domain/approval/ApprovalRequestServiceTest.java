@@ -40,7 +40,7 @@ class ApprovalRequestServiceTest {
     private final NotificationService notifications = mock(NotificationService.class);
 
     private final ApprovalRequestService service =
-            new ApprovalRequestService(requests, workflows, engine, new ObjectMapper(), notifications);
+            new ApprovalRequestService(requests, workflows, engine, new ObjectMapper(), notifications, decided -> { });
 
     @BeforeEach
     void anEnabledEventWorkflowExists() {

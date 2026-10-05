@@ -228,6 +228,11 @@ public class EngagementService {
         if (e.getPublishAt() != null && !e.getPublishAt().isBefore(e.getStartsAt())) {
             e.setPublishAt(null);
         }
+        // Students who are registered are owed the new details. They get them once the change is
+        // approved (see EventApprovalListener), not before: until then it is not settled.
+        if (moved && campus.hasStudentsToTell(eventId)) {
+            e.setMovedAt(java.time.OffsetDateTime.now());
+        }
         eventRepository.save(e);
 
         String latest = latestEventApprovals().getOrDefault(eventId.toString(), e.isApprovalRequired() ? "NOT_SENT" : null);
@@ -237,7 +242,12 @@ public class EngagementService {
         if (moved && wasApproved) {
             e.setApprovalRequired(true);
             eventRepository.save(e);
-            return toEventRow(e, sendForApproval(e, null));
+            String status = sendForApproval(e, null);
+            if ("AUTO_APPROVED".equals(status) || "APPROVED".equals(status)) {
+                // Approved on the spot by the workflow's policy: settled now.
+                campus.tellStudentsOfMove(eventId);
+            }
+            return toEventRow(e, status);
         }
         return toEventRow(e, latest);
     }

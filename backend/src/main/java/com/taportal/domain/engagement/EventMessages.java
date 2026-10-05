@@ -83,6 +83,15 @@ public class EventMessages {
                         + "/careers/events</a>.");
     }
 
+    /** The event was moved and the change approved: its new date and place. */
+    public void moved(RecruitingEvent e, EventRegistration r) {
+        write(e, r, "EVENT_MOVED", null, "The details of " + e.getName() + " have changed",
+                "The details of <strong>" + esc(e.getName()) + "</strong> have changed. "
+                        + ("WAITLISTED".equals(r.getStatus()) ? "You are still on the waitlist." : "Your registration still stands."),
+                details(e),
+                "If you can no longer come, reply to this email so your seat can go to someone else.");
+    }
+
     /** In the last 24 hours before the event. Once per student and event. */
     public void reminder(RecruitingEvent e, EventRegistration r) {
         write(e, r, "EVENT_REMINDER", "event-reminder:" + r.getId(), "Coming up: " + e.getName(),

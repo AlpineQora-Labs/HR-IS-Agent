@@ -99,6 +99,14 @@ public class RecruitingEvent {
     @Column(name = "consent_text")
     private String consentText;
 
+    /**
+     * Set when it was moved (date, time, place or format) while students were registered, and
+     * they have not yet been told. Cleared when they are. See CampusService.tellStudentsOfMove.
+     */
+    @Setter
+    @Column(name = "moved_at")
+    private OffsetDateTime movedAt;
+
     /** It must be approved before students can see it. True for every event created since the rule. */
     @Setter
     @Column(name = "approval_required", nullable = false)

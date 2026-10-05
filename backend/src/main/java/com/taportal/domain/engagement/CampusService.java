@@ -660,6 +660,34 @@ public class CampusService {
         }
     }
 
+    /* ---------- an event that was moved ---------- */
+
+    /**
+     * Tells the students of a moved event its new date and place, once: those holding a seat and
+     * those on the waitlist. Called when the change is approved, because until then the new
+     * details are not settled. Does nothing for an event that was not moved, or whose students
+     * have already been told.
+     */
+    @Transactional
+    public void tellStudentsOfMove(UUID eventId) {
+        RecruitingEvent event = events.findById(eventId).orElse(null);
+        if (event == null || event.getMovedAt() == null) {
+            return;
+        }
+        for (EventRegistration r : registrations.findByEventIdOrderByCreatedAt(eventId)) {
+            if ("REGISTERED".equals(r.getStatus()) || "WAITLISTED".equals(r.getStatus())) {
+                messages.moved(event, r);
+            }
+        }
+        event.setMovedAt(null);
+        events.save(event);
+    }
+
+    /** Whether anyone is waiting to hear about this event: a seat held and not yet used, or a place on the waitlist. */
+    public boolean hasStudentsToTell(UUID eventId) {
+        return registrations.countByEventIdAndStatusIn(eventId, List.of("REGISTERED", "WAITLISTED")) > 0;
+    }
+
     /* ---------- how each school has done ---------- */
 
     /**

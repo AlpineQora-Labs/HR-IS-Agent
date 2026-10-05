@@ -30,13 +30,16 @@ public class ApprovalRequestService {
     private final ApprovalWorkflowService engine;
     private final ObjectMapper mapper;
     private final com.taportal.domain.notification.NotificationService notifications;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     public ApprovalRequestService(
             ApprovalRequestRepository requests,
             ApprovalWorkflowRepository workflows,
             ApprovalWorkflowService engine,
             ObjectMapper mapper,
-            com.taportal.domain.notification.NotificationService notifications) {
+            com.taportal.domain.notification.NotificationService notifications,
+            org.springframework.context.ApplicationEventPublisher events) {
+        this.events = events;
         this.requests = requests;
         this.workflows = workflows;
         this.engine = engine;
@@ -138,6 +141,8 @@ public class ApprovalRequestService {
             req.setDecidedAt(OffsetDateTime.now());
             notifications.broadcast("APPROVED",
                     "Approved: " + req.getTitle(), "Fully approved by " + actor(), "/approvals");
+            // Whatever owns the item acts on the outcome in the same transaction.
+            events.publishEvent(new ApprovalDecided(req.getItemType(), req.getItemRef(), true));
         } else {
             RequiredApproval next = required.get(req.getCurrentStep());
             notifyApprovers(next.role(), req.getTitle(), toResponse(req));
@@ -154,6 +159,7 @@ public class ApprovalRequestService {
         req.setDecidedAt(OffsetDateTime.now());
         notifications.broadcast("REJECTED",
                 "Rejected: " + req.getTitle(), "Rejected by " + actor(), "/approvals");
+        events.publishEvent(new ApprovalDecided(req.getItemType(), req.getItemRef(), false));
         return toResponse(requests.save(req));
     }
 
