@@ -187,6 +187,10 @@ export interface FormMeta {
   template: boolean
   defaultForKind: boolean
   updatedAt: string
+  /** Events that use it: to register students, or as their intake form. */
+  events: number
+  /** Event templates that use it: new events made from them will use it too. */
+  eventTemplates: number
 }
 
 export interface FormResponseRow {

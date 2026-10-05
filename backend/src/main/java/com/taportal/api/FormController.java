@@ -49,19 +49,23 @@ public class FormController {
     }
 
     /** List row — schema omitted to keep the library listing light. */
+    /**
+     * A form or template in the library.
+     *
+     * @param events         events that use it (to register students, or as their intake form)
+     * @param eventTemplates event templates that use it: new events made from them will use it too
+     */
     public record FormMetaDto(
-            UUID id, String purpose, String name, boolean template, boolean defaultForKind, OffsetDateTime updatedAt) {
-
-        static FormMetaDto of(FormDefinition d) {
-            return new FormMetaDto(d.getId(), d.getPurpose(), d.getName(), d.isTemplate(), d.isDefaultForKind(), d.getUpdatedAt());
-        }
+            UUID id, String purpose, String name, boolean template, boolean defaultForKind, OffsetDateTime updatedAt,
+            long events, long eventTemplates) {
     }
 
     public record CreateFormRequest(@NotBlank String purpose, @NotBlank String name, String schema, UUID fromFormId, Boolean template) {}
 
     public record SaveFormRequest(@NotBlank String name, @NotBlank String schema) {}
 
-    public record SaveAsTemplateRequest(@NotBlank String name) {}
+    /** {@code schema}: the form as it stands on screen, unsaved changes included; null to copy what is stored. */
+    public record SaveAsTemplateRequest(@NotBlank String name, String schema) {}
 
     public record SubmitResponseRequest(@NotBlank String subjectType, UUID subjectId, @NotBlank String answers, UUID formId) {}
 
@@ -71,16 +75,32 @@ public class FormController {
     private final FormResponseRepository responses;
     private final FormLogicService formLogic;
     private final com.taportal.domain.engagement.CampusService campusService;
+    private final com.taportal.domain.engagement.RecruitingEventRepository events;
+    private final com.taportal.domain.engagement.EventTemplateRepository eventTemplates;
 
     public FormController(
             FormDefinitionRepository definitions,
             FormResponseRepository responses,
             FormLogicService formLogic,
-            com.taportal.domain.engagement.CampusService campusService) {
+            com.taportal.domain.engagement.CampusService campusService,
+            com.taportal.domain.engagement.RecruitingEventRepository events,
+            com.taportal.domain.engagement.EventTemplateRepository eventTemplates) {
+        this.events = events;
+        this.eventTemplates = eventTemplates;
         this.campusService = campusService;
         this.definitions = definitions;
         this.responses = responses;
         this.formLogic = formLogic;
+    }
+
+    private FormMetaDto meta(FormDefinition d) {
+        return new FormMetaDto(d.getId(), d.getPurpose(), d.getName(), d.isTemplate(), d.isDefaultForKind(), d.getUpdatedAt(),
+                events.countByRegistrationFormIdOrIntakeFormId(d.getId(), d.getId()),
+                eventTemplates.countByRegistrationFormIdOrIntakeFormId(d.getId(), d.getId()));
+    }
+
+    private static String count(long n, String what) {
+        return n + " " + what + (n == 1 ? "" : "s");
     }
 
     // ── Library ─────────────────────────────────────────────────────────────
@@ -88,7 +108,7 @@ public class FormController {
     /** Every form and template, ordered by kind then name. */
     @GetMapping("/v1/form-defs")
     public List<FormMetaDto> list() {
-        return definitions.findByOrderByPurposeAscNameAsc().stream().map(FormMetaDto::of).toList();
+        return definitions.findByOrderByPurposeAscNameAsc().stream().map(this::meta).toList();
     }
 
     @GetMapping("/v1/form-defs/{id}")
@@ -136,7 +156,9 @@ public class FormController {
         FormDefinition t = new FormDefinition();
         t.setPurpose(src.getPurpose());
         t.setName(request.name());
-        t.setSchema(src.getSchema());
+        // What is on screen, when the screen sends it: a template taken from a form with unsaved
+        // changes should hold those changes.
+        t.setSchema(request.schema() != null && !request.schema().isBlank() ? request.schema() : src.getSchema());
         t.setTemplate(true);
         t.setDefaultForKind(false);
         return FormDefinitionDto.of(definitions.save(t));
@@ -166,6 +188,13 @@ public class FormController {
         if (d.isDefaultForKind()) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                     "This is the default form for its kind — make another form the default first");
+        }
+        // An event that lost its form would quietly fall back to the default one: refuse instead.
+        FormMetaDto use = meta(d);
+        if (use.events() > 0 || use.eventTemplates() > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This form is used by " + count(use.events(), "event") + " and " + count(use.eventTemplates(), "event template")
+                            + ". Point them at another form first.");
         }
         definitions.delete(d);
     }

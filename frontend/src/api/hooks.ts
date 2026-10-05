@@ -271,7 +271,7 @@ function useLibraryMutation<TArg>(fn: (arg: TArg) => Promise<unknown>) {
 }
 
 export function useCreateForm() {
-  return useLibraryMutation((input: { purpose: string; name: string; fromFormId?: string; template?: boolean }) =>
+  return useLibraryMutation((input: { purpose: string; name: string; fromFormId?: string; template?: boolean; schema?: string }) =>
     api.post<FormDefinitionDto>('/form-defs', input).then((r) => r.data))
 }
 
@@ -281,8 +281,9 @@ export function useUpdateFormDef() {
 }
 
 export function useSaveAsTemplate() {
-  return useLibraryMutation(({ id, name }: { id: string; name: string }) =>
-    api.post(`/form-defs/${id}/save-as-template`, { name }))
+  // schema: the form as it stands on screen, so unsaved changes are part of the template.
+  return useLibraryMutation(({ id, name, schema }: { id: string; name: string; schema?: string }) =>
+    api.post(`/form-defs/${id}/save-as-template`, { name, schema }))
 }
 
 export function useMakeDefaultForm() {

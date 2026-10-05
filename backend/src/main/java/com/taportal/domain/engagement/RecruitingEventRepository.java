@@ -11,6 +11,9 @@ public interface RecruitingEventRepository extends JpaRepository<RecruitingEvent
 
     long countByTemplateId(UUID templateId);
 
+    /** Events that use a form: as the form students register with, or the one filled in at creation. */
+    long countByRegistrationFormIdOrIntakeFormId(UUID registrationFormId, UUID intakeFormId);
+
     /** Events starting in a stretch of time: the ones a reminder or a note afterwards could be due for. */
     java.util.List<RecruitingEvent> findByStartsAtBetween(java.time.OffsetDateTime from, java.time.OffsetDateTime to);
 }

@@ -12,4 +12,7 @@ public interface EventTemplateRepository extends JpaRepository<EventTemplate, UU
     boolean existsByNameIgnoreCaseAndIdNot(String name, UUID id);
 
     boolean existsByNameIgnoreCase(String name);
+
+    /** Event templates that use a form, either way round. */
+    long countByRegistrationFormIdOrIntakeFormId(UUID registrationFormId, UUID intakeFormId);
 }

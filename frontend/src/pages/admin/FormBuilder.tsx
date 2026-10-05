@@ -1097,6 +1097,9 @@ export default function FormBuilder() {
     setActiveFormId(id)
   }
 
+  // Where the open form is used, from the library listing.
+  const usage = (library ?? []).find((f) => f.id === activeFormId) ?? null
+
   // Action panel: create a new form, or snapshot the current one as a template.
   const [panel, setPanel] = useState<null | 'new' | 'template'>(null)
   const [panelName, setPanelName] = useState('')
@@ -1248,6 +1251,29 @@ export default function FormBuilder() {
           )}
         </div>
 
+        {/* Where the open form is used: an edit reaches every event listed, and so does a delete. */}
+        {usage && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '0 14px 12px', padding: '9px 12px', borderRadius: 'var(--ra-2)', background: usage.events + usage.eventTemplates > 0 ? 'var(--warn-bg, #fdf3dc)' : 'var(--app-sunken)', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+            {usage.template ? (
+              <span>A template. It is not used by events itself: start a new form from it with + New form.</span>
+            ) : usage.events + usage.eventTemplates === 0 ? (
+              <span>Not used by any event yet{usage.defaultForKind ? ', but it is the default: events that choose no form use it' : ''}.</span>
+            ) : (
+              <span>
+                Used by <strong>{usage.events} {usage.events === 1 ? 'event' : 'events'}</strong> and{' '}
+                <strong>{usage.eventTemplates} {usage.eventTemplates === 1 ? 'event template' : 'event templates'}</strong>
+                {usage.defaultForKind ? ', and by every event that chooses no form' : ''}. Saving a change here changes it for all of them.
+                To change it for one event only, make a copy with + New form and choose the copy on that event.
+              </span>
+            )}
+          </div>
+        )}
+        {deleteForm.isError && (
+          <div style={{ margin: '0 14px 12px', fontSize: 12.5, color: 'var(--c-red, #c41230)' }}>
+            {(deleteForm.error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not delete this form.'}
+          </div>
+        )}
+
         {panel && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '0 14px 12px', padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 'var(--ra-2)', background: 'var(--app-sunken)' }}>
             {panel === 'new' ? (
@@ -1263,13 +1289,17 @@ export default function FormBuilder() {
                   onChange={(e) => setPanelSource(e.target.value)}>
                   <option value="blank">Start blank</option>
                   {(library ?? []).filter((f) => f.purpose === panelKind).map((f) => (
-                    <option key={f.id} value={f.id}>Copy of: {f.name}{f.template ? ' (template)' : ''}</option>
+                    <option key={f.id} value={f.id}>{f.template ? 'From template' : 'Copy of'}: {f.name}</option>
                   ))}
                 </select>
                 <button className="btn btn--primary btn--sm" disabled={!panelName.trim() || createForm.isPending}
                   onClick={() =>
                     createForm.mutate(
-                      { purpose: panelKind, name: panelName.trim(), fromFormId: panelSource === 'blank' ? undefined : panelSource },
+                      {
+                        purpose: panelKind, name: panelName.trim(), fromFormId: panelSource === 'blank' ? undefined : panelSource,
+                        // A copy of the form that is open is a copy of what is on screen, unsaved changes included.
+                        schema: panelSource !== 'blank' && panelSource === activeFormId ? JSON.stringify({ ...form, title: panelName.trim() }) : undefined,
+                      },
                       { onSuccess: (d) => { setActiveFormId((d as { id: string }).id); setPanel(null) } },
                     )
                   }>
@@ -1281,10 +1311,11 @@ export default function FormBuilder() {
                 <span className="eyebrow">Save as template</span>
                 <input className="input" style={{ width: 260, fontSize: 13 }} placeholder="Template name" value={panelName}
                   onChange={(e) => setPanelName(e.target.value)} />
+                {dirty && <span className="muted" style={{ fontSize: 12, margin: 0 }}>Includes your unsaved changes.</span>}
                 <button className="btn btn--primary btn--sm" disabled={!panelName.trim() || saveTemplate.isPending}
                   onClick={() =>
                     activeFormId && saveTemplate.mutate(
-                      { id: activeFormId, name: panelName.trim() },
+                      { id: activeFormId, name: panelName.trim(), schema: JSON.stringify(form) },
                       { onSuccess: () => setPanel(null) },
                     )
                   }>
