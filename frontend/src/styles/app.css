@@ -2102,41 +2102,30 @@ span.sched__person {
   box-shadow: inset 0 0 0 1px var(--line);
 }
 
-/* A slimmer side bar: 224px instead of 264px. The logo capsule and the menu card follow its width. */
-.app--leftmenu:not(.app--collapsed) {
-  grid-template-columns: 224px 1fr;
-  --shell-rail-w: 224px;
-}
-.app--leftmenu:not(.app--square):not(.app--collapsed) .side-brand {
-  padding: 0 12px;
-}
-
-/* The side menu is sized like the top menu: 40px pills, 14px text, 4px of card around them. */
-.app--leftmenu:not(.app--square) .app__rail .app__side {
-  padding: 4px;
-  border-radius: 26px;
-}
-.app--leftmenu:not(.app--square) .app__side .nav-item {
-  height: 40px;
-  padding: 0 16px;
-  font-size: 14px;
-}
-.app--leftmenu:not(.app--square) .app__side .nav-item .ic {
-  width: 16px;
-  height: 16px;
-}
-.app--leftmenu:not(.app--square) .app__side .nav-foot {
-  padding-top: 4px;
-}
+/* Collapsed only: the side menu's buttons and margin are the top menu's (40px buttons, 4px around them).
+   Expanded, the side menu keeps its own size. */
 .app--leftmenu:not(.app--square).app--collapsed .app__rail .app__side {
   padding: 4px;
 }
 .app--leftmenu:not(.app--square).app--collapsed .app__side .nav-item {
-  width: 40px;
+  width: 48px;
+  height: 48px;
   padding: 0;
 }
-/* Expanded, the logo capsule is as tall as the top menu's. The collapsed circle keeps its size. */
-.app--leftmenu:not(.app--square):not(.app--collapsed) .side-brand {
-  height: 48px;
-  margin: 14px 0 14px 12px;
+.app--leftmenu:not(.app--square).app--collapsed .app__side .nav-item .ic {
+  width: 18px;
+  height: 18px;
+}
+.app--leftmenu:not(.app--square).app--collapsed .app__side .nav-foot {
+  padding-top: 4px;
+}
+
+/* Collapsed, the side menu is a pipe a touch thicker than the top menu bar: 56px (a 48px button and 4px each side). */
+.app--leftmenu.app--collapsed {
+  grid-template-columns: 68px 1fr;
+  --shell-rail-w: 68px;
+}
+/* The logo circle is wider than the pipe, so it is centred on it rather than on the column. */
+.app--leftmenu:not(.app--square).app--collapsed .side-brand {
+  margin: 8px 0 8px 10px;
 }
