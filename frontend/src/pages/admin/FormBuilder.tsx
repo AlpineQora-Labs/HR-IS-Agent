@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import FormRulesCanvas from './FormRulesCanvas'
-import ConfirmButton from '@/components/ConfirmButton'
 import { useCreateForm, useDeleteForm, useFormDefById, useFormsList, useMakeDefaultForm, useSaveAsTemplate, useUpdateFormDef } from '@/api/hooks'
 import type { FormMeta } from '@/api/types'
 import { uid } from './builderStore'
 import { IntakeInput, answerText, type Answer } from './IntakeInput'
-import { ASSISTANT } from '@/lib/brand'
 
 // Event-intake form builder — drag & drop redesign.
 // LEFT: a palette of field types (dropdown, type-ahead, single/multiple
@@ -124,6 +122,10 @@ const FIELD_ICON_PATHS: Record<string, React.ReactNode> = {
   'layout-single': (<rect x="3" y="8" width="18" height="8" rx="2" />),
   'layout-double': (<><rect x="3" y="8" width="8" height="8" rx="2" /><rect x="13" y="8" width="8" height="8" rx="2" /></>),
   chevron: (<path d="m9 6 6 6-6 6" />),
+  copy: (<><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h9" /></>),
+  trash: (<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />),
+  close: (<path d="M6 6l12 12M18 6 6 18" />),
+  grip: (<><circle cx="9" cy="6" r="1.2" fill="currentColor" /><circle cx="15" cy="6" r="1.2" fill="currentColor" /><circle cx="9" cy="12" r="1.2" fill="currentColor" /><circle cx="15" cy="12" r="1.2" fill="currentColor" /><circle cx="9" cy="18" r="1.2" fill="currentColor" /><circle cx="15" cy="18" r="1.2" fill="currentColor" /></>),
 }
 
 function FieldIcon({ kind, size = 15 }: { kind: string; size?: number }) {
@@ -153,8 +155,8 @@ const FIELD_GROUPS: { name: string; types: IntakeFieldType[] }[] = [
 ]
 
 const LAYOUT_PALETTE: { kind: 'single' | 'double'; label: string; hint: string }[] = [
-  { kind: 'single', label: 'Single field', hint: 'One long field per row' },
-  { kind: 'double', label: 'Side by side', hint: 'Two fields in one row' },
+  { kind: 'single', label: 'Full width', hint: 'One question in the row' },
+  { kind: 'double', label: 'Side by side', hint: 'Two questions in the row' },
 ]
 
 const TYPE_LABEL: Record<IntakeFieldType, string> = {
@@ -353,44 +355,27 @@ function CanvasField({ f, selected, onSelect, onDuplicate, onRemove }: {
   onRemove: () => void
 }) {
   const missingOptions = optionTypes.includes(f.type) && (f.options ?? []).length === 0
-  const act = {
-    border: '1px solid var(--line)', background: 'var(--app-panel)', borderRadius: 6,
-    width: 24, height: 24, cursor: 'pointer', fontSize: 12, color: 'var(--ink-3)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  } as const
   return (
     <div
       onClick={(e) => { e.stopPropagation(); onSelect() }}
-      style={{
-        position: 'relative',
-        cursor: 'pointer',
-        border: selected ? '1.5px solid var(--bofa-navy)' : missingOptions ? '1.5px solid var(--bofa-red, #c41230)' : '1px solid var(--line)',
-        boxShadow: selected ? '0 0 0 3px rgba(1, 33, 105, 0.14)' : 'none',
-        borderRadius: 'var(--ra-2)',
-        background: 'var(--app-panel)',
-        padding: '12px 14px 8px',
-      }}
+      className={['fb-field', selected ? 'fb-field--selected' : '', missingOptions ? 'fb-field--bad' : ''].filter(Boolean).join(' ')}
     >
       {/* Render exactly what the filler will see; clicks select, not focus. */}
       <div style={{ pointerEvents: 'none' }}>
         <IntakePreviewField f={f} />
       </div>
-      {selected && (
-        <span className="badge badge--info" style={{ position: 'absolute', top: -10, left: 10, fontSize: 9.5 }}>
-          {TYPE_LABEL[f.type]}
-        </span>
-      )}
-      {missingOptions && (
-        <span className="badge badge--danger" style={{ position: 'absolute', top: -10, right: selected ? 66 : 10, fontSize: 9.5 }}>
-          No options
-        </span>
-      )}
-      {selected && (
-        <span style={{ position: 'absolute', top: -12, right: 8, display: 'flex', gap: 4 }}>
-          <button title="Duplicate" aria-label="Duplicate field" style={act}
-            onClick={(e) => { e.stopPropagation(); onDuplicate() }}>⧉</button>
-          <button title="Delete (Del)" aria-label="Delete field" style={{ ...act, color: 'var(--bofa-red, #c41230)' }}
-            onClick={(e) => { e.stopPropagation(); onRemove() }}>×</button>
+      {(selected || missingOptions) && (
+        <span className="fb-field__tools">
+          {missingOptions && <span className="badge badge--danger">No options</span>}
+          {selected && <span className="badge badge--info">{TYPE_LABEL[f.type]}</span>}
+          {selected && (
+            <>
+              <button title="Duplicate" aria-label="Duplicate question" className="fb-tool"
+                onClick={(e) => { e.stopPropagation(); onDuplicate() }}><FieldIcon kind="copy" size={13} /></button>
+              <button title="Delete (Del)" aria-label="Delete question" className="fb-tool fb-tool--danger"
+                onClick={(e) => { e.stopPropagation(); onRemove() }}><FieldIcon kind="trash" size={13} /></button>
+            </>
+          )}
         </span>
       )}
     </div>
@@ -406,60 +391,67 @@ function PropertiesPanel({ field, onPatch, onDuplicate, onDelete }: {
 }) {
   if (!field) {
     return (
-      <div className="card" style={{ padding: '18px 16px' }}>
-        <div className="eyebrow" style={{ marginBottom: 8 }}>Field properties</div>
-        <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
-          Select a field on the canvas to edit its label, help text, options and rules.
-        </p>
+      <div className="card fb-prop">
+        <div className="eyebrow">Question</div>
+        <div className="fb-prop__empty">
+          <span className="fb-pal__ic"><FieldIcon kind="short" /></span>
+          <p>Pick a question on the form to change its label, help text and options.</p>
+        </div>
       </div>
     )
   }
   const hasOpts = optionTypes.includes(field.type)
   const isDisplay = DISPLAY_TYPES.includes(field.type)
   return (
-    <div className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span className="eyebrow">Field properties</span>
-        <span className="badge badge--info">{TYPE_LABEL[field.type]}</span>
+    <div className="card fb-prop">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span className="fb-pal__ic"><FieldIcon kind={field.type} /></span>
+        <div style={{ minWidth: 0 }}>
+          <div className="eyebrow">Question</div>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-0)' }}>{TYPE_LABEL[field.type]}</div>
+        </div>
       </div>
 
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5, color: 'var(--ink-4)' }}>
+      <label className="fb-label">
         {field.type === 'header' ? 'Heading' : field.type === 'image' ? 'Caption' : 'Label'}
-        <input className="input" value={field.label} style={{ fontSize: 13 }}
-          placeholder={field.type === 'header' ? 'Section title' : 'Field label'}
+        <input className="input" value={field.label}
+          placeholder={field.type === 'header' ? 'Section title' : 'Question label'}
           onChange={(e) => onPatch({ label: e.target.value })} />
       </label>
 
       {field.type === 'image' && (
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5, color: 'var(--ink-4)' }}>
+        <label className="fb-label">
           Image URL
-          <input className="input" value={field.src ?? ''} style={{ fontSize: 12.5 }} placeholder="https://…"
+          <input className="input" value={field.src ?? ''} placeholder="https://…"
             onChange={(e) => onPatch({ src: e.target.value || undefined })} />
         </label>
       )}
 
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5, color: 'var(--ink-4)' }}>
+      <label className="fb-label">
         {field.type === 'header' ? 'Subheading' : 'Help text'}
-        <input className="input" value={field.help ?? ''} style={{ fontSize: 12.5 }} placeholder="Optional"
+        <input className="input" value={field.help ?? ''} placeholder="Optional"
           onChange={(e) => onPatch({ help: e.target.value || undefined })} />
       </label>
 
       {!isDisplay && (
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--ink-2)' }}>
+        <label className="fb-check">
           <input type="checkbox" checked={field.required} onChange={(e) => onPatch({ required: e.target.checked })} />
-          Required
+          <span>
+            <strong>Required</strong>
+            <small>The form cannot be sent without an answer.</small>
+          </span>
         </label>
       )}
 
       {hasOpts && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div className="eyebrow">{field.type === 'typeahead' ? 'Suggestions' : 'Options'}</div>
+          <div className="fb-label">{field.type === 'typeahead' ? 'Suggestions' : 'Options'}</div>
           {(field.options ?? []).map((o, i) => (
             <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input className="input" value={o} style={{ flex: 1, fontSize: 12.5 }}
+              <input className="input" value={o} style={{ flex: 1 }}
                 onChange={(e) => onPatch({ options: (field.options ?? []).map((x, j) => (j === i ? e.target.value : x)) })} />
-              <button className="btn btn--ghost btn--sm" disabled={(field.options ?? []).length <= 1} aria-label="Remove option"
-                onClick={() => onPatch({ options: (field.options ?? []).filter((_, j) => j !== i) })}>×</button>
+              <button className="fb-tool" disabled={(field.options ?? []).length <= 1} aria-label="Remove option" title="Remove option"
+                onClick={() => onPatch({ options: (field.options ?? []).filter((_, j) => j !== i) })}><FieldIcon kind="close" size={12} /></button>
             </div>
           ))}
           <button className="btn btn--outline btn--sm" style={{ alignSelf: 'flex-start' }}
@@ -469,10 +461,10 @@ function PropertiesPanel({ field, onPatch, onDuplicate, onDelete }: {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+      <div style={{ display: 'flex', gap: 8, borderTop: '1px solid var(--line)', paddingTop: 14 }}>
         <button className="btn btn--outline btn--sm" onClick={onDuplicate}>Duplicate</button>
         <span style={{ flex: 1 }} />
-        <button className="btn btn--outline btn--sm" style={{ color: 'var(--bofa-red, #c41230)' }} onClick={onDelete}>Delete</button>
+        <button className="btn btn--danger btn--sm" onClick={onDelete}>Delete</button>
       </div>
     </div>
   )
@@ -604,7 +596,7 @@ function EmptySlot({ onDropField, wide }: { onDropField: (t: IntakeFieldType) =>
         fontSize: 12, color: over ? 'var(--bofa-navy)' : 'var(--ink-5)',
       }}
     >
-      {wide ? 'Drag a field type here' : 'Drop field'}
+      {wide ? 'Drag a question type here' : 'Drop a question'}
     </div>
   )
 }
@@ -1007,7 +999,7 @@ function LivePreview({ form }: { form: IntakeForm }) {
 // ── Main builder ────────────────────────────────────────────────────────────
 const KINDS = [
   { key: 'EVENT_INTAKE', label: 'Event intake', hint: 'Used by Campus · New event', fallback: defaultIntakeForm },
-  { key: 'EVENT_REGISTRATION', label: 'Student registration', hint: `What students fill in (and ${ASSISTANT} asks) to register`, fallback: defaultRegistrationForm },
+  { key: 'EVENT_REGISTRATION', label: 'Student registration', hint: 'What students fill in, on the form or in chat, to register', fallback: defaultRegistrationForm },
 ] as const
 
 export default function FormBuilder() {
@@ -1093,7 +1085,10 @@ export default function FormBuilder() {
 
   const switchForm = (id: string) => {
     if (id === activeFormId) return
-    if (dirty && !window.confirm('Discard unsaved changes to this form?')) return
+    if (dirty) {
+      setAsk({ title: 'Leave without saving?', body: 'This form has changes that have not been saved. Opening another form discards them.', ok: 'Discard changes', onOk: () => setActiveFormId(id) })
+      return
+    }
     setActiveFormId(id)
   }
 
@@ -1105,6 +1100,8 @@ export default function FormBuilder() {
   const [panelName, setPanelName] = useState('')
   const [panelKind, setPanelKind] = useState<(typeof KINDS)[number]['key']>('EVENT_INTAKE')
   const [panelSource, setPanelSource] = useState<string>('blank')
+  // A question the app asks before something is lost.
+  const [ask, setAsk] = useState<null | { title: string; body: string; ok: string; onOk: () => void }>(null)
 
   function patchRows(fn: (rows: IntakeRow[]) => IntakeRow[]) {
     setForm((prev) => {
@@ -1177,17 +1174,15 @@ export default function FormBuilder() {
 
   const fieldCount = flattenIntake(form).length
 
+  const used = usage ? usage.events + usage.eventTemplates : 0
+  const closePanel = () => setPanel(null)
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Toolbar */}
+      {/* The form that is open, and what can be done with it. */}
       <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', flexWrap: 'wrap' }}>
-          <select
-            className="select"
-            style={{ width: 250 }}
-            value={activeFormId ?? ''}
-            onChange={(e) => switchForm(e.target.value)}
-          >
+        <div className="fb-bar">
+          <select className="select" style={{ width: 280 }} value={activeFormId ?? ''} onChange={(e) => switchForm(e.target.value)} aria-label="Form">
             {KINDS.map((k) => {
               const forms = (library ?? []).filter((f) => f.purpose === k.key && !f.template)
               return forms.length === 0 ? null : (
@@ -1206,9 +1201,9 @@ export default function FormBuilder() {
               </optgroup>
             )}
           </select>
-          <span className="eyebrow">{serverForm?.template ? `Template · ${meta.label}` : meta.hint}</span>
-          <div style={{ flex: 1 }} />
-          <span className="eyebrow">{fieldCount} fields · {form.rows.length} rows</span>
+          <span className="badge">{serverForm?.template ? `Template · ${meta.label}` : meta.label}</span>
+          {serverForm?.defaultForKind && <span className="badge badge--ok">Default</span>}
+          <span style={{ flex: 1 }} />
           {isLoading ? (
             <span className="badge">Loading…</span>
           ) : dirty ? (
@@ -1219,11 +1214,9 @@ export default function FormBuilder() {
           <button className="btn btn--primary btn--sm" disabled={!dirty || updateForm.isPending} onClick={save}>
             {updateForm.isPending ? 'Saving…' : 'Save'}
           </button>
-          <ConfirmButton label="Reset to defaults" confirmLabel="Replace all fields?" onConfirm={() => { setForm(meta.fallback()); setDirty(true) }} />
         </div>
 
-        {/* Library actions: create forms, snapshot templates, manage defaults. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px 12px', flexWrap: 'wrap' }}>
+        <div className="fb-bar fb-bar--actions">
           <button className="btn btn--outline btn--sm" onClick={() => { setPanel('new'); setPanelName(''); setPanelKind(meta.key); setPanelSource(activeFormId ?? 'blank') }}>
             + New form
           </button>
@@ -1237,15 +1230,14 @@ export default function FormBuilder() {
               Make default
             </button>
           )}
-          {serverForm?.defaultForKind && <span className="badge badge--ok">Default for {meta.label}</span>}
           <span style={{ flex: 1 }} />
+          <button className="btn btn--ghost btn--sm"
+            onClick={() => setAsk({ title: 'Reset to defaults?', body: `Every question and rule on this form is replaced by the standard ${meta.label.toLowerCase()} form. Nothing is saved until you choose Save.`, ok: 'Reset', onOk: () => { setForm(meta.fallback()); setDirty(true) } })}>
+            Reset to defaults
+          </button>
           {serverForm && !serverForm.defaultForKind && (
-            <button className="btn btn--outline btn--sm" style={{ color: 'var(--bofa-red, #c41230)' }} disabled={deleteForm.isPending}
-              onClick={() => {
-                if (!activeFormId) return
-                if (!window.confirm(`Delete "${serverForm.name}"? This cannot be undone.`)) return
-                deleteForm.mutate(activeFormId, { onSuccess: () => setActiveFormId(null) })
-              }}>
+            <button className="btn btn--danger btn--sm" disabled={deleteForm.isPending}
+              onClick={() => activeFormId && setAsk({ title: `Delete “${serverForm.name}”?`, body: 'The form and its rules are removed. This cannot be undone.', ok: 'Delete', onOk: () => deleteForm.mutate(activeFormId, { onSuccess: () => setActiveFormId(null) }) })}>
               Delete
             </button>
           )}
@@ -1253,10 +1245,10 @@ export default function FormBuilder() {
 
         {/* Where the open form is used: an edit reaches every event listed, and so does a delete. */}
         {usage && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '0 14px 12px', padding: '9px 12px', borderRadius: 'var(--ra-2)', background: usage.events + usage.eventTemplates > 0 ? 'var(--warn-bg, #fdf3dc)' : 'var(--app-sunken)', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+          <div className={used > 0 ? 'fb-note fb-note--used' : 'fb-note'}>
             {usage.template ? (
               <span>A template. It is not used by events itself: start a new form from it with + New form.</span>
-            ) : usage.events + usage.eventTemplates === 0 ? (
+            ) : used === 0 ? (
               <span>Not used by any event yet{usage.defaultForKind ? ', but it is the default: events that choose no form use it' : ''}.</span>
             ) : (
               <span>
@@ -1269,69 +1261,20 @@ export default function FormBuilder() {
           </div>
         )}
         {deleteForm.isError && (
-          <div style={{ margin: '0 14px 12px', fontSize: 12.5, color: 'var(--c-red, #c41230)' }}>
+          <div className="fb-note" style={{ color: 'var(--c-red, #c41230)' }}>
             {(deleteForm.error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not delete this form.'}
-          </div>
-        )}
-
-        {panel && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '0 14px 12px', padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 'var(--ra-2)', background: 'var(--app-sunken)' }}>
-            {panel === 'new' ? (
-              <>
-                <span className="eyebrow">New form</span>
-                <input className="input" style={{ width: 200, fontSize: 13 }} placeholder="Form name" value={panelName}
-                  onChange={(e) => setPanelName(e.target.value)} />
-                <select className="select" style={{ width: 180, fontSize: 13 }} value={panelKind}
-                  onChange={(e) => { setPanelKind(e.target.value as typeof panelKind); setPanelSource('blank') }}>
-                  {KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
-                </select>
-                <select className="select" style={{ width: 220, fontSize: 13 }} value={panelSource}
-                  onChange={(e) => setPanelSource(e.target.value)}>
-                  <option value="blank">Start blank</option>
-                  {(library ?? []).filter((f) => f.purpose === panelKind).map((f) => (
-                    <option key={f.id} value={f.id}>{f.template ? 'From template' : 'Copy of'}: {f.name}</option>
-                  ))}
-                </select>
-                <button className="btn btn--primary btn--sm" disabled={!panelName.trim() || createForm.isPending}
-                  onClick={() =>
-                    createForm.mutate(
-                      {
-                        purpose: panelKind, name: panelName.trim(), fromFormId: panelSource === 'blank' ? undefined : panelSource,
-                        // A copy of the form that is open is a copy of what is on screen, unsaved changes included.
-                        schema: panelSource !== 'blank' && panelSource === activeFormId ? JSON.stringify({ ...form, title: panelName.trim() }) : undefined,
-                      },
-                      { onSuccess: (d) => { setActiveFormId((d as { id: string }).id); setPanel(null) } },
-                    )
-                  }>
-                  {createForm.isPending ? 'Creating…' : 'Create'}
-                </button>
-              </>
-            ) : (
-              <>
-                <span className="eyebrow">Save as template</span>
-                <input className="input" style={{ width: 260, fontSize: 13 }} placeholder="Template name" value={panelName}
-                  onChange={(e) => setPanelName(e.target.value)} />
-                {dirty && <span className="muted" style={{ fontSize: 12, margin: 0 }}>Includes your unsaved changes.</span>}
-                <button className="btn btn--primary btn--sm" disabled={!panelName.trim() || saveTemplate.isPending}
-                  onClick={() =>
-                    activeFormId && saveTemplate.mutate(
-                      { id: activeFormId, name: panelName.trim(), schema: JSON.stringify(form) },
-                      { onSuccess: () => setPanel(null) },
-                    )
-                  }>
-                  {saveTemplate.isPending ? 'Saving…' : 'Save template'}
-                </button>
-              </>
-            )}
-            <button className="btn btn--ghost btn--sm" onClick={() => setPanel(null)}>Cancel</button>
           </div>
         )}
       </div>
 
-      <div className="tabs" style={{ marginBottom: 2 }}>
-        <button className="tab" aria-selected={mode === 'builder'} onClick={() => setMode('builder')}>Builder</button>
-        <button className="tab" aria-selected={mode === 'preview'} onClick={() => setMode('preview')}>Preview</button>
-        <button className="tab" aria-selected={mode === 'config'} onClick={() => setMode('config')}>Configuration</button>
+      <div className="fb-modes">
+        <div className="segmented" role="group" aria-label="View">
+          <button aria-pressed={mode === 'builder'} onClick={() => setMode('builder')}>Builder</button>
+          <button aria-pressed={mode === 'preview'} onClick={() => setMode('preview')}>Preview</button>
+          <button aria-pressed={mode === 'config'} onClick={() => setMode('config')}>Configuration</button>
+        </div>
+        <span style={{ flex: 1 }} />
+        <span className="eyebrow">{fieldCount} {fieldCount === 1 ? 'question' : 'questions'} · {form.rows.length} {form.rows.length === 1 ? 'row' : 'rows'}</span>
       </div>
 
       {mode === 'preview' && <LivePreview form={form} />}
@@ -1351,195 +1294,261 @@ export default function FormBuilder() {
       )}
 
       {mode === 'builder' && (
-      <div style={{ display: 'grid', gridTemplateColumns: '210px minmax(0, 1fr) 280px', gap: 16, alignItems: 'start' }}>
-        {/* LEFT: palette */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 12 }}>
-          <div className="card" style={{ padding: 10 }}>
-            <div className="eyebrow" style={{ padding: '4px 6px 8px' }}>Layout</div>
+      <div className="fb-grid">
+        {/* LEFT: what can be added */}
+        <div className="fb-side">
+          <div className="card fb-pal">
+            <div className="eyebrow fb-pal__title">Add a question</div>
+            {FIELD_GROUPS.map((g) => {
+              const open = openGroups.includes(g.name)
+              return (
+                <div key={g.name}>
+                  <button className="fb-pal__group" aria-expanded={open}
+                    onClick={() => setOpenGroups((cur) => (open ? cur.filter((n) => n !== g.name) : [...cur, g.name]))}>
+                    <span className="fb-pal__chev"><FieldIcon kind="chevron" size={12} /></span>
+                    <span style={{ flex: 1 }}>{g.name}</span>
+                    <span className="fb-pal__count">{g.types.length}</span>
+                  </button>
+                  {open && g.types.map((t) => {
+                    const p = FIELD_PALETTE.find((x) => x.type === t)!
+                    return (
+                      <div key={p.type} className="fb-pal__item" draggable
+                        onDragStart={(e) => setPayload(e, { kind: 'palette-field', type: p.type })}
+                        onClick={() => {
+                          const f = newField(p.type)
+                          patchRows((rows) => [...rows, { id: uid(), slots: [f] }])
+                          setSelectedId(f.id)
+                        }}
+                        title="Drag onto the form, or click to add at the end">
+                        <span className="fb-pal__ic"><FieldIcon kind={p.type} /></span>
+                        <span>
+                          <div className="fb-pal__label">{p.label}</div>
+                          <div className="fb-pal__hint">{p.hint}</div>
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
+            <div className="fb-pal__sep" />
+            <div className="eyebrow fb-pal__title">Add a row</div>
             {LAYOUT_PALETTE.map((l) => (
-              <div
-                key={l.kind}
-                draggable
+              <div key={l.kind} className="fb-pal__item" draggable
                 onDragStart={(e) => setPayload(e, { kind: 'palette-layout', layout: l.kind })}
                 onClick={() => patchRows((rows) => [...rows, { id: uid(), slots: l.kind === 'double' ? [null, null] : [null] }])}
-                title="Drag onto the canvas (or click to append)"
-                style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid var(--line)', background: 'var(--app-panel)', cursor: 'grab', borderRadius: 'var(--ra-2)', padding: '8px 10px', marginBottom: 6 }}
-              >
-                <span style={{ width: 20, display: 'inline-flex', justifyContent: 'center', color: 'var(--ink-3)' }}><FieldIcon kind={`layout-${l.kind}`} /></span>
+                title="Drag onto the form, or click to add at the end">
+                <span className="fb-pal__ic"><FieldIcon kind={`layout-${l.kind}`} /></span>
                 <span>
-                  <div style={{ fontSize: 13, color: 'var(--ink-1)', fontWeight: 500 }}>{l.label}</div>
-                  <div style={{ fontSize: 11, color: 'var(--ink-5)' }}>{l.hint}</div>
+                  <div className="fb-pal__label">{l.label}</div>
+                  <div className="fb-pal__hint">{l.hint}</div>
                 </span>
               </div>
             ))}
           </div>
-
-          <div className="card" style={{ padding: 10 }}>
-            <div className="eyebrow" style={{ padding: '4px 6px 8px' }}>Field types</div>
-            {FIELD_GROUPS.map((g) => {
-              const open = openGroups.includes(g.name)
-              return (
-                <div key={g.name} style={{ marginBottom: 6 }}>
-                  <button
-                    onClick={() => setOpenGroups((cur) => (open ? cur.filter((n) => n !== g.name) : [...cur, g.name]))}
-                    aria-expanded={open}
-                    style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                      border: '1px solid var(--line)', background: open ? 'var(--app-sunken)' : 'var(--app-panel)',
-                      borderRadius: 'var(--ra-2)', padding: '8px 10px', cursor: 'pointer',
-                      font: 'inherit', fontSize: 12.5, fontWeight: 600, color: 'var(--ink-1)', textAlign: 'left',
-                    }}
-                  >
-                    <span style={{
-                      display: 'inline-flex', transition: 'transform .12s ease',
-                      transform: open ? 'rotate(90deg)' : 'none', color: 'var(--ink-4)',
-                    }}><FieldIcon kind="chevron" size={12} /></span>
-                    <span style={{ flex: 1 }}>{g.name}</span>
-                    <span className="muted" style={{ fontSize: 10.5 }}>{g.types.length}</span>
-                  </button>
-                  {open && (
-                    <div style={{ padding: '6px 0 2px 6px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {g.types.map((t) => {
-                        const p = FIELD_PALETTE.find((x) => x.type === t)!
-                        return (
-                          <div
-                            key={p.type}
-                            draggable
-                            onDragStart={(e) => setPayload(e, { kind: 'palette-field', type: p.type })}
-                            onClick={() => {
-                              const f = newField(p.type)
-                              patchRows((rows) => [...rows, { id: uid(), slots: [f] }])
-                              setSelectedId(f.id)
-                            }}
-                            title="Drag into a slot or onto the canvas (or click to append)"
-                            style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid var(--line)', background: 'var(--app-panel)', cursor: 'grab', borderRadius: 'var(--ra-2)', padding: '7px 10px' }}
-                          >
-                            <span style={{ width: 20, display: 'inline-flex', justifyContent: 'center', color: 'var(--ink-3)' }}><FieldIcon kind={p.type} /></span>
-                            <span>
-                              <div style={{ fontSize: 13, color: 'var(--ink-1)', fontWeight: 500 }}>{p.label}</div>
-                              <div style={{ fontSize: 11, color: 'var(--ink-5)' }}>{p.hint}</div>
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
         </div>
 
-        {/* RIGHT: canvas */}
-        <div>
+        {/* MIDDLE: the form itself */}
+        <div className="card fb-paper">
+          <div className="fb-paper__head">
+            <div style={{ minWidth: 0 }}>
+              <div className="eyebrow">{meta.label}</div>
+              <div className="fb-paper__title">{serverForm?.name ?? 'Form'}</div>
+            </div>
+            <span style={{ flex: 1 }} />
+            <span className="fb-paper__hint">{meta.hint}</span>
+          </div>
+
           {/* System fields — locked; they describe the EVENT record itself, so
               they only apply to the intake form. */}
           {meta.key === 'EVENT_INTAKE' && (
-          <div className="card" style={{ marginBottom: 12, background: 'var(--app-sunken)' }}>
-            <div className="card__body" style={{ padding: '14px 16px' }}>
+            <div className="fb-system">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <span className="eyebrow">System fields</span>
+                <span className="eyebrow">Always collected</span>
                 <span className="badge" style={{ gap: 6 }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                     <rect x="5" y="11" width="14" height="10" rx="2" />
                     <path d="M8 11V7a4 4 0 0 1 8 0v4" />
                   </svg>
-                  Always collected
+                  Cannot be removed
                 </span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8 }}>
                 {SYSTEM_FIELDS.map((sf) => (
-                  <div key={sf.label} style={{ background: 'var(--app-panel)', border: '1px solid var(--line)', borderRadius: 'var(--ra-2)', padding: '8px 12px' }}>
+                  <div key={sf.label} className="fb-system__item">
                     <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-1)' }}>{sf.label}</div>
                     <div style={{ fontSize: 11, color: 'var(--ink-5)', marginTop: 2 }}>{sf.hint}</div>
                   </div>
                 ))}
               </div>
             </div>
-          </div>
           )}
 
-          {(
-            /* Editable canvas */
-            <div
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                // Drop on the canvas background = append at the end.
-                e.preventDefault()
-                const p = getPayload(e)
-                if (p) dropAt(form.rows.length, p)
-              }}
-              onClick={() => setSelectedId(null)}
-              style={{ minHeight: 220 }}
-            >
-              <InsertZone onDropPayload={(p) => dropAt(0, p)} hint="Drop to insert row" />
-              {form.rows.map((row, ri) => (
-                <div key={row.id}>
-                  <div
-                    style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}
-                    onDragOver={(e) => e.preventDefault()}
-                  >
-                    <span
-                      draggable
-                      onDragStart={(e) => setPayload(e, { kind: 'row', rowId: row.id })}
-                      title="Drag to reorder row"
-                      style={{ cursor: 'grab', color: 'var(--ink-5)', fontSize: 15, userSelect: 'none', display: 'flex', alignItems: 'center', padding: '0 2px' }}
-                    >
-                      ⠿
-                    </span>
-                    <div style={{ flex: 1, display: 'grid', gridTemplateColumns: `repeat(${row.slots.length}, minmax(0, 1fr))`, gap: 10 }}>
-                      {row.slots.map((slot, si) =>
-                        slot ? (
-                          <CanvasField
-                            key={slot.id}
-                            f={slot}
-                            selected={slot.id === selectedId}
-                            onSelect={() => setSelectedId(slot.id)}
-                            onDuplicate={() => duplicateField(slot.id)}
-                            onRemove={() => removeField(slot.id)}
-                          />
-                        ) : (
-                          <EmptySlot key={`empty-${si}`} wide={row.slots.length === 1}
-                            onDropField={(t) => {
-                              const f = newField(t)
-                              setSlot(row.id, si, f)
-                              setSelectedId(f.id)
-                            }} />
-                        ),
-                      )}
-                    </div>
-                    <button
-                      className="btn btn--ghost btn--sm"
-                      aria-label="Delete row"
-                      style={{ alignSelf: 'flex-start' }}
-                      onClick={() => patchRows((rows) => rows.filter((r) => r.id !== row.id))}
-                    >
-                      ×
-                    </button>
+          <div
+            className="fb-paper__body"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              // Drop on the form's background = add at the end.
+              e.preventDefault()
+              const p = getPayload(e)
+              if (p) dropAt(form.rows.length, p)
+            }}
+            onClick={() => setSelectedId(null)}
+          >
+            <InsertZone onDropPayload={(p) => dropAt(0, p)} hint="Drop to insert a row" />
+            {form.rows.map((row, ri) => (
+              <div key={row.id}>
+                <div className="fb-row" onDragOver={(e) => e.preventDefault()}>
+                  <span className="fb-row__grip" draggable title="Drag to move this row"
+                    onDragStart={(e) => setPayload(e, { kind: 'row', rowId: row.id })}>
+                    <FieldIcon kind="grip" size={14} />
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: `repeat(${row.slots.length}, minmax(0, 1fr))`, gap: 10 }}>
+                    {row.slots.map((slot, si) =>
+                      slot ? (
+                        <CanvasField
+                          key={slot.id}
+                          f={slot}
+                          selected={slot.id === selectedId}
+                          onSelect={() => setSelectedId(slot.id)}
+                          onDuplicate={() => duplicateField(slot.id)}
+                          onRemove={() => removeField(slot.id)}
+                        />
+                      ) : (
+                        <EmptySlot key={`empty-${si}`} wide={row.slots.length === 1}
+                          onDropField={(t) => {
+                            const f = newField(t)
+                            setSlot(row.id, si, f)
+                            setSelectedId(f.id)
+                          }} />
+                      ),
+                    )}
                   </div>
-                  <InsertZone onDropPayload={(p) => dropAt(ri + 1, p)} hint="Drop to insert row" />
+                  <button className="fb-tool fb-row__del" aria-label="Remove row" title="Remove this row"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const filled = row.slots.filter((sl) => sl !== null).length
+                      const remove = () => patchRows((rows) => rows.filter((r) => r.id !== row.id))
+                      if (filled === 0) remove()
+                      else setAsk({ title: 'Remove this row?', body: `The row and ${filled === 1 ? 'its question' : `its ${filled} questions`} are removed from the form.`, ok: 'Remove', onOk: remove })
+                    }}>
+                    <FieldIcon kind="close" size={12} />
+                  </button>
                 </div>
-              ))}
-              {form.rows.length === 0 && (
-                <div style={{ border: '2px dashed var(--line)', borderRadius: 'var(--ra-3)', padding: '44px 20px', textAlign: 'center', color: 'var(--ink-4)', fontSize: 13 }}>
-                  Drag a layout block or field type from the left to start building.
-                </div>
-              )}
-            </div>
-          )}
+                <InsertZone onDropPayload={(p) => dropAt(ri + 1, p)} hint="Drop to insert a row" />
+              </div>
+            ))}
+            {form.rows.length === 0 && (
+              <div className="fb-empty">
+                <span className="fb-pal__ic"><FieldIcon kind="layout-single" /></span>
+                <strong>Nothing on this form yet</strong>
+                <span>Drag a question from the left, or click one to add it.</span>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* RIGHT: properties for the selected field */}
-        <div style={{ position: 'sticky', top: 12 }}>
-            <PropertiesPanel
-              field={selectedField}
-              onPatch={(patch) => selectedField && patchField(selectedField.id, patch)}
-              onDuplicate={() => selectedField && duplicateField(selectedField.id)}
-              onDelete={() => selectedField && removeField(selectedField.id)}
-            />
-
+        {/* RIGHT: the question that is picked */}
+        <div className="fb-side">
+          <PropertiesPanel
+            field={selectedField}
+            onPatch={(patch) => selectedField && patchField(selectedField.id, patch)}
+            onDuplicate={() => selectedField && duplicateField(selectedField.id)}
+            onDelete={() => selectedField && removeField(selectedField.id)}
+          />
         </div>
       </div>
+      )}
+
+      {/* New form, or the open one saved as a template. */}
+      {panel && (
+        <div className="scrim" style={{ zIndex: 200 }} onClick={closePanel}>
+          <div className="modal" style={{ maxWidth: 520 }} role="dialog" aria-modal="true" aria-label={panel === 'new' ? 'New form' : 'Save as template'} onClick={(e) => e.stopPropagation()}>
+            <div className="modal__head" style={{ paddingBottom: 14, borderBottom: '1px solid var(--line)' }}>
+              <div className="eyebrow">Forms</div>
+              <h3 style={{ fontSize: 21 }}>{panel === 'new' ? 'New form' : 'Save as template'}</h3>
+            </div>
+            <div className="modal__body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <label className="fb-label">
+                {panel === 'new' ? 'Form name' : 'Template name'}
+                <input className="input" autoFocus placeholder={panel === 'new' ? 'For example, Student registration, India' : 'Template name'} value={panelName}
+                  onChange={(e) => setPanelName(e.target.value)} />
+              </label>
+              {panel === 'new' ? (
+                <>
+                  <label className="fb-label">
+                    Kind of form
+                    <select className="select" value={panelKind}
+                      onChange={(e) => { setPanelKind(e.target.value as typeof panelKind); setPanelSource('blank') }}>
+                      {KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="fb-label">
+                    Start from
+                    <select className="select" value={panelSource} onChange={(e) => setPanelSource(e.target.value)}>
+                      <option value="blank">A blank form</option>
+                      {(library ?? []).filter((f) => f.purpose === panelKind).map((f) => (
+                        <option key={f.id} value={f.id}>{f.template ? 'Template' : 'Copy of'}: {f.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {panelSource !== 'blank' && panelSource === activeFormId && dirty && (
+                    <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>The copy includes your unsaved changes.</p>
+                  )}
+                </>
+              ) : (
+                <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
+                  A template is a starting point for new forms. It is not used by events itself{dirty ? ', and it includes your unsaved changes' : ''}.
+                </p>
+              )}
+            </div>
+            <div className="modal__foot">
+              <button className="btn btn--ghost btn--sm" onClick={closePanel}>Cancel</button>
+              {panel === 'new' ? (
+                <button className="btn btn--primary btn--sm" disabled={!panelName.trim() || createForm.isPending}
+                  onClick={() =>
+                    createForm.mutate(
+                      {
+                        purpose: panelKind, name: panelName.trim(), fromFormId: panelSource === 'blank' ? undefined : panelSource,
+                        // A copy of the form that is open is a copy of what is on screen, unsaved changes included.
+                        schema: panelSource !== 'blank' && panelSource === activeFormId ? JSON.stringify({ ...form, title: panelName.trim() }) : undefined,
+                      },
+                      { onSuccess: (d) => { setActiveFormId((d as { id: string }).id); setPanel(null) } },
+                    )
+                  }>
+                  {createForm.isPending ? 'Creating…' : 'Create form'}
+                </button>
+              ) : (
+                <button className="btn btn--primary btn--sm" disabled={!panelName.trim() || saveTemplate.isPending}
+                  onClick={() =>
+                    activeFormId && saveTemplate.mutate(
+                      { id: activeFormId, name: panelName.trim(), schema: JSON.stringify(form) },
+                      { onSuccess: () => setPanel(null) },
+                    )
+                  }>
+                  {saveTemplate.isPending ? 'Saving…' : 'Save template'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {ask && (
+        <div className="scrim" style={{ zIndex: 210 }} onClick={() => setAsk(null)}>
+          <div className="modal" style={{ maxWidth: 440 }} role="alertdialog" aria-modal="true" aria-label={ask.title} onClick={(e) => e.stopPropagation()}>
+            <div className="modal__head">
+              <h3 style={{ fontSize: 19 }}>{ask.title}</h3>
+            </div>
+            <div className="modal__body">
+              <p style={{ margin: 0, fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>{ask.body}</p>
+            </div>
+            <div className="modal__foot">
+              <button className="btn btn--ghost btn--sm" onClick={() => setAsk(null)}>Cancel</button>
+              <button className="btn btn--primary btn--sm" autoFocus onClick={() => { const run = ask.onOk; setAsk(null); run() }}>{ask.ok}</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

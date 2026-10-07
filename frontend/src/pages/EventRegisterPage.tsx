@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom'
 import { api } from '@/api/client'
 import { DISPLAY_TYPES, effectiveValue, fieldVisible, flattenIntake, normalizeIntake, resolveField, type IntakeField, type IntakeForm } from './admin/FormBuilder'
 import { IntakeInput, answerText, type Answer } from './admin/IntakeInput'
-import { ASSISTANT } from '@/lib/brand'
 
 /* The public event-registration surface — what the QR code on the booth banner
    opens. Shell-less (no recruiter chrome). One form definition
@@ -105,7 +104,7 @@ export default function EventRegisterPage() {
                 {event?.registration === 'WAITLIST' ? 'Join the waitlist' : 'Register for this event'}
               </h1>
               <p style={{ margin: '0 0 14px', fontSize: 13.5, color: 'var(--ink-4)' }}>
-                Fill in the form, or chat with {ASSISTANT}. The questions are the same.
+                Fill in the form, or use the chat. The questions are the same.
               </p>
               {event && seatsLine(event) && (
                 <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--ink-2)', fontWeight: 600 }}>{seatsLine(event)}.</p>
@@ -113,7 +112,7 @@ export default function EventRegisterPage() {
 
               <div className="segmented" role="group" aria-label="Mode" style={{ marginBottom: 16 }}>
                 <button aria-pressed={mode === 'form'} onClick={() => setMode('form')}>Form</button>
-                <button aria-pressed={mode === 'chat'} onClick={() => setMode('chat')}>Chat with {ASSISTANT}</button>
+                <button aria-pressed={mode === 'chat'} onClick={() => setMode('chat')}>Chat</button>
               </div>
 
               {mode === 'form'

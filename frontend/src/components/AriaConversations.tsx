@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useApplicationConversation } from '@/api/hooks'
-import { ASSISTANT } from '@/lib/brand'
+import { CHAT } from '@/lib/brand'
 
 // Shared Aria transcript rendering: every conversation a candidate had with
 // the external chat agent, one block per application. Used by the candidate
@@ -69,7 +69,7 @@ export default function AriaConversations({ apps, emptyText }: {
   if (apps.length === 0) {
     return (
       <div style={{ fontSize: 12.5, color: 'var(--ink-4)', textAlign: 'center', padding: '24px 0' }}>
-        No applications yet. {ASSISTANT} conversations appear once they apply.
+        No applications yet. {CHAT} conversations appear once they apply.
       </div>
     )
   }
@@ -78,7 +78,7 @@ export default function AriaConversations({ apps, emptyText }: {
       {apps.map((a) => <AppTranscript key={a.id} appId={a.id} jobTitle={a.jobTitle} onLoaded={onLoaded} />)}
       {allLoaded && total === 0 && (
         <div style={{ fontSize: 12.5, color: 'var(--ink-4)', textAlign: 'center', padding: '24px 0' }}>
-          {emptyText ?? `No ${ASSISTANT} conversations for this candidate. Transcripts appear here when they apply through the career-site chat.`}
+          {emptyText ?? `No ${CHAT.toLowerCase()} conversations for this candidate. Transcripts appear here when they apply through the career-site chat.`}
         </div>
       )}
     </>

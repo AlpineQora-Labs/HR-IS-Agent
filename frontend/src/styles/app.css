@@ -116,8 +116,8 @@ a {
   color: var(--ink-4);
   font-size: 9.5px;
   font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  text-transform: none;
   line-height: 1;
   /* Start where the wordmark starts: (flag 133 + gap 28) / lockup height 73 × 19px. */
   margin-left: 42px;
@@ -581,8 +581,8 @@ button.card:hover {
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  text-transform: none;
   color: var(--ink-4);
 }
 .app__side .nav-item {
@@ -654,4 +654,1489 @@ button.card:hover {
   .app__user {
     padding: 0 6px;
   }
+}
+
+
+/* ══ Left menu (experiment) ════════════════════════════════════════════════
+   One white card down the left holds the logo and the pages of the section
+   picked in the top menu. Switched on by LEFT_MENU in AppShell. */
+.app--leftmenu {
+  grid-template-areas: "rail top" "rail main";
+  grid-template-columns: 264px 1fr;
+  --shell-rail-w: 264px;
+}
+.app--leftmenu.app--collapsed {
+  grid-template-columns: 78px 1fr;
+  --shell-rail-w: 78px;
+}
+.app--leftmenu .app__rail .app__side {
+  margin: 12px 0 12px 12px;
+  padding: 0 12px 12px;
+  border-radius: 28px;
+}
+.app--leftmenu .side-brand {
+  display: flex;
+  align-items: center;
+  height: 84px;
+  padding: 0 10px;
+  flex: none;
+}
+.app--leftmenu .side-brand .brand-logo {
+  height: 20px;
+}
+.app--leftmenu.app--collapsed .side-brand {
+  justify-content: center;
+  padding: 0;
+}
+.app--leftmenu .app__side-scroll {
+  gap: 4px;
+  scrollbar-width: none;
+}
+.app--leftmenu .app__side-scroll::-webkit-scrollbar {
+  display: none;
+}
+.app--leftmenu .app__collapse-handle {
+  top: 104px;
+}
+.app--leftmenu .side-brand .brand-logo {
+  height: 21px;
+}
+.app--leftmenu .side-brand .brand-sub {
+  margin-left: 0;
+}
+.app--leftmenu.app--collapsed .side-brand .brand-mark-img {
+  height: 26px;
+}
+
+
+/* ══ Square frame (experiment) ═════════════════════════════════════════════
+   The top bar and the side menu are one white frame, flush to the window with
+   square corners; the page fills what is left. Switched on by SQUARE_MENU. */
+.app--square {
+  grid-template-rows: 64px 1fr;
+  --shell-chrome-h: 64px;
+}
+.app--square .app__top {
+  background: var(--app-panel);
+  border-bottom: 1px solid var(--line);
+  padding: 0 20px;
+}
+.app--square .app__rail .app__side {
+  margin: 0;
+  padding: 0 12px 12px;
+  border-radius: 0;
+  border-right: 1px solid var(--line);
+  box-shadow: none;
+}
+/* The logo cell is as tall as the top bar. */
+.app--square .side-brand {
+  height: 64px;
+  margin: 0 -12px 12px;
+  padding: 0 22px;
+}
+.app--square.app--collapsed .side-brand {
+  padding: 0;
+}
+.app--square .app__main {
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.app--square .topnav__pills {
+  padding: 0;
+  gap: 4px;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.app--square .topnav__pill {
+  height: 38px;
+  border-radius: 999px;
+}
+.app--square .app__top > .btn,
+.app--square .app__top > .notif > .btn,
+.app--square .app__top .btn--ghost {
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+.app--square .app__top .btn--icon {
+  width: 40px;
+}
+.app--square .app__user {
+  height: 40px;
+  padding: 0 14px 0 4px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+.app--square .app__user .avatar {
+  width: 30px;
+  height: 30px;
+}
+/* The handle is a tab on the menu's edge. */
+.app--square .app__collapse-handle {
+  top: 78px;
+  right: -14px;
+  border: 1px solid var(--line);
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  background: var(--app-panel);
+}
+
+
+/* ══ Form builder ══════════════════════════════════════════════════════════
+   The same cards, pills and type as the rest of the app: a header card for
+   the open form, a list of what can be added, the form as a sheet, and the
+   picked question's settings. */
+.fb-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+}
+.fb-bar--actions {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  border-top: 1px solid var(--line);
+}
+.fb-note {
+  margin: 0 16px 14px;
+  padding: 9px 12px;
+  border-radius: var(--ra-2);
+  background: var(--app-sunken);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.fb-note--used {
+  background: var(--warn-bg, #fdf3dc);
+}
+.fb-modes {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.fb-grid {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) 296px;
+  gap: 16px;
+  align-items: start;
+}
+.fb-side {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* What can be added */
+.fb-pal {
+  padding: 16px 10px 10px;
+}
+.fb-pal__title {
+  padding: 0 8px 8px;
+}
+.fb-pal__group {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--ra-2);
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-1);
+  text-align: left;
+  cursor: pointer;
+}
+.fb-pal__group:hover {
+  background: var(--app-sunken);
+}
+.fb-pal__chev {
+  display: inline-flex;
+  color: var(--ink-4);
+  transition: transform 0.12s ease;
+}
+.fb-pal__group[aria-expanded="true"] .fb-pal__chev {
+  transform: rotate(90deg);
+}
+.fb-pal__count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+.fb-pal__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--ra-2);
+  cursor: grab;
+}
+.fb-pal__item:hover {
+  background: var(--app-sunken);
+}
+.fb-pal__ic {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--navy-050);
+  color: var(--bofa-navy);
+}
+.fb-pal__label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--ink-1);
+}
+.fb-pal__hint {
+  font-size: 11px;
+  color: var(--ink-5);
+}
+.fb-pal__sep {
+  margin: 10px 8px 14px;
+  border-top: 1px solid var(--line);
+}
+
+/* The form as a sheet */
+.fb-paper {
+  overflow: hidden;
+}
+.fb-paper__head {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 18px 22px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.fb-paper__title {
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 21px;
+  line-height: 1.2;
+  color: var(--ink-0);
+}
+.fb-paper__hint {
+  max-width: 260px;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: right;
+  color: var(--ink-4);
+}
+.fb-paper__body {
+  min-height: 220px;
+  padding: 8px 10px 14px 4px;
+}
+.fb-system {
+  padding: 14px 22px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--app-sunken);
+}
+.fb-system__item {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--ra-2);
+  background: var(--app-panel);
+}
+.fb-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+.fb-row__grip {
+  width: 18px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-5);
+  cursor: grab;
+  opacity: 0.45;
+  transition: opacity 0.12s ease;
+}
+.fb-row__del {
+  align-self: center;
+  opacity: 0.45;
+  transition: opacity 0.12s ease;
+}
+.fb-row:hover .fb-row__grip,
+.fb-row:hover .fb-row__del,
+.fb-row__del:focus-visible {
+  opacity: 1;
+}
+.fb-field {
+  position: relative;
+  padding: 12px 14px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--ra-2);
+  background: var(--app-panel);
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.fb-field:hover {
+  border-color: var(--ink-4);
+}
+.fb-field--bad {
+  border-color: var(--bofa-red);
+}
+.fb-field--selected,
+.fb-field--selected:hover {
+  border-color: var(--bofa-navy);
+  box-shadow: 0 0 0 3px rgba(1, 33, 105, 0.12);
+}
+.fb-field__tools {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.fb-tool {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--app-panel);
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.fb-tool:hover:not(:disabled) {
+  background: var(--app-sunken);
+  color: var(--ink-0);
+}
+.fb-tool:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.fb-tool--danger,
+.fb-tool--danger:hover:not(:disabled) {
+  color: var(--bofa-red);
+}
+.fb-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 8px 8px 14px;
+  padding: 40px 20px;
+  border: 2px dashed var(--line);
+  border-radius: var(--ra-3);
+  font-size: 13px;
+  text-align: center;
+  color: var(--ink-4);
+}
+.fb-empty strong {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--ink-1);
+}
+
+/* The picked question */
+.fb-prop {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+.fb-prop__empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.fb-prop__empty p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-4);
+}
+.fb-label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.fb-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--ra-2);
+  background: var(--app-sunken);
+  cursor: pointer;
+}
+.fb-check input {
+  margin-top: 2px;
+}
+.fb-check strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-1);
+}
+.fb-check small {
+  display: block;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--ink-4);
+}
+
+
+/* ══ Dashboard right panel ═════════════════════════════════════════════════
+   One navy panel down the right of the dashboard, as tall as the page beside
+   it: hiring progress, the to-do list and what is coming up. */
+.dash-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 22px 20px;
+  border-radius: 24px;
+  background: var(--bofa-navy);
+  color: #fff;
+}
+.dash-panel section + section {
+  padding-top: 22px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+.dash-panel__title {
+  font-size: 16px;
+  font-weight: 600;
+}
+.dash-panel__sub {
+  margin-top: 2px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+.dash-panel__bar {
+  height: 8px;
+  margin-top: 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.dash-panel__bar div {
+  height: 100%;
+  border-radius: 999px;
+  background: #fff;
+}
+.dash-panel__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+}
+.dash-panel__stats div {
+  padding: 10px 8px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.1);
+  text-align: center;
+}
+.dash-panel__stats strong {
+  display: block;
+  font-size: 19px;
+  font-weight: 600;
+  color: #fff;
+}
+.dash-panel__stats span {
+  font-size: 11px;
+  opacity: 0.75;
+}
+.dash-panel__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  margin-top: 14px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--bofa-navy);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.dash-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.dash-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  text-decoration: none;
+}
+.dash-panel__row:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.dash-panel__row strong {
+  display: block;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dash-panel__row small {
+  display: block;
+  overflow: hidden;
+  font-size: 11.5px;
+  opacity: 0.72;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dash-panel__glyph,
+.dash-panel__date {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--bofa-navy);
+  font-size: 13px;
+}
+.dash-panel__date {
+  flex-direction: column;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+.dash-panel__date b {
+  font-size: 14px;
+}
+.dash-panel__empty {
+  padding: 14px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 12.5px;
+  opacity: 0.85;
+}
+.dash-panel__link {
+  display: inline-block;
+  margin-top: 12px;
+  color: #fff;
+  font-size: 12.5px;
+  text-decoration: underline;
+}
+
+
+/* ══ Logo apart from the menu ══════════════════════════════════════════════
+   As in the AlpineOrion app: the logo is a white capsule of its own, level
+   with the top menu, and the side menu is a separate card under it. */
+.app--leftmenu:not(.app--square) .side-brand {
+  height: 56px;
+  margin: 10px 0 10px 12px;
+  padding: 0 14px;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--app-panel);
+  box-shadow: 0 1px 2px rgba(14, 26, 51, 0.05);
+}
+/* The name-and-flag lockup is very wide for its height, so it is sized by the capsule's width. */
+.app--leftmenu:not(.app--square) .side-brand .brand-logo {
+  width: 100%;
+  max-width: 222px;
+  height: auto;
+}
+.app--leftmenu:not(.app--square) .side-brand .brand-toggle,
+.app--leftmenu:not(.app--square) .side-brand .brand-toggle > span {
+  width: 100%;
+}
+.app--leftmenu:not(.app--square) .side-brand .brand-sub {
+  display: none;
+}
+.app--leftmenu:not(.app--square).app--collapsed .side-brand {
+  /* A circle the size of the bell button, centred over the icon rail. */
+  width: 60px;
+  height: 60px;
+  margin: 8px 0 8px 15px;
+  padding: 0;
+  border-radius: 50%;
+}
+/* The flag is wider than it is tall, so it is sized by its width to stay clear of the circle's edge. */
+.app--leftmenu:not(.app--square).app--collapsed .side-brand .brand-toggle {
+  width: 100%;
+  height: 100%;
+  justify-content: center;
+}
+.app--leftmenu:not(.app--square).app--collapsed .side-brand .brand-mark-img {
+  width: 44px;
+  height: auto;
+}
+/* The side menu is a capsule like the top menu: tight padding around its pills and fully round ends. */
+.app--leftmenu:not(.app--square) .app__rail .app__side {
+  margin: 0 0 12px 12px;
+  padding: 8px;
+  border-radius: 30px;
+}
+.app--leftmenu:not(.app--square) .app__side .nav-item {
+  height: 44px;
+}
+.app--leftmenu:not(.app--square) .app__side .nav-foot {
+  padding-top: 8px;
+}
+.app--leftmenu:not(.app--square).app--collapsed .app__rail .app__side {
+  padding: 8px;
+  border-radius: 999px;
+}
+.app--leftmenu:not(.app--square).app--collapsed .app__side .nav-item {
+  width: 44px;
+}
+.app--leftmenu:not(.app--square) .app__collapse-handle {
+  top: 104px;
+}
+
+
+/* ══ Interview desk ════════════════════════════════════════════════════════
+   What needs doing about interviews, across every job: four counts that
+   filter, the stuck interviews with their action on the row, the week ahead
+   as an agenda, and who is carrying the load. */
+.desk {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.desk__tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.desk-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.desk-tile:hover {
+  border-color: var(--ink-4);
+}
+.desk-tile[aria-pressed="true"] {
+  border-color: var(--bofa-navy);
+  background: var(--bofa-navy);
+}
+.desk-tile__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.desk-tile__value {
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--ink-0);
+}
+.desk-tile__note {
+  font-size: 12px;
+  color: var(--ink-4);
+}
+.desk-tile[aria-pressed="true"] .desk-tile__label,
+.desk-tile[aria-pressed="true"] .desk-tile__value {
+  color: #fff;
+}
+.desk-tile[aria-pressed="true"] .desk-tile__note {
+  color: rgba(255, 255, 255, 0.75);
+}
+.desk__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  align-items: start;
+}
+.desk__main {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.desk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+}
+.desk-row__avatar {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  font-size: 11px;
+}
+.desk-row__main {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.desk-row__name {
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-0);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+a.desk-row__name:hover {
+  text-decoration: underline;
+}
+.desk-row__main small {
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--ink-4);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desk-row__why {
+  flex: 1 1 220px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+.desk-row__actions {
+  flex: none;
+  display: flex;
+  gap: 6px;
+}
+.desk-row__when,
+.desk-row__time {
+  flex: none;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.desk-row__time {
+  width: 68px;
+  font-weight: 600;
+  color: var(--ink-1);
+}
+.desk-day {
+  padding: 10px 18px 8px;
+  border-top: 1px solid var(--line);
+  background: var(--app-sunken);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.desk-empty {
+  padding: 28px 18px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  text-align: center;
+  color: var(--ink-4);
+}
+.desk-load {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.desk-load__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.desk-load__main strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desk-load__bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.desk-load__bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #fff;
+}
+.desk-load__n {
+  flex: none;
+  width: 22px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+}
+
+
+/* ══ Interview scheduling panel ════════════════════════════════════════════
+   The navy panel beside the interview desk: a candidate, the panel who will
+   interview them, a month of open and booked days, and the open times. */
+.sched {
+  gap: 18px;
+}
+.sched section + section {
+  padding-top: 18px;
+}
+.sched__select {
+  width: 100%;
+  height: 42px;
+  margin-top: 12px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+}
+.sched__select option {
+  color: #111;
+}
+.sched__who {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+.sched__avatar {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--bofa-navy);
+  font-size: 14px;
+  font-weight: 600;
+}
+.sched__who strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+}
+.sched__who small {
+  display: block;
+  overflow: hidden;
+  font-size: 12px;
+  opacity: 0.75;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sched__label {
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.sched__people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sched__person {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px 0 4px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.sched__person b {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.sched__person i {
+  font-style: normal;
+  font-size: 11px;
+  opacity: 0.7;
+}
+.sched__person[aria-pressed="true"] {
+  background: #fff;
+  color: var(--bofa-navy);
+}
+.sched__person[aria-pressed="true"] b {
+  background: var(--bofa-navy);
+  color: #fff;
+}
+.sched__month {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.sched__month button {
+  width: 28px;
+  height: 28px;
+  margin-left: 4px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.sched__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  justify-items: center;
+}
+.sched__dow {
+  padding-bottom: 4px;
+  font-size: 10.5px;
+  opacity: 0.65;
+}
+.sched__day {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: default;
+}
+.sched__day[data-out] {
+  opacity: 0.35;
+}
+.sched__day[data-state="open"] {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sched__day[data-state="full"] {
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: line-through;
+  cursor: pointer;
+}
+.sched__day[data-today] {
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.6);
+}
+.sched__day[aria-pressed="true"] {
+  background: #fff;
+  color: var(--bofa-navy);
+  text-decoration: none;
+}
+.sched__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 11px;
+  opacity: 0.85;
+}
+.sched__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sched__legend span::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.6);
+}
+.sched__legend span[data-state="full"]::before {
+  background: rgba(255, 255, 255, 0.2);
+}
+.sched__legend span[data-state="none"]::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+.sched__times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sched__times span {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.sched__go {
+  width: 100%;
+  border: 0;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sched__go:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.sched__note {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  opacity: 0.7;
+}
+
+
+/* The scheduling panel as a drawer: it fills the slide-over and scrolls inside it. */
+.sched--drawer {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-radius: 0;
+}
+.sched__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sched__close {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.sched__close:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+.sched__links {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.sched__links a {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.sched__links a:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+/* With the panel in a drawer, the desk's list has the full width. */
+.desk__body {
+  grid-template-columns: minmax(0, 1fr);
+}
+.desk-row__job {
+  color: inherit;
+  text-decoration: none;
+}
+.desk-row__job:hover {
+  text-decoration: underline;
+}
+
+/* Times in the scheduling drawer are picked, one at a time. */
+.sched__times button {
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.sched__times button:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+.sched__times button[aria-pressed="true"] {
+  background: #fff;
+  color: var(--bofa-navy);
+  font-weight: 600;
+}
+.sched__again {
+  width: 100%;
+  height: 40px;
+  margin-top: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sched__again:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* A candidate with no time yet: their name opens the scheduling drawer. */
+.desk-row__open {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.desk-row__open:hover {
+  text-decoration: underline;
+}
+
+.sched__when {
+  font-size: 15px;
+  font-weight: 600;
+}
+.sched__join {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+span.sched__person {
+  cursor: default;
+}
+
+/* Notes in the navy drawer are white, whatever the page's paragraph colour is. */
+.sched .sched__note {
+  color: #fff;
+}
+
+/* ══ Interview drawer in the bank's colours ════════════════════════════════
+   White body, a navy head, navy for what is chosen and red for the one action
+   that commits. The dashboard's panel stays navy; this is the
+   drawer only. */
+.sched.sched--drawer {
+  gap: 0;
+  padding: 0;
+  background: #fff;
+  color: var(--ink-1);
+}
+.sched.sched--drawer > section {
+  padding: 18px 20px;
+  border-top: 1px solid var(--line);
+}
+.sched.sched--drawer > section:first-child {
+  padding: 20px 20px 18px;
+  border-top: 0;
+  background: var(--bofa-navy);
+  color: #fff;
+}
+.sched.sched--drawer > section:first-child + section {
+  border-top: 0;
+}
+.sched--drawer > section:not(:first-child) .sched__label {
+  color: var(--ink-1);
+}
+.sched--drawer > section:not(:first-child) .sched__person {
+  background: var(--app-sunken);
+  color: var(--ink-1);
+}
+.sched--drawer > section:not(:first-child) .sched__person b {
+  background: #fff;
+  color: var(--bofa-navy);
+}
+.sched--drawer > section:not(:first-child) .sched__person i {
+  opacity: 0.6;
+}
+.sched--drawer > section:not(:first-child) .sched__person[aria-pressed="true"] {
+  background: var(--bofa-navy);
+  color: #fff;
+}
+.sched--drawer > section:not(:first-child) .sched__person[aria-pressed="true"] b {
+  background: #fff;
+  color: var(--bofa-navy);
+}
+.sched--drawer .sched__month button {
+  background: var(--app-sunken);
+  color: var(--ink-1);
+}
+.sched--drawer .sched__dow {
+  color: var(--ink-4);
+  opacity: 1;
+}
+.sched--drawer .sched__day {
+  color: var(--ink-5);
+}
+.sched--drawer .sched__day[data-state="open"] {
+  background: var(--navy-050);
+  color: var(--bofa-navy);
+}
+.sched--drawer .sched__day[data-today] {
+  box-shadow: inset 0 0 0 1.5px var(--bofa-red);
+}
+.sched--drawer .sched__day[aria-pressed="true"] {
+  background: var(--bofa-navy);
+  color: #fff;
+}
+.sched--drawer .sched__legend {
+  color: var(--ink-3);
+  opacity: 1;
+}
+.sched--drawer .sched__legend span::before {
+  background: var(--navy-050);
+  box-shadow: inset 0 0 0 1px var(--bofa-navy);
+}
+.sched--drawer .sched__times button {
+  border: 1px solid var(--line-3, var(--line));
+  background: #fff;
+  color: var(--ink-1);
+}
+.sched--drawer .sched__times button:hover {
+  border-color: var(--bofa-navy);
+  background: #fff;
+}
+.sched--drawer .sched__times button[aria-pressed="true"] {
+  border-color: var(--bofa-navy);
+  background: var(--bofa-navy);
+  color: #fff;
+}
+/* The one action that commits is red. */
+.sched--drawer .sched__go {
+  background: var(--bofa-red);
+  color: #fff;
+}
+.sched--drawer .sched__go:disabled {
+  background: var(--app-sunken);
+  color: var(--ink-4);
+  opacity: 1;
+}
+.sched--drawer .sched__again {
+  border-color: var(--bofa-navy);
+  color: var(--bofa-navy);
+}
+.sched--drawer .sched__again:hover {
+  background: var(--navy-050);
+}
+.sched.sched--drawer .sched__note {
+  color: var(--ink-4);
+  opacity: 1;
+}
+.sched--drawer > section:not(:first-child) .dash-panel__empty {
+  background: var(--app-sunken);
+  color: var(--ink-3);
+  opacity: 1;
+}
+.sched--drawer .sched__when {
+  color: var(--ink-0);
+}
+
+
+/* Interviewers in the drawer: who is on the panel, and a search to add someone. */
+.sched__drop {
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  color: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.sched__none {
+  font-size: 12.5px;
+  color: var(--ink-4);
+}
+.sched__find {
+  width: 100%;
+  height: 40px;
+  margin-top: 10px;
+  padding: 0 14px;
+  border: 1px solid var(--line-3, var(--line));
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink-1);
+  font: inherit;
+  font-size: 13px;
+}
+.sched__find:focus {
+  outline: none;
+  border-color: var(--bofa-navy);
+}
+.sched__found {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+.sched__found button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--app-sunken);
+  color: var(--ink-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sched__found button:hover {
+  background: var(--navy-050);
+}
+.sched__found b {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--bofa-navy);
+  font-size: 11px;
+}
+.sched__found span {
+  flex: 1;
+  min-width: 0;
+}
+.sched__found strong {
+  display: block;
+  font-size: 13px;
+}
+.sched__found small {
+  display: block;
+  font-size: 11.5px;
+  color: var(--ink-4);
+}
+.sched__found i {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--bofa-navy);
+}
+.sched--drawer .sched__day[data-state="full"] {
+  background: transparent;
+  color: var(--ink-4);
+  text-decoration: line-through;
+}
+.sched--drawer .sched__legend span[data-state="full"]::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--ink-5);
+}
+
+/* The desk's job picker: one job, or all of them. */
+.desk__job {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.desk__job label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.desk__job .select {
+  width: 320px;
+}
+
+/* The desk says how scheduling works, and counts what is booked ahead. */
+.desk__how {
+  max-width: 78ch;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.desk__tiles {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.desk-tile--still {
+  cursor: default;
+  background: var(--navy-050);
+}
+.desk-tile--still:hover {
+  border-color: var(--line);
+}
+
+/* The drawer has no outline of its own, so the navy head runs to the edge; the white body keeps a hairline. */
+.sched.sched--drawer {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/* A slimmer side bar: 224px instead of 264px. The logo capsule and the menu card follow its width. */
+.app--leftmenu:not(.app--collapsed) {
+  grid-template-columns: 224px 1fr;
+  --shell-rail-w: 224px;
+}
+.app--leftmenu:not(.app--square):not(.app--collapsed) .side-brand {
+  padding: 0 12px;
+}
+
+/* The side menu is sized like the top menu: 40px pills, 14px text, 4px of card around them. */
+.app--leftmenu:not(.app--square) .app__rail .app__side {
+  padding: 4px;
+  border-radius: 26px;
+}
+.app--leftmenu:not(.app--square) .app__side .nav-item {
+  height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+.app--leftmenu:not(.app--square) .app__side .nav-item .ic {
+  width: 16px;
+  height: 16px;
+}
+.app--leftmenu:not(.app--square) .app__side .nav-foot {
+  padding-top: 4px;
+}
+.app--leftmenu:not(.app--square).app--collapsed .app__rail .app__side {
+  padding: 4px;
+}
+.app--leftmenu:not(.app--square).app--collapsed .app__side .nav-item {
+  width: 40px;
+  padding: 0;
+}
+/* Expanded, the logo capsule is as tall as the top menu's. The collapsed circle keeps its size. */
+.app--leftmenu:not(.app--square):not(.app--collapsed) .side-brand {
+  height: 48px;
+  margin: 14px 0 14px 12px;
 }

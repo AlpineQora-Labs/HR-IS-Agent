@@ -32,6 +32,11 @@ public class Job {
     @Column(nullable = false)
     private String title;
 
+    /** The job ID its posting carries on the careers site; null when it has none. */
+    @Setter
+    @Column(name = "job_no")
+    private String jobNo;
+
     @Setter
     @Column(nullable = false)
     private String department;

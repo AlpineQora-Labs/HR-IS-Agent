@@ -27,7 +27,7 @@ public class AriaConfig {
     public AssistantBrain assistantBrain(
             @Value("${app.aria.enabled:true}") boolean enabled,
             @Value("${app.aria.model:claude-opus-4-8}") String model,
-            @Value("${app.assistant-name:Erica}") String name) {
+            @Value("${app.assistant-name:Bank of America Careers}") String name) {
         ScriptedBrain scripted = new ScriptedBrain(name);
         if (enabled && hasKey()) {
             log.info("Aria copy: Claude-powered (model={})", model);

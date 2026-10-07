@@ -22,7 +22,7 @@ import type { ApplicationRow, JobSummary } from '../api/types'
 import { date, initials } from '../lib/format'
 import { api } from '@/api/client'
 import { stageHue } from '@/lib/stages'
-import { ASSISTANT } from '@/lib/brand'
+import { CHAT } from '@/lib/brand'
 import { FitBadge } from '../components/FitBadge'
 
 // Terminal stages folded into the collapsible "Closed" lane so the active board
@@ -351,7 +351,7 @@ function AriaTranscript({ applicationId }: { applicationId: string }) {
         style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 0, cursor: 'pointer', padding: 0, color: 'var(--bofa-navy)', fontSize: 13, fontWeight: 600 }}
       >
         <span style={{ fontSize: 11 }}>{open ? '▾' : '▸'}</span>
-        {ASSISTANT} chat transcript
+        {CHAT} transcript
         {msgCount > 0 && <span className="badge badge--info">{msgCount} messages</span>}
       </button>
       {open && (
@@ -359,7 +359,7 @@ function AriaTranscript({ applicationId }: { applicationId: string }) {
           {isLoading ? (
             <div style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>Loading transcript…</div>
           ) : !convo || !convo.messages || convo.messages.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>No {ASSISTANT} conversation for this candidate.</div>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>No {CHAT.toLowerCase()} conversation for this candidate.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7, maxHeight: 280, overflowY: 'auto', padding: '2px 2px 2px 0' }}>
               {convo.messages.map((m) => {

@@ -66,7 +66,7 @@ export default function JobDetailPage() {
           <div>
             <h1 style={{ fontSize: 28 }}>{job.title}</h1>
             <p className="sub">
-              {[job.department, job.location, job.workMode, job.employmentType].filter(Boolean).join(' · ')}
+              {[job.jobNo ? `Job ID ${job.jobNo}` : null, job.department, job.location, job.workMode, job.employmentType].filter(Boolean).join(' · ')}
             </p>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
               <span className={`badge ${statusBadgeClass(job.status)}`}>{job.status}</span>

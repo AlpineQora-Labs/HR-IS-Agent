@@ -150,7 +150,8 @@ public class JobService {
                 j.getPayPeriod(),
                 applicationRepository.findByJobId(j.getId()).size(),
                 j.getPostedAt(),
-                j.getSummary());
+                j.getSummary(),
+                j.getJobNo());
     }
 
     private JobDetail toDetail(Job j) {
@@ -208,7 +209,8 @@ public class JobService {
                 knockouts,
                 new Preview(j.getPreviewHeadline(), j.getPreviewMediaUrl(), j.getPreviewDayInLife()),
                 splitChoices(j.getLanguages()),
-                stageCounts);
+                stageCounts,
+                j.getJobNo());
     }
 
     private String recruiterName(UUID id) {

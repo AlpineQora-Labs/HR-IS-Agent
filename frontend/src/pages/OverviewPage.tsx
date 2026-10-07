@@ -171,15 +171,6 @@ function TrendChart({ apps }: { apps: ApplicationRow[] }) {
   )
 }
 
-// ── Right rail ──────────────────────────────────────────────────────────────
-function NavyCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ background: 'var(--bofa-navy)', color: '#fff', borderRadius: 'var(--ra-3)', padding: '18px 20px' }}>
-      {children}
-    </div>
-  )
-}
-
 interface Todo {
   key: string
   glyph: string
@@ -212,7 +203,6 @@ export default function OverviewPage() {
     }).length
     const delta = prior7 === 0 || in7 === 0 ? null : ((in7 - prior7) / prior7) * 100
     const deltaMeta = in7 === 0 && prior7 > 0 ? `vs ${prior7} last week` : undefined
-    const drafts = (offers ?? []).filter((o) => o.status === 'DRAFT')
     const sent = (offers ?? []).filter((o) => o.status === 'SENT')
     const newApps = list.filter((a) => a.stage === 'APPLIED')
     const openSlots = (slots ?? []).filter((s) => !s.booked && new Date(s.startsAt).getTime() > now && new Date(s.startsAt).getTime() < now + wk)
@@ -220,22 +210,18 @@ export default function OverviewPage() {
       .filter((a) => a.appliedAt)
       .sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime())
       .slice(0, 5)
-    const nextEvent = (events ?? [])
+    const upcoming = (events ?? [])
       .filter((e) => new Date(e.startsAt).getTime() > now)
-      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0]
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
     const seatsOpen = (jobs ?? []).filter((j) => j.status.toUpperCase() === 'OPEN').reduce((n, j) => n + j.openings, 0)
 
     const todos: Todo[] = [
-      ...drafts.slice(0, 2).map((o) => ({
-        key: `o-${o.id}`, glyph: '✉', label: `Send offer — ${o.candidateName ?? o.title}`,
-        sub: o.jobTitle ?? 'Draft ready for review', to: '/offers',
-      })),
       ...(newApps.length ? [{ key: 'review', glyph: '☰', label: `Review ${newApps.length} new application${newApps.length === 1 ? '' : 's'}`, sub: 'Waiting in Applied', to: '/pipeline' }] : []),
       ...(sent.length ? [{ key: 'sent', glyph: '⏳', label: `${sent.length} offer${sent.length === 1 ? '' : 's'} awaiting decision`, sub: 'Follow up if quiet', to: '/offers' }] : []),
-      ...(openSlots.length ? [{ key: 'slots', glyph: '▦', label: `${openSlots.length} open interview slot${openSlots.length === 1 ? '' : 's'} this week`, sub: 'Offer them to candidates', to: '/interviews' }] : []),
+      ...(openSlots.length ? [{ key: 'slots', glyph: '▦', label: `${openSlots.length} open interview slot${openSlots.length === 1 ? '' : 's'} this week`, sub: 'Share them with candidates', to: '/interviews' }] : []),
     ].slice(0, 4)
 
-    return { in7, delta, deltaMeta, drafts, sent, recent, nextEvent, seatsOpen, todos }
+    return { in7, delta, deltaMeta, recent, upcoming, seatsOpen, todos }
   }, [apps, offers, slots, events, jobs])
 
   return (
@@ -248,7 +234,7 @@ export default function OverviewPage() {
         <Link to="/analytics" className="btn btn--outline btn--sm">Full analytics</Link>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 20, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 20, alignItems: 'stretch' }}>
         {/* Main column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
@@ -261,7 +247,7 @@ export default function OverviewPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 220px) 1fr', gap: 14, alignItems: 'stretch' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <DeltaTile label="New applications" value={derived.in7} delta={derived.delta} meta={derived.deltaMeta} to="/pipeline" />
-              <DeltaTile label="Offers awaiting" value={derived.sent.length} delta={null} to="/offers" />
+              <DeltaTile label="Upcoming events" value={derived.upcoming.length} delta={null} to="/events" />
             </div>
             <TrendChart apps={apps ?? []} />
           </div>
@@ -293,70 +279,74 @@ export default function OverviewPage() {
           </div>
         </div>
 
-        {/* Right rail */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <NavyCard>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 17 }}>Hiring progress</div>
-            <div style={{ fontSize: 12, opacity: 0.75, marginTop: 3 }}>Last 30 days</div>
+        {/* Right panel: one navy panel down the side, holding what needs the recruiter today. */}
+        <aside className="dash-panel">
+          <section>
+            <div className="dash-panel__title">Hiring progress</div>
+            <div className="dash-panel__sub">Last 30 days</div>
             {(() => {
               const hired = summary?.hires30d ?? 0
               const total = hired + derived.seatsOpen
               const pct = total ? Math.round((hired / total) * 100) : 0
               return (
                 <>
-                  <div style={{ height: 8, borderRadius: 999, background: 'rgba(255,255,255,0.22)', marginTop: 14 }}>
-                    <div style={{ width: `${Math.max(4, pct)}%`, height: '100%', borderRadius: 999, background: '#fff' }} />
-                  </div>
-                  <div style={{ fontSize: 12.5, marginTop: 10, opacity: 0.9 }}>
-                    <strong>{hired} hired</strong> · {derived.seatsOpen} seats still open
+                  <div className="dash-panel__bar"><div style={{ width: `${Math.max(4, pct)}%` }} /></div>
+                  <div className="dash-panel__stats">
+                    <div><strong>{hired}</strong><span>Hired</span></div>
+                    <div><strong>{derived.seatsOpen}</strong><span>Seats open</span></div>
+                    <div><strong>{pct}%</strong><span>Filled</span></div>
                   </div>
                 </>
               )
             })()}
-            <Link to="/pipeline" className="btn btn--sm" style={{ marginTop: 14, width: '100%', justifyContent: 'center', background: '#fff', color: 'var(--bofa-navy)', border: 0 }}>
-              View pipeline
-            </Link>
-          </NavyCard>
+            <Link to="/pipeline" className="dash-panel__btn">View pipeline</Link>
+          </section>
 
-          <div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 16.5, color: 'var(--ink-0)', margin: '4px 0 12px' }}>Your to-do list</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <section>
+            <div className="dash-panel__title">Your to-do list</div>
+            <div className="dash-panel__list">
               {derived.todos.length === 0 ? (
-                <div className="card"><div className="card__body" style={{ fontSize: 12.5, color: 'var(--ink-4)', textAlign: 'center', padding: '22px 14px' }}>All clear — nothing waiting on you.</div></div>
+                <div className="dash-panel__empty">All clear. Nothing is waiting on you.</div>
               ) : (
                 derived.todos.map((t) => (
-                  <Link key={t.key} to={t.to} className="card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', textDecoration: 'none' }}>
-                    <span style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--ink-0)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>
-                      {t.glyph}
-                    </span>
+                  <Link key={t.key} to={t.to} className="dash-panel__row">
+                    <span className="dash-panel__glyph">{t.glyph}</span>
                     <span style={{ minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--ink-0)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.label}</span>
-                      <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-4)' }}>{t.sub}</span>
+                      <strong>{t.label}</strong>
+                      <small>{t.sub}</small>
                     </span>
                   </Link>
                 ))
               )}
             </div>
-          </div>
+          </section>
 
-          {derived.nextEvent && (
-            <NavyCard>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#5BE49B' }} />
-                <span style={{ fontFamily: 'var(--font-display)', fontSize: 15.5 }}>{derived.nextEvent.name}</span>
-              </div>
-              <div style={{ fontSize: 12.5, marginTop: 8, opacity: 0.9 }}>
-                {date(derived.nextEvent.startsAt)}{derived.nextEvent.location ? ` · ${derived.nextEvent.location}` : ''}
-              </div>
-              <div style={{ fontSize: 11.5, marginTop: 6, opacity: 0.7 }}>
-                {derived.nextEvent.registrations.toLocaleString()} registered so far.
-              </div>
-              <Link to="/events" className="link" style={{ display: 'inline-block', marginTop: 10, color: '#fff', textDecoration: 'underline', fontSize: 12.5 }}>
-                Event details →
-              </Link>
-            </NavyCard>
-          )}
-        </div>
+          <section>
+            <div className="dash-panel__title">Coming up</div>
+            <div className="dash-panel__list">
+              {derived.upcoming.length === 0 ? (
+                <div className="dash-panel__empty">No events are scheduled.</div>
+              ) : (
+                derived.upcoming.slice(0, 3).map((e) => {
+                  const d = new Date(e.startsAt)
+                  return (
+                    <Link key={e.id} to="/events" className="dash-panel__row">
+                      <span className="dash-panel__date">
+                        <b>{d.toLocaleDateString('en-US', { day: 'numeric' })}</b>
+                        {d.toLocaleDateString('en-US', { month: 'short' })}
+                      </span>
+                      <span style={{ minWidth: 0 }}>
+                        <strong>{e.name}</strong>
+                        <small>{e.location ?? 'Virtual'} · {e.registrations.toLocaleString()} registered</small>
+                      </span>
+                    </Link>
+                  )
+                })
+              )}
+            </div>
+            <Link to="/events" className="dash-panel__link">All events →</Link>
+          </section>
+        </aside>
       </div>
     </div>
   )

@@ -22,7 +22,9 @@ public final class InterviewDtos {
             Integer score,
             String recommendation,
             String summary,
-            String meetingLink) {
+            String meetingLink,
+            /** How the time was set: TEXT, WEB_PAGE, CHAT (the candidate, from times worked out automatically) or TEAM. */
+            String bookedVia) {
     }
 
     /**

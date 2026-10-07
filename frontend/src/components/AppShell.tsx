@@ -110,6 +110,9 @@ const GROUP_PILL_LABELS: Record<string, string> = {
   'Platform': 'Platform',
 }
 
+/* Groups left out of the top menu. Their pages still open by address and from search. */
+const HIDDEN_PILL_GROUPS = new Set(['Offer & Hire', 'Talent Intelligence'])
+
 /* The icon each top-menu pill carries. */
 const GROUP_PILL_ICONS: Record<string, string> = {
   'Recruiting': 'jobs',
@@ -119,6 +122,13 @@ const GROUP_PILL_ICONS: Record<string, string> = {
   'Engagement': 'crm',
   'Platform': 'analytics',
 }
+
+/* Experiment: the side menu is one white card down the whole left edge with the logo at its top.
+   Set to false for the logo in the top bar. */
+const LEFT_MENU = true
+/* Experiment on top of it: the top bar and the side menu as one connected, square-cornered frame
+   instead of floating rounded cards. */
+const SQUARE_MENU = false
 
 /* Admin's rail shows its sections (the page has no in-page tabs). */
 // No 'Overview' entry: the locked Settings item at the rail's bottom already
@@ -132,12 +142,11 @@ const ADMIN_SECTIONS: { tab: string | null; label: string; icon: string }[] = [
   { tab: 'config', label: 'Configuration', icon: 'integrations' },
 ]
 
-function AdminRailNav() {
+function AdminLinks() {
   const location = useLocation()
   const cur = new URLSearchParams(location.search).get('tab')
   return (
-    <nav className="app__side">
-      <div className="nav-title">Settings</div>
+    <>
       {ADMIN_SECTIONS.map(({ tab, label, icon }) => {
         const Icon = ICONS[icon]
         // Communications is a real sub-route (lifted component set); the other
@@ -159,8 +168,47 @@ function AdminRailNav() {
           </Link>
         )
       })}
+    </>
+  )
+}
+
+function AdminRailNav() {
+  return (
+    <nav className="app__side">
+      <div className="nav-title">Settings</div>
+      <AdminLinks />
       <RailFoot />
     </nav>
+  )
+}
+
+/* The left side: the logo in its own capsule, then a card with the pages of the section picked in the top menu. */
+function LeftMenu({
+  groups,
+  activeGroup,
+  collapsed,
+  onHome,
+}: {
+  groups: { group: string; keys: string[] }[]
+  activeGroup: string
+  collapsed: boolean
+  onHome: () => void
+}) {
+  const pages = (keys: string[]) =>
+    keys.map((k) => <Item key={k} to={ROUTES[k]} Icon={ICONS[k]} label={MODULES.find((m) => m.key === k)!.label} />)
+  return (
+    <>
+      {/* The logo is its own capsule above the menu card, as in the AlpineOrion app. */}
+      <div className="side-brand">
+        <Brand collapsed={collapsed} onToggle={onHome} />
+      </div>
+      <nav className="app__side">
+      <div className="app__side-scroll">
+        {activeGroup === 'Admin' ? <AdminLinks /> : pages(groups.find((g) => g.group === activeGroup)?.keys ?? [])}
+      </div>
+      <RailFoot />
+      </nav>
+    </>
   )
 }
 
@@ -206,7 +254,8 @@ function Item({ to, Icon, label }: { to: string; Icon: IconC; label: string }) {
  *   - public/brand-logo.svg → full logo, shown when expanded
  *   - public/brand-mark.svg → symbol only, shown on the collapsed rail
  */
-const LOGO_SRCS = ['/brand-logo.svg', '/brand-logo.png']
+// The left menu carries the bank's own lockup: the name, then the flag.
+const LOGO_SRCS = LEFT_MENU ? ['/brand-lockup.svg', '/brand-logo.svg', '/brand-logo.png'] : ['/brand-logo.svg', '/brand-logo.png']
 const MARK_SRCS = ['/brand-mark.svg', '/brand-mark.png']
 
 function Brand({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
@@ -292,16 +341,18 @@ export function AppShell({ children }: { children: ReactNode }) {
       .filter(([, r]) => (r === '/' ? location.pathname === '/' : location.pathname.startsWith(r)))
       .sort((a, b) => b[1].length - a[1].length)[0]?.[0] ?? 'overview'
   const activeGroupName = MODULES.find((m) => m.key === activeKey)?.group ?? 'Recruiting'
-  const pillGroups = groups.filter((g) => g.group !== 'Admin')
+  const pillGroups = groups.filter((g) => g.group !== 'Admin' && !HIDDEN_PILL_GROUPS.has(g.group))
   const activeGroup = groups.find((g) => g.group === activeGroupName) ?? pillGroups[0]
 
   return (
-    <div className={collapsed ? 'app app--collapsed' : 'app'}>
+    <div className={['app', collapsed ? 'app--collapsed' : '', LEFT_MENU ? 'app--leftmenu' : '', LEFT_MENU && SQUARE_MENU ? 'app--square' : ''].filter(Boolean).join(' ')}>
       {/* Quixotic-style band: logo · group pills (primary nav) · actions. */}
       <div className="app__top">
-        <div className="app__topbrand">
-          <Brand collapsed={false} onToggle={() => navigate('/')} />
-        </div>
+        {!LEFT_MENU && (
+          <div className="app__topbrand">
+            <Brand collapsed={false} onToggle={() => navigate('/')} />
+          </div>
+        )}
         <nav className="topnav" aria-label="Sections">
           <div className="topnav__pills">
             {pillGroups.map((g) => {
@@ -338,7 +389,14 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
       {/* Contextual rail: just the active group's modules. */}
       <div className="app__rail">
-        {activeGroup.group === 'Admin' ? (
+        {LEFT_MENU ? (
+          <LeftMenu
+            groups={pillGroups}
+            activeGroup={activeGroup.group}
+            collapsed={collapsed}
+            onHome={() => navigate('/')}
+          />
+        ) : activeGroup.group === 'Admin' ? (
           <AdminRailNav />
         ) : (
           <RailNav keys={activeGroup.keys} title={GROUP_PILL_LABELS[activeGroup.group] ?? activeGroup.group} />

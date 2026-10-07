@@ -83,9 +83,12 @@
   --strip-w:          6px;          /* the colored left strip */
 
   /* ---- Type families ---- */
-  --font-display: 'Source Serif 4', 'Source Serif Pro', 'Charter', Georgia, serif;
-  --font-sans:    'Inter', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
-  --font-mono:    'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* One sans family for headings, labels and body. */
+  --font-display: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-sans:    'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  /* Small labels and figures use the same family; --font-code is for real code and template fields. */
+  --font-mono:    'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-code:    'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* ---- Type scale ---- */
   --t-eyebrow:  10px;   /* tier · the concierge */
@@ -104,8 +107,8 @@
   --t-display:  72px;
 
   /* ---- Tracking for the mono ALL-CAPS pattern ---- */
-  --track-mono: 0.14em;
-  --track-mono-tight: 0.08em;
+  --track-mono: 0.01em;
+  --track-mono-tight: 0;
 
   /* ---- Easing / motion (rare — used for hover only) ---- */
   --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1); /* @kind other */
@@ -164,12 +167,11 @@ strong, b { font-weight: 600; color: var(--ink-0); }
    "TIER 2 · THE CONCIERGE", "STEP ZERO · ALIGN BEFORE PAGING", etc. */
 .eyebrow,
 .label-mono {
-  font-family: var(--font-mono);
-  font-weight: 500;
+  font-family: var(--font-sans);
+  font-weight: 600;
   font-size: var(--t-mono);
   letter-spacing: var(--track-mono);
-  text-transform: uppercase;
-  color: var(--ink-2);
+  color: var(--ink-3);
 }
 .eyebrow.red    { color: var(--bofa-red); }
 .eyebrow.navy   { color: var(--bofa-navy); }
@@ -191,7 +193,7 @@ strong, b { font-weight: 600; color: var(--ink-0); }
   font-family: var(--font-mono);
   font-size: var(--t-micro);
   letter-spacing: var(--track-mono-tight);
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--ink-4);
 }
 

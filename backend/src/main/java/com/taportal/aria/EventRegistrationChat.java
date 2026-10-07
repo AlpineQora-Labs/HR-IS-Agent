@@ -81,8 +81,8 @@ public class EventRegistrationChat {
             CampusService campusService,
             RecruitingEventRepository events,
             ObjectMapper objectMapper,
-            @Value("${app.assistant-name:Erica}") String name) {
-        this.name = name == null || name.isBlank() ? "Erica" : name.trim();
+            @Value("${app.assistant-name:Bank of America Careers}") String name) {
+        this.name = name == null || name.isBlank() ? "Bank of America Careers" : name.trim();
         this.conversations = conversations;
         this.messages = messages;
         this.formDefinitions = formDefinitions;
@@ -115,14 +115,14 @@ public class EventRegistrationChat {
         if ("CLOSED".equals(registration) || "FULL".equals(registration)) {
             state.done = true;
             conversation.setStatus("COMPLETED");
-            aria(conversation, "closed", "Hello, I'm " + name + ". " + ("FULL".equals(registration)
+            aria(conversation, "closed", "Hello, this is " + name + ". " + ("FULL".equals(registration)
                     ? event.getName() + " is full, so I can't register you for it."
                     : "Registration for " + event.getName() + " has closed, so I can't register you for it.")
                     + " Have a look at our other events on the careers site.");
             persist(conversation, state);
             return turn(conversation, state);
         }
-        aria(conversation, "greeting", "Hello, I'm " + name + ". Good to see you at " + event.getName() + when
+        aria(conversation, "greeting", "Hello, this is " + name + ". Good to see you at " + event.getName() + when
                 + ". Let's get you registered — it takes under a minute."
                 + ("WAITLIST".equals(registration)
                         ? " Every seat is taken for now, so this puts you on the waitlist." : ""));

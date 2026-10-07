@@ -2,4 +2,6 @@
    in the backend's application.yml (the name the assistant introduces itself by);
    it is not read from the server, so the two are changed together. "Aria" is only
    the module's name in the code. */
-export const ASSISTANT = 'Erica'
+export const ASSISTANT = 'Bank of America Careers'
+/* What the assistant's chat is called where the full name would be a mouthful. */
+export const CHAT = 'Careers chat'

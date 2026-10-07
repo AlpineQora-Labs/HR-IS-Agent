@@ -24,7 +24,7 @@
 .msgs__scroll { overflow-y: auto; min-height: 0; }
 
 .msgs__day {
-  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.01em; text-transform: none;
   color: var(--ink-4); padding: 14px 0 6px;
 }
 

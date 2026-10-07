@@ -21,7 +21,7 @@ import java.util.List;
 public class ClaudeBrain implements AssistantBrain {
 
     private static final String SYSTEM =
-            "You are %s, the careers assistant for Bank of America Careers. "
+            "You are the careers assistant, and you go by the name %s. Say \"this is %1$s\" when you introduce yourself. "
                     + "Speak in the first person, in 1-2 short plain sentences. "
                     + "No markdown, no headings, no emoji, no exclamation marks. "
                     + "Output only the message to the candidate, nothing else.";
@@ -36,7 +36,7 @@ public class ClaudeBrain implements AssistantBrain {
         this.client = client;
         this.model = model;
         this.fallback = fallback;
-        this.system = SYSTEM.formatted(name == null || name.isBlank() ? "Erica" : name.trim());
+        this.system = SYSTEM.formatted(name == null || name.isBlank() ? "Bank of America Careers" : name.trim());
     }
 
     private String complete(String userPrompt, long maxTokens) {

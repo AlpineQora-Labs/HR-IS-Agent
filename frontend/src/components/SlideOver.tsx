@@ -17,11 +17,14 @@ export default function SlideOver({
   label,
   onClose,
   width = 440,
+  bare = false,
   children,
 }: {
   label: string
   onClose: () => void
   width?: number
+  /** No outline of its own: for a drawer whose content colours its own edge, like a navy head. */
+  bare?: boolean
   children: React.ReactNode
 }) {
   const [closing, setClosing] = useState(false)
@@ -73,7 +76,7 @@ export default function SlideOver({
           width,
           maxWidth: 'calc(92vw - 12px)',
           background: 'var(--app-panel)',
-          border: '1px solid var(--line)',
+          border: bare ? 0 : '1px solid var(--line)',
           borderRadius: 16,
           overflow: 'hidden',
           boxShadow: '-24px 0 64px rgba(16,22,38,0.22), 0 8px 28px rgba(16,22,38,0.14)',

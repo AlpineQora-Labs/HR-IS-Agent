@@ -6,6 +6,8 @@
 export interface JobSummary {
   id: string
   title: string
+  /** The job ID on the careers site, when it has one. */
+  jobNo?: string | null
   department: string
   location: string
   workMode: string
@@ -123,6 +125,8 @@ export interface Interview {
   recommendation: string
   summary: string
   meetingLink: string | null
+  /** How the time was set: TEXT, WEB_PAGE or CHAT (the candidate picked, from times worked out automatically), or TEAM. Null when not recorded. */
+  bookedVia?: 'TEXT' | 'WEB_PAGE' | 'CHAT' | 'TEAM' | null
 }
 
 export interface Slot {

@@ -691,7 +691,7 @@ function ViewerTab({ s }: { s: SurveyV2 }) {
   return (
     <div className="card" style={{ maxWidth: 760 }}>
       <div style={{ background: 'var(--bofa-navy)', color: '#fff', padding: '16px 22px' }}>
-        <div style={{ fontSize: 11, opacity: 0.8, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Preview · {programName(s.programId)}</div>
+        <div style={{ fontSize: 11, opacity: 0.8, letterSpacing: '0.04em', textTransform: 'none' }}>Preview · {programName(s.programId)}</div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginTop: 2 }}>{s.name}</div>
         {s.summary ? <div style={{ fontSize: 12.5, opacity: 0.85, marginTop: 4 }}>{s.summary}</div> : null}
       </div>

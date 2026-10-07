@@ -84,6 +84,11 @@ public class Interview {
     @Column(name = "booked_at")
     private OffsetDateTime bookedAt;
 
+    /** Who set the time, and how: TEXT, WEB_PAGE, CHAT or TEAM (see BookingOrigin). Null when not recorded. */
+    @Setter
+    @Column(name = "booked_via")
+    private String bookedVia;
+
     /** Candidate-driven reschedules, counted against the policy limit. */
     @Setter
     @Column(name = "reschedule_count", nullable = false)

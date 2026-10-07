@@ -195,6 +195,45 @@ export function useRescheduleInterview() {
   return useSchedulingMutation((interviewId: string) => api.post(`/interviews/${interviewId}/reschedule`))
 }
 
+/** Starts an interview for an application that has none: the candidate is invited and offered times. */
+export function useBeginInterview() {
+  return useSchedulingMutation((applicationId: string) =>
+    api.post<Interview>('/interviews/self-schedule', { applicationId }).then((r) => r.data))
+}
+
+/** One day for a panel: whether a time can be booked, why not when none can, and every time that can. */
+export interface DayOpenings {
+  day: string
+  state: 'OPEN' | 'FULL' | 'OUTSIDE' | 'PAST'
+  why: string | null
+  times: string[]
+}
+
+/** Day by day, every time these interviewers could hold the interview. Asking changes nothing. */
+export function useInterviewOpenings(interviewId: string | undefined, interviewerUserIds: string[]) {
+  return useQuery({
+    enabled: !!interviewId,
+    queryKey: ['interview-openings', interviewId, [...interviewerUserIds].sort().join(',')],
+    queryFn: () =>
+      api
+        .get<DayOpenings[]>(`/interviews/${interviewId}/openings`, {
+          params: { days: 60, ...(interviewerUserIds.length ? { interviewerUserIds: interviewerUserIds.join(',') } : {}) },
+        })
+        .then((r) => r.data),
+  })
+}
+
+/** The hiring team books a time it picked for the candidate, with this panel. */
+export function useBookInterviewTime() {
+  return useSchedulingMutation(({ interviewId, startsAt, interviewerUserIds }: { interviewId: string; startsAt: string; interviewerUserIds?: string[] }) =>
+    api.post(`/interviews/${interviewId}/book-time`, { startsAt, interviewerUserIds }))
+}
+
+/** The hiring team books one of the times on offer, on the candidate's behalf. */
+export function useSelectProposedSlot() {
+  return useSchedulingMutation((slotId: string) => api.post(`/interview-slots/${slotId}/select`))
+}
+
 /** COMPLETED | CANCELED | NO_SHOW. */
 export function useTransitionInterview() {
   return useSchedulingMutation(({ interviewId, status }: { interviewId: string; status: string }) =>

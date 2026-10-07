@@ -26,7 +26,9 @@ public final class JobDtos {
             String payPeriod,
             long applicants,
             OffsetDateTime postedAt,
-            String summary) {
+            String summary,
+            /** The job ID on the careers site, when it has one. */
+            String jobNo) {
     }
 
     public record SkillRef(UUID id, String name, String category, BigDecimal weight, boolean required) {}
@@ -65,7 +67,8 @@ public final class JobDtos {
             List<Knockout> knockoutQuestions,
             Preview preview,
             List<String> languages,
-            Map<String, Long> stageCounts) {
+            Map<String, Long> stageCounts,
+            String jobNo) {
     }
 
     public record CreateJobRequest(

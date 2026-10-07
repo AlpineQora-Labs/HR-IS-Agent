@@ -192,6 +192,7 @@ public class InterviewService {
         slot.setStatus("SELECTED");
         slotRepository.save(slot);
         interview.setBookedAt(OffsetDateTime.now());
+        interview.setBookedVia(BookingOrigin.TEAM.name());
         Interview saved = interviewRepository.save(interview);
         block(saved, app, team, startsAt, endsAt);
         withdrawOtherOffers(saved);
@@ -353,6 +354,36 @@ public class InterviewService {
         return slots;
     }
 
+    /**
+     * The hiring team books a time of its own choosing for the candidate. The panel is set, the
+     * time replaces whatever was on offer, and it is booked at once through the same checks as a
+     * candidate's own pick: a time that is no longer free is refused.
+     */
+    @Transactional(noRollbackFor = ResponseStatusException.class)
+    public Interview bookByTeam(UUID interviewId, OffsetDateTime startsAt, List<UUID> panel) {
+        Interview interview = load(interviewId);
+        if (isBooked(interview)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This interview is booked — reschedule it to pick another time.");
+        }
+        if (startsAt == null || !startsAt.isAfter(OffsetDateTime.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pick a time that is still to come");
+        }
+        Application app = applications.findById(interview.getApplicationId()).orElseThrow();
+        if (panel != null && !panel.isEmpty()) {
+            panelists.deleteByInterviewId(interviewId);
+            for (UUID userId : panel.stream().distinct().toList()) {
+                panelists.save(new InterviewPanelist(interviewId, userId));
+            }
+        }
+        List<RecruiterUser> team = participantsFor(interview, app);
+        OffsetDateTime end = startsAt.plusMinutes(interview.getDurationMin());
+        List<OffsetDateTime[]> window = new ArrayList<>();
+        window.add(new OffsetDateTime[] {startsAt, end});
+        List<SlotResponse> offered = offer(interview, app, team, window);
+        return selectProposedSlot(offered.get(0).id(), com.taportal.domain.events.BookingOrigin.TEAM);
+    }
+
     /** The team starts scheduling for an application; the candidate is told the times. */
     @Transactional
     public Interview beginByTeam(UUID applicationId, String type, int durationMin, UUID roundId) {
@@ -509,6 +540,7 @@ public class InterviewService {
         interview.setStatus("SCHEDULED");
         interview.setMeetingLink("https://teams.microsoft.com/l/meetup-join/19%3Ameeting_" + UUID.randomUUID());
         interview.setBookedAt(OffsetDateTime.now());
+        interview.setBookedVia(origin.name());
         interviewRepository.save(interview);
         events.publishEvent(new InterviewBooked(interview.getId(), interview.getScheduledAt(), origin));
 
@@ -785,7 +817,8 @@ public class InterviewService {
                 i.getScore(),
                 i.getRecommendation(),
                 i.getSummary(),
-                i.getMeetingLink());
+                i.getMeetingLink(),
+                i.getBookedVia());
     }
 
     static SlotResponse toSlotResponse(InterviewSlot s) {

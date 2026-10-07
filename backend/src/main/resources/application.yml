@@ -31,7 +31,7 @@ app:
   # EventRegistrationChat). The screens carry the same name as ASSISTANT in
   # frontend/src/lib/brand.ts; the two are changed together, in code, so there is
   # no environment override. Stored text was renamed once, by V27.
-  assistant-name: Erica
+  assistant-name: Bank of America Careers
   messaging:
     # 'simulated' records every text and email and delivers none. A real
     # provider is a class implementing SmsGateway / EmailGateway; its

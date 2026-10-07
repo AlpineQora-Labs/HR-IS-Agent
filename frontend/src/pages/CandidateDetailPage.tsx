@@ -1,10 +1,9 @@
 import { Link, useParams } from 'react-router-dom'
 import AriaConversations from '@/components/AriaConversations'
 import MessageTimeline, { InterviewReminders } from '@/components/MessageTimeline'
-import PhoneSimulator from '@/components/PhoneSimulator'
 import { useCandidate } from '../api/hooks'
 import { humanize, initials } from '../lib/format'
-import { ASSISTANT } from '@/lib/brand'
+import { CHAT } from '@/lib/brand'
 import { FitBadge } from '../components/FitBadge'
 
 function stageClass(stage: string) {
@@ -151,7 +150,7 @@ export default function CandidateDetailPage() {
 
         <div className="card">
           <div className="card__head">
-            <h3 style={{ fontSize: 15 }}>{ASSISTANT} conversations</h3>
+            <h3 style={{ fontSize: 15 }}>{CHAT} conversations</h3>
             <span className="eyebrow">From the career-site chat</span>
           </div>
           <div className="card__body">
@@ -161,30 +160,6 @@ export default function CandidateDetailPage() {
         </div>
 
         <div style={{ display: 'grid', gap: 20, minWidth: 0 }}>
-        <div className="card">
-          <div className="card__head">
-            <h3 style={{ fontSize: 15 }}>Candidate’s phone</h3>
-            <a
-              className="link"
-              style={{ fontSize: 12.5 }}
-              href={`/phone/${c.id}`}
-              target="candidate-phone"
-              onClick={(e) => {
-                e.preventDefault()
-                window.open(`/phone/${c.id}`, 'candidate-phone', 'width=420,height=860')
-              }}
-            >
-              Open in its own window
-            </a>
-          </div>
-          <div className="card__body">
-            <PhoneSimulator candidateId={c.id} />
-            <div className="phone-caption">
-              A stand-in for the handset. What is typed here is handled as a text from the candidate.
-            </div>
-          </div>
-        </div>
-
         <div className="card">
           <div className="card__head">
             <h3 style={{ fontSize: 15 }}>Skills</h3>

@@ -21,11 +21,11 @@ public class ScriptedBrain implements AssistantBrain {
     private final String name;
 
     public ScriptedBrain(String name) {
-        this.name = name == null || name.isBlank() ? "Erica" : name.trim();
+        this.name = name == null || name.isBlank() ? "Bank of America Careers" : name.trim();
     }
 
     public ScriptedBrain() {
-        this("Erica");
+        this("Bank of America Careers");
     }
 
     /** All candidate-facing times are rendered in ET, whatever offset the DB returns. */
@@ -36,7 +36,7 @@ public class ScriptedBrain implements AssistantBrain {
     @Override
     public String greeting(Job job, String language) {
         String title = job != null ? job.getTitle() : "this role";
-        return "Hello, I'm " + name + ", the careers assistant. "
+        return "Hello, this is " + name + ". "
                 + "Thank you for your interest in the " + title + " role. "
                 + "I'll ask a few questions to start your application. It takes about a minute. "
                 + "To begin, what's your full name?";

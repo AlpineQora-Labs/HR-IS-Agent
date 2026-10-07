@@ -80,7 +80,7 @@ export default function CareersEventsPage() {
       {/* Hero */}
       <div style={{ background: 'var(--bofa-navy, #012169)', color: '#fff' }}>
         <div style={{ maxWidth: 1120, margin: '0 auto', padding: '44px 24px' }}>
-          <div style={{ fontSize: 12.5, letterSpacing: '0.14em', textTransform: 'uppercase', opacity: 0.7 }}>
+          <div style={{ fontSize: 12.5, letterSpacing: '0.01em', textTransform: 'none', opacity: 0.7 }}>
             Early Careers
           </div>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 40, margin: '8px 0 6px', color: '#fff' }}>Campus Events</h1>
@@ -94,7 +94,7 @@ export default function CareersEventsPage() {
       <main style={{ maxWidth: 1120, margin: '0 auto', padding: '28px 24px 60px', display: 'grid', gridTemplateColumns: '220px 1fr', gap: 32, alignItems: 'start' }}>
         {/* Filters */}
         <aside style={{ position: 'sticky', top: 20 }}>
-          <div style={{ fontSize: 12.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-4)', marginBottom: 10 }}>
+          <div style={{ fontSize: 12.5, letterSpacing: '0.01em', textTransform: 'none', color: 'var(--ink-4)', marginBottom: 10 }}>
             Location
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

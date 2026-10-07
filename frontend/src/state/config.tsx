@@ -33,10 +33,10 @@ export const MODULES: ModuleDef[] = [
   { key: 'sourcing', label: 'Sourcing', group: 'Talent Intelligence' },
   { key: 'mobility', label: 'Internal Mobility', group: 'Talent Intelligence' },
   // Engagement
+  { key: 'events', label: 'Campus', group: 'Engagement' },
   { key: 'crm', label: 'Talent CRM', group: 'Engagement' },
   { key: 'campaigns', label: 'Nurture', group: 'Engagement' },
   { key: 'referrals', label: 'Referrals', group: 'Engagement' },
-  { key: 'events', label: 'Campus', group: 'Engagement' },
   { key: 'surveys', label: 'Surveys', group: 'Engagement' },
   { key: 'copilot', label: 'AI Copilot', group: 'Engagement' },
   // Platform

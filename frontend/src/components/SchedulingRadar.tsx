@@ -3,7 +3,7 @@ import SlideOver, { useSlideOverClose } from '@/components/SlideOver'
 import { useProposeTimes, useSchedulingOverview, useTransitionInterview } from '@/api/hooks'
 import type { AttentionItem, InterviewerLoad } from '@/api/types'
 import { date } from '@/lib/format'
-import { ASSISTANT } from '@/lib/brand'
+import { CHAT } from '@/lib/brand'
 
 /* The scheduling attention bar — "what's stuck", across every job. A slim strip
    of counters keeps the calendar as the page's hero; clicking a counter opens a
@@ -23,7 +23,7 @@ const age = (hours: number) => (hours < 1 ? '<1h' : hours < 48 ? `${hours}h` : `
 const LANES: { key: LaneKey; label: string; tone: string; hint: string }[] = [
   { key: 'awaiting', label: 'Awaiting candidate', tone: 'var(--warn, #b45309)', hint: 'Offers out — the candidate hasn’t picked a time yet. Re-propose to retract and offer fresh times (optionally with a different panel).' },
   { key: 'outcome', label: 'Needs outcome', tone: 'var(--bofa-red, #c41230)', hint: 'The scheduled time has passed — record what happened so the pipeline keeps moving.' },
-  { key: 'noshow', label: 'No-show recovery', tone: 'var(--info, #1d4ed8)', hint: `${ASSISTANT} has already re-offered times in the candidate’s chat. No action needed unless you want to step in.` },
+  { key: 'noshow', label: 'No-show recovery', tone: 'var(--info, #1d4ed8)', hint: `The ${CHAT.toLowerCase()} has already re-offered times in the candidate’s chat. No action needed unless you want to step in.` },
   { key: 'today', label: 'Today', tone: 'var(--ok, #047857)', hint: 'Interviews happening today (ET).' },
 ]
 
@@ -178,7 +178,7 @@ function LanePanel({
                 </>
               )}
               {lane.key === 'noshow' && (
-                <span className="muted" style={{ fontSize: 12 }}>{ASSISTANT} has sent new times</span>
+                <span className="muted" style={{ fontSize: 12 }}>New times sent in chat</span>
               )}
               {lane.key === 'today' && item.meetingLink && (
                 <a href={item.meetingLink} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>Join on Teams</a>
@@ -232,7 +232,7 @@ function LoadPanel({ load, onClose }: { load: InterviewerLoad[]; onClose: () => 
 
 /* Panel picker + load-balancing assist: choose who sits on this round, lightest
    load first, then re-propose times that fit every panelist's calendar. */
-function PanelPicker({ item, load, onClose }: { item: AttentionItem; load: InterviewerLoad[]; onClose: () => void }) {
+export function PanelPicker({ item, load, onClose }: { item: AttentionItem; load: InterviewerLoad[]; onClose: () => void }) {
   const propose = useProposeTimes()
   const animated = useSlideOverClose()
   const byLoad = useMemo(() => [...load].sort((a, b) => a.next7Days - b.next7Days), [load])

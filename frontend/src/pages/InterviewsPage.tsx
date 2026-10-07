@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { defaultJobId } from '@/lib/jobs'
 import SlideOver, { useSlideOverClose } from '@/components/SlideOver'
 import { SchedulingRadar } from '@/components/SchedulingRadar'
+import InterviewDesk from './InterviewDesk'
 import { useStore } from '@/state/store'
 import { useApplications, useJobInterviews, useJobs, useProposeTimes, useRescheduleInterview, useSlots, useTransitionInterview } from '@/api/hooks'
 import { date } from '@/lib/format'
@@ -143,7 +144,7 @@ function TimeGrid({
             const isToday = d.toDateString() === todayKey
             return (
               <div key={d.toISOString()} style={{ padding: '8px 6px', textAlign: 'center', borderLeft: '1px solid var(--line)' }}>
-                <div style={{ fontSize: 11, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                <div style={{ fontSize: 11, color: 'var(--ink-4)', textTransform: 'none', letterSpacing: '0.03em' }}>
                   {d.toLocaleDateString('en-US', { weekday: 'short' })}
                 </div>
                 <div className="t-num" style={{ fontSize: 14, fontWeight: isToday ? 700 : 500, color: isToday ? 'var(--bofa-navy)' : 'var(--ink-1)', marginTop: 2 }}>
@@ -443,20 +444,10 @@ function InterviewCalendar({
     return typeColors[ev.typeKey || 'INTERVIEW'] || TYPE_HUES[0]
   }
 
-  const earliest = useMemo(
-    () => (events.length ? new Date(Math.min(...events.map((e) => e.start.getTime()))) : new Date()),
-    [events],
-  )
   const [scale, setScale] = useState<Scale>('week')
-  const [cursor, setCursor] = useState(() => earliest)
-  const [anchored, setAnchored] = useState(false)
+  // Opens on the current week; an old interview does not drag the calendar back to its date.
+  const [cursor, setCursor] = useState(() => new Date())
   const [selected, setSelected] = useState<CalEvent | null>(null)
-  useEffect(() => {
-    if (!anchored && events.length) {
-      setCursor(earliest)
-      setAnchored(true)
-    }
-  }, [anchored, events.length, earliest])
 
   function shift(dir: number) {
     const d = new Date(cursor)
@@ -695,7 +686,8 @@ export default function InterviewsPage() {
   const [params, setParams] = useSearchParams()
   const jobId = params.get('job') ?? ''
   const setJobId = (id: string) => setParams(id ? { job: id } : {}, { replace: true })
-  const [view, setView] = useState<'calendar' | 'list'>('calendar')
+  // The desk (what needs doing) comes first; the calendar and the list are other views of the same interviews.
+  const [view, setView] = useState<'desk' | 'calendar' | 'list'>('desk')
 
   const effectiveJobId = jobId || defaultJobId(jobs)
 
@@ -722,19 +714,26 @@ export default function InterviewsPage() {
         <div className="page-head__row">
           <div>
             <h1>Interviews</h1>
-            <p className="sub">Scheduled conversations and open interviewer availability, scoped by job and candidate.</p>
+            <p className="sub">
+              {view === 'desk'
+                ? 'What needs doing about interviews across every job, and the week ahead.'
+                : 'Scheduled interviews and open interviewer times, for one job at a time.'}
+            </p>
           </div>
           <div className="segmented" role="group" aria-label="View">
+            <button aria-pressed={view === 'desk'} onClick={() => setView('desk')}>Desk</button>
             <button aria-pressed={view === 'calendar'} onClick={() => setView('calendar')}>Calendar</button>
             <button aria-pressed={view === 'list'} onClick={() => setView('list')}>List</button>
           </div>
         </div>
       </div>
 
-      {/* Cross-job radar: what's stuck, what's today, who's loaded. */}
-      <SchedulingRadar />
+      {view === 'desk' && <InterviewDesk />}
 
-      <div className="toolbar" style={{ marginBottom: 18 }}>
+      {/* Cross-job radar: what's stuck, what's today, who's loaded. */}
+      {view !== 'desk' && <SchedulingRadar />}
+
+      <div className="toolbar" style={{ marginBottom: 18, display: view === 'desk' ? 'none' : undefined }}>
         <select
           className="select"
           style={{ width: 280 }}
@@ -749,7 +748,7 @@ export default function InterviewsPage() {
         </select>
       </div>
 
-      {view === 'calendar' ? (
+      {view === 'desk' ? null : view === 'calendar' ? (
         <>
           <InterviewCalendar interviews={interviews} slots={slotsByJob} nameByApp={nameByApp} />
           <p className="sub" style={{ marginTop: 12, fontSize: 12.5 }}>

@@ -130,7 +130,7 @@ export default function JobsPage() {
     const q = filter.trim().toLowerCase()
     if (!q) return data
     return data.filter((j) =>
-      [j.title, j.department, j.location, j.family, j.status].some((v) => v?.toLowerCase().includes(q)),
+      [j.title, j.jobNo, j.department, j.location, j.family, j.status].some((v) => v?.toLowerCase().includes(q)),
     )
   }, [data, filter])
 
@@ -227,7 +227,7 @@ export default function JobsPage() {
                       </div>
                     </Link>
                     <div className="who__sub" style={{ marginTop: 2 }}>
-                      {j.department}
+                      {j.jobNo ? `Job ID ${j.jobNo} · ` : ''}{j.department}
                     </div>
                   </td>
                   <td className="t-muted">{j.location}</td>

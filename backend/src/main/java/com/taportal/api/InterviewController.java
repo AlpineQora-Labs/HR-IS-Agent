@@ -72,6 +72,13 @@ public class InterviewController {
         return interviewService.proposeByTeam(id, request == null ? null : request.interviewerUserIds());
     }
 
+    /** The hiring team books a time it picked for the candidate. 409 if it is no longer free. */
+    @PostMapping("/v1/interviews/{id}/book-time")
+    public InterviewResponse bookTime(@PathVariable UUID id, @RequestBody SchedulingDtos.BookTimeRequest request) {
+        return InterviewService.toResponse(
+                interviewService.bookByTeam(id, request.startsAt(), request.interviewerUserIds()));
+    }
+
     /** The options currently awaiting the candidate. */
     @GetMapping("/v1/interviews/{id}/proposed-slots")
     public List<SlotResponse> proposedSlots(@PathVariable UUID id) {

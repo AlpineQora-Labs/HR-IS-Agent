@@ -6,7 +6,7 @@ import AriaConversations from '@/components/AriaConversations'
 import MessageTimeline from '@/components/MessageTimeline'
 import type { CandidateSummary } from '../api/types'
 import { date, humanize, initials } from '../lib/format'
-import { ASSISTANT } from '@/lib/brand'
+import { CHAT } from '@/lib/brand'
 import { FitBadge } from '../components/FitBadge'
 
 // Split-view pilot: the candidate list docks left, the record lives on the
@@ -78,7 +78,7 @@ function CandidateDetailPane({ summary, tab, setTab, frameless = false }: {
     { key: 'applications', label: 'Applications', count: apps.length },
     { key: 'interviews', label: 'Interviews', count: interviews.length },
     { key: 'messages', label: 'Messages' },
-    { key: 'aria', label: `${ASSISTANT} chat` },
+    { key: 'aria', label: CHAT },
   ]
 
   return (

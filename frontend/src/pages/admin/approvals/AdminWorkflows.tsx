@@ -450,7 +450,7 @@ function WorkflowCard({
             fontFamily: 'var(--font-mono)',
             fontSize: 10.5,
             letterSpacing: '.12em',
-            textTransform: 'uppercase',
+            textTransform: 'none',
             color: 'var(--ink-4)',
             marginBottom: 10,
           }}

@@ -41,4 +41,10 @@ public final class SchedulingDtos {
 
     /** Optional panel override when (re)proposing times. */
     public record ProposeRequest(List<UUID> interviewerUserIds) {}
+
+    /** One day for a panel: OPEN, FULL, OUTSIDE or PAST; why when not open; the start of every time that can be booked. */
+    public record DayOpeningsDto(java.time.LocalDate day, String state, String why, List<OffsetDateTime> times) {}
+
+    /** A time the hiring team picked for the candidate, and the panel it is for (null keeps the panel). */
+    public record BookTimeRequest(OffsetDateTime startsAt, List<UUID> interviewerUserIds) {}
 }
