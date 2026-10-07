@@ -72,6 +72,19 @@ public class InterviewController {
         return interviewService.proposeByTeam(id, request == null ? null : request.interviewerUserIds());
     }
 
+    /** Day by day, every time this panel could hold the interview. Read only. */
+    @GetMapping("/v1/interviews/{id}/openings")
+    public List<SchedulingDtos.DayOpeningsDto> openings(
+            @PathVariable UUID id,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) List<UUID> interviewerUserIds,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "42") int days) {
+        java.time.LocalDate from = java.time.LocalDate.now();
+        return interviewService.openingsFor(id, interviewerUserIds, from, from.plusDays(Math.max(1, Math.min(days, 90)))).stream()
+                .map(d -> new SchedulingDtos.DayOpeningsDto(
+                        d.day(), d.state().name(), d.why(), d.times().stream().map(t -> t[0]).toList()))
+                .toList();
+    }
+
     /** The hiring team books a time it picked for the candidate. 409 if it is no longer free. */
     @PostMapping("/v1/interviews/{id}/book-time")
     public InterviewResponse bookTime(@PathVariable UUID id, @RequestBody SchedulingDtos.BookTimeRequest request) {

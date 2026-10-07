@@ -355,6 +355,23 @@ public class InterviewService {
     }
 
     /**
+     * Every time a panel could hold this interview on each day of a range, and for a day with
+     * none, why. It is what the hiring team picks from; nothing is offered or changed by asking.
+     *
+     * @param panel the interviewers to check; null or empty for the people already on the interview
+     */
+    @Transactional(readOnly = true)
+    public List<AvailabilityService.DayOpenings> openingsFor(
+            UUID interviewId, List<UUID> panel, java.time.LocalDate from, java.time.LocalDate to) {
+        Interview interview = load(interviewId);
+        Application app = applications.findById(interview.getApplicationId()).orElseThrow();
+        List<UUID> ids = panel != null && !panel.isEmpty()
+                ? panel.stream().distinct().toList()
+                : participantsFor(interview, app).stream().map(RecruiterUser::getId).toList();
+        return availability.openings(ids, interview.getDurationMin(), from, to, interviewId);
+    }
+
+    /**
      * The hiring team books a time of its own choosing for the candidate. The panel is set, the
      * time replaces whatever was on offer, and it is booked at once through the same checks as a
      * candidate's own pick: a time that is no longer free is refused.
