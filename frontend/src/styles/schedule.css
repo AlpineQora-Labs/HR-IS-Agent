@@ -1,0 +1,112 @@
+/* The schedule picker: a month of days, the times of a day, and what to do
+   with the times chosen. Built on the product tokens (ds-product.css).
+   Which days are open, which times exist and how many may be chosen are the
+   server's to say; nothing here carries a rule. */
+
+.sched { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+.sched__label {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-4); margin: 0 0 6px;
+}
+.sched__row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sched__muted { font-size: 12px; color: var(--ink-4); line-height: 1.45; }
+
+/* ---- Who, and which round ------------------------------------------- */
+.sched__people { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sched__person {
+  font-size: 12px; font-weight: 500; color: var(--ink-1);
+  padding: 4px 9px; border: 1px solid var(--line-2); border-radius: var(--ra-1); background: var(--app-panel);
+}
+.sched__link {
+  appearance: none; border: 0; background: none; padding: 0; cursor: pointer;
+  font: inherit; font-size: 12.5px; font-weight: 500; color: var(--bofa-navy);
+}
+.sched__link:hover { text-decoration: underline; }
+.sched__link:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 3px; }
+.sched__link:disabled { color: var(--ink-5); cursor: default; text-decoration: none; }
+
+.sched__panel {
+  border: 1px solid var(--line); border-radius: var(--ra-2); padding: 4px 0;
+  max-height: 188px; overflow-y: auto; background: var(--app-panel);
+}
+.sched__check {
+  display: flex; align-items: center; gap: 9px; padding: 6px 12px; cursor: pointer;
+  font-size: 12.5px; color: var(--ink-1);
+}
+.sched__check:hover { background: var(--app-hover); }
+.sched__check small { color: var(--ink-4); font-size: 11.5px; }
+
+/* ---- The month ------------------------------------------------------ */
+.sched__month { font-size: 13px; font-weight: 600; color: var(--ink-0); min-width: 116px; text-align: center; }
+.sched__nav {
+  appearance: none; cursor: pointer; width: 28px; height: 28px; border-radius: var(--ra-1);
+  border: 1px solid var(--line-2); background: var(--app-panel); color: var(--ink-2);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 14px; line-height: 1;
+}
+.sched__nav:hover:not(:disabled) { background: var(--app-hover); border-color: var(--line-3); }
+.sched__nav:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.sched__nav:disabled { opacity: 0.4; cursor: default; }
+
+.sched__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.sched__dow { font-size: 11px; color: var(--ink-4); text-align: center; padding: 2px 0 4px; }
+.sched__day {
+  appearance: none; height: 36px; border-radius: var(--ra-1);
+  border: 1px solid transparent; background: none;
+  font-family: var(--font-sans); font-size: 13px; color: var(--ink-5);
+  display: flex; align-items: center; justify-content: center;
+}
+.sched__day--open { cursor: pointer; color: var(--ink-0); font-weight: 500; border-color: var(--line-3); background: var(--app-panel); }
+.sched__day--open:hover { background: var(--app-hover); border-color: var(--ink-4); }
+.sched__day--full { background: var(--app-sunken); color: var(--ink-4); text-decoration: line-through; }
+.sched__day--past { color: var(--line-3); }
+.sched__day[aria-pressed="true"] { background: var(--bofa-navy); border-color: var(--bofa-navy); color: #fff; }
+.sched__day--has-chosen { box-shadow: inset 0 -2px 0 var(--bofa-navy); }
+.sched__day:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.sched__legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px; color: var(--ink-4); }
+.sched__key { display: inline-flex; align-items: center; gap: 6px; }
+.sched__swatch { width: 10px; height: 10px; border-radius: 2px; border: 1px solid transparent; flex: none; }
+.sched__swatch--open { border-color: var(--line-3); background: var(--app-panel); }
+.sched__swatch--full { background: var(--app-sunken); border-color: var(--line); }
+.sched__swatch--outside { border-color: var(--line); background: none; }
+
+/* ---- The times of a day --------------------------------------------- */
+.sched__times { display: flex; flex-wrap: wrap; gap: 6px; }
+.sched__time {
+  appearance: none; cursor: pointer; height: 32px; padding: 0 11px; border-radius: var(--ra-1);
+  border: 1px solid var(--line-3); background: var(--app-panel);
+  font-family: var(--font-sans); font-size: 12.5px; font-weight: 500; color: var(--ink-0);
+}
+.sched__time:hover:not(:disabled) { background: var(--app-hover); border-color: var(--ink-4); }
+.sched__time[aria-pressed="true"] { background: var(--bofa-navy); border-color: var(--bofa-navy); color: #fff; }
+.sched__time:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.sched__time:disabled { color: var(--ink-5); border-color: var(--line); cursor: default; }
+
+/* ---- What is chosen, and what becomes of it -------------------------- */
+.sched__chosen { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.sched__chosen li {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 12.5px; color: var(--ink-1);
+  padding: 5px 4px 5px 10px; border: 1px solid var(--line); border-radius: var(--ra-1);
+}
+.sched__drop {
+  appearance: none; border: 0; background: none; cursor: pointer; color: var(--ink-4);
+  font-size: 12px; padding: 2px 6px; border-radius: 3px;
+}
+.sched__drop:hover { color: var(--ink-0); background: var(--app-hover); }
+.sched__drop:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.sched__actions { display: flex; flex-direction: column; gap: 8px; }
+.sched__said {
+  font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+  border: 1px solid var(--line-2); border-left: 3px solid var(--c-green, #007840);
+  border-radius: var(--ra-1); padding: 9px 12px; background: var(--app-panel); overflow-wrap: anywhere;
+}
+.sched__said--refused { border-left-color: var(--bofa-red); color: var(--danger-fg); }
+.sched__said--note { border-left-color: var(--c-amber, #8F5E00); }
+.sched__said p { margin: 0; font-size: inherit; line-height: inherit; color: inherit; }
+.sched__said p + p { margin-top: 6px; }
+
+.sched__booked { font-size: 13px; line-height: 1.5; color: var(--ink-1); }
+.sched__booked b { color: var(--ink-0); }
