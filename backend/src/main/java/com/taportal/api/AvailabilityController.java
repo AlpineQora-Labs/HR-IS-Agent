@@ -1,5 +1,6 @@
 package com.taportal.api;
 
+import com.taportal.domain.interview.AvailabilityService;
 import com.taportal.domain.interview.CalendarEventRepository;
 import com.taportal.domain.interview.InterviewerSettings;
 import com.taportal.domain.interview.InterviewerSettingsRepository;
@@ -44,6 +45,9 @@ public class AvailabilityController {
 
     public record CalendarEventDto(UUID id, String title, OffsetDateTime startsAt, OffsetDateTime endsAt, String kind) {}
 
+    /** One person's free interview start times, day by day. */
+    public record PersonWeek(UUID userId, List<SchedulingDtos.DayOpeningsDto> days) {}
+
     public record Detail(UUID userId, String name, String role, SettingsDto settings, List<RuleDto> rules) {}
 
     private static final SettingsDto DEFAULTS = new SettingsDto("09:00", "17:00", "America/New_York", 2, 8);
@@ -52,16 +56,19 @@ public class AvailabilityController {
     private final InterviewerSettingsRepository settings;
     private final InterviewerWeeklyRuleRepository rules;
     private final CalendarEventRepository calendarEvents;
+    private final AvailabilityService availability;
 
     public AvailabilityController(
             RecruiterUserRepository users,
             InterviewerSettingsRepository settings,
             InterviewerWeeklyRuleRepository rules,
-            CalendarEventRepository calendarEvents) {
+            CalendarEventRepository calendarEvents,
+            AvailabilityService availability) {
         this.users = users;
         this.settings = settings;
         this.rules = rules;
         this.calendarEvents = calendarEvents;
+        this.availability = availability;
     }
 
     @GetMapping("/users")
@@ -72,6 +79,27 @@ public class AvailabilityController {
                         u.getId(), u.getName(), u.getRole(), u.getTitle(),
                         settingsDto(u.getId()),
                         rules.findByUserIdOrderByDayOfWeekAscStartTimeAsc(u.getId()).size()))
+                .toList();
+    }
+
+    /**
+     * Every interviewer's free start times for an interview of the given length over the coming
+     * days, each person taken alone. It is what the availability screen draws as the team's week.
+     */
+    @GetMapping("/week")
+    public List<PersonWeek> week(
+            @RequestParam(defaultValue = "7") int days,
+            @RequestParam(defaultValue = "30") int durationMin) {
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(Math.max(1, Math.min(days, 14)) - 1);
+        return users.findAll().stream()
+                .filter((u) -> !"VIEWER".equals(u.getRole()))
+                .map((u) -> new PersonWeek(
+                        u.getId(),
+                        availability.openings(List.of(u.getId()), durationMin, from, to, null).stream()
+                                .map((d) -> new SchedulingDtos.DayOpeningsDto(
+                                        d.day(), d.state().name(), d.why(), d.times().stream().map((t) -> t[0]).toList()))
+                                .toList()))
                 .toList();
     }
 

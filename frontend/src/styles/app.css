@@ -2129,3 +2129,1186 @@ span.sched__person {
 .app--leftmenu:not(.app--square).app--collapsed .side-brand {
   margin: 8px 0 8px 10px;
 }
+
+
+/* Above the interview calendar: candidates invited who have no time yet, so no place on the grid. */
+.cal-waiting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: var(--app-panel);
+  box-shadow: 0 1px 2px rgba(14, 26, 51, 0.05);
+}
+.cal-waiting__label {
+  margin-right: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.cal-waiting__who {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line-3, var(--line));
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink-1);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.cal-waiting__who:hover {
+  border-color: var(--bofa-navy);
+  color: var(--bofa-navy);
+}
+
+/* The search sits above the chosen interviewers. */
+.sched--drawer .sched__find {
+  margin-top: 0;
+}
+.sched--drawer .sched__find + .sched__people,
+.sched--drawer .sched__found + .sched__people {
+  margin-top: 10px;
+}
+
+
+/* ══ Side menu laid out like the AlpineOrion app's ═════════════════════════
+   Under the logo capsule: a card that names the section and lists its pages,
+   only as tall as its pages; then, at the foot, Settings in its own card and
+   a small capsule holding the collapse control. */
+.app--leftmenu:not(.app--square) .app__rail .side-card {
+  flex: 0 0 auto;
+}
+.app--leftmenu:not(.app--square) .app__rail .side-card--menu {
+  margin-bottom: 0;
+  padding: 12px 8px 8px;
+  border-radius: 26px;
+}
+.app--leftmenu:not(.app--square) .side-card--menu .nav-title {
+  padding: 4px 14px 8px;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
+}
+.app--leftmenu:not(.app--square) .side-card--menu .app__side-scroll {
+  flex: 0 0 auto;
+}
+.app--leftmenu .side-gap {
+  flex: 1;
+  min-height: 12px;
+}
+.app--leftmenu:not(.app--square) .app__rail .side-card--foot {
+  margin: 0 0 8px 12px;
+  padding: 6px 8px;
+  border-radius: 26px;
+}
+.app--leftmenu .side-tools {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  height: 48px;
+  margin: 0 0 12px 12px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--app-panel);
+  box-shadow: 0 1px 2px rgba(14, 26, 51, 0.05);
+}
+.app--leftmenu .side-tools button {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.app--leftmenu .side-tools button:hover {
+  background: var(--app-sunken);
+  color: var(--ink-0);
+}
+.app--leftmenu .side-tools .ic {
+  width: 16px;
+  height: 16px;
+}
+/* The collapse control now lives in the foot capsule, so the tab on the page's edge goes. */
+.app--leftmenu:not(.app--square) .app__collapse-handle {
+  display: none;
+}
+/* Collapsed: the same three pieces, as round pipes. */
+.app--leftmenu:not(.app--square).app--collapsed .side-card--menu {
+  padding: 4px;
+  border-radius: 999px;
+}
+.app--leftmenu:not(.app--square).app--collapsed .side-card--menu .nav-title {
+  display: none;
+}
+.app--leftmenu:not(.app--square).app--collapsed .side-card--foot {
+  padding: 4px;
+  border-radius: 999px;
+}
+.app--leftmenu.app--collapsed .side-tools {
+  justify-content: center;
+  height: 56px;
+  padding: 0;
+}
+
+
+/* ══ Interview plan as a flow ══════════════════════════════════════════════
+   A job's interviews read left to right, from "candidate ready" to "offer":
+   one card per interview with its name, length, interviewers and next open
+   time. It scrolls sideways when there are more than fit. */
+.plan-flow {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 4px 2px 10px;
+  overflow-x: auto;
+}
+.plan-flow__item {
+  display: flex;
+  align-items: stretch;
+  flex: none;
+}
+.plan-flow__arrow {
+  align-self: center;
+  padding: 0 10px;
+  font-size: 16px;
+  color: var(--ink-5);
+}
+.plan-flow__end {
+  flex: none;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 130px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: var(--app-sunken);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink-2);
+}
+.plan-flow__dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--bofa-navy);
+}
+.plan-flow__new {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 150px;
+  border: 1.5px dashed var(--line-3, #c3ccda);
+  border-radius: 20px;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.plan-flow__new span {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--navy-050);
+  color: var(--bofa-navy);
+  font-size: 18px;
+}
+.plan-flow__new:hover {
+  border-color: var(--bofa-navy);
+  color: var(--bofa-navy);
+}
+.plan-step {
+  display: flex;
+  flex-direction: column;
+  width: 268px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--app-panel);
+  box-shadow: 0 1px 2px rgba(14, 26, 51, 0.05);
+}
+.plan-step__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.plan-step__no {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--navy-050);
+  color: var(--bofa-navy);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.plan-step__x {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-4);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+.plan-step__x:hover {
+  background: var(--app-sunken);
+  color: var(--bofa-red);
+}
+.plan-step__name {
+  width: 100%;
+  margin: 8px -6px 0;
+  padding: 5px 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-0);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+}
+.plan-step__name:hover {
+  border-color: var(--line);
+}
+.plan-step__name:focus {
+  outline: none;
+  border-color: var(--bofa-navy);
+  background: #fff;
+}
+.plan-step__label {
+  margin: 12px 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-4);
+}
+.plan-step__lengths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.plan-step__lengths button {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line-3, var(--line));
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.plan-step__lengths button[aria-pressed="true"] {
+  border-color: var(--bofa-navy);
+  background: var(--bofa-navy);
+  color: #fff;
+  font-weight: 600;
+}
+.plan-step__people {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.plan-step__person {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 3px 6px 3px 3px;
+  border-radius: 999px;
+  background: var(--app-sunken);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-1);
+}
+.plan-step__person button {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-4);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.plan-step__person button:hover {
+  color: var(--bofa-red);
+}
+.plan-step__add {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px dashed var(--line-3, #c3ccda);
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.plan-step__add:hover {
+  border-color: var(--bofa-navy);
+  color: var(--bofa-navy);
+}
+.plan-step__notes {
+  margin-top: 8px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--ink-4);
+}
+.plan-step__open {
+  margin-top: auto;
+  padding-top: 12px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.plan-step__open::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--ink-5);
+}
+.plan-step__open[data-state="ok"]::before {
+  background: var(--c-green);
+}
+.plan-step__open[data-state="blocked"] {
+  color: var(--bofa-red);
+  font-weight: 600;
+}
+.plan-step__open[data-state="blocked"]::before {
+  background: var(--bofa-red);
+}
+
+
+/* ══ Interview plan workspace ══════════════════════════════════════════════
+   A job's interviews down the left; the one picked on the right with its
+   name, length, interviewers and their hours, and a week of the times they
+   are all free. */
+.plan {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.plan__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 22px;
+  background: var(--app-sunken);
+}
+.plan__listhead {
+  padding: 6px 10px 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-4);
+}
+.plan__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: none;
+  color: var(--ink-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.plan__item:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+.plan__item[aria-current="true"] {
+  border-color: var(--line);
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(14, 26, 51, 0.06);
+}
+.plan__n {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.plan__item[aria-current="true"] .plan__n {
+  background: var(--bofa-navy);
+  color: #fff;
+}
+.plan__itemmain {
+  flex: 1;
+  min-width: 0;
+}
+.plan__itemmain strong {
+  display: block;
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan__itemmain small {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-4);
+}
+.plan__dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ink-5);
+}
+.plan__dot[data-state="ok"] {
+  background: var(--c-green);
+}
+.plan__dot[data-state="blocked"] {
+  background: var(--bofa-red);
+}
+.plan__add {
+  margin-top: 2px;
+  padding: 12px;
+  border: 1.5px dashed var(--line-3, #c3ccda);
+  border-radius: 16px;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.plan__add:hover {
+  border-color: var(--bofa-navy);
+  color: var(--bofa-navy);
+}
+.plan__detail {
+  min-width: 0;
+  padding: 4px 4px 0;
+}
+.plan__detail--empty {
+  padding: 40px 20px;
+  font-size: 13.5px;
+  text-align: center;
+  color: var(--ink-4);
+}
+.plan__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.plan__name {
+  flex: 1;
+  min-width: 0;
+  margin-left: -8px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink-0);
+  font: inherit;
+  font-size: 22px;
+  font-weight: 600;
+}
+.plan__name:hover {
+  border-color: var(--line);
+}
+.plan__name:focus {
+  outline: none;
+  border-color: var(--bofa-navy);
+  background: #fff;
+}
+.plan__block {
+  margin-top: 20px;
+}
+.plan__label {
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.plan__hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-4);
+}
+.plan__people {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plan__person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+}
+.plan__personmain {
+  flex: 1;
+  min-width: 0;
+}
+.plan__personmain strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-0);
+}
+.plan__personmain small {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-4);
+}
+.plan__x {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-4);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+.plan__x:hover {
+  background: var(--app-sunken);
+  color: var(--bofa-red);
+}
+.plan__addperson {
+  align-self: flex-start;
+  height: 36px;
+  padding: 0 14px;
+  border: 1.5px dashed var(--line-3, #c3ccda);
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.plan__addperson:hover {
+  border-color: var(--bofa-navy);
+  color: var(--bofa-navy);
+}
+.plan__hours {
+  padding: 16px;
+  border-radius: 18px;
+  background: var(--app-sunken);
+}
+.plan__week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+.plan__day {
+  min-height: 132px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+}
+.plan__day[data-state="OUTSIDE"],
+.plan__day[data-state="PAST"],
+.plan__day[data-state="FULL"] {
+  background: var(--app-sunken);
+  border-color: transparent;
+}
+.plan__dayname {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--ink-4);
+}
+.plan__dayname b {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-0);
+}
+.plan__times {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.plan__times span {
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--navy-050);
+  color: var(--bofa-navy);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.plan__times em {
+  font-style: normal;
+  font-size: 11.5px;
+  text-align: center;
+  color: var(--ink-4);
+}
+.plan__why {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--ink-4);
+}
+
+
+/* ══ One drawer everywhere ═════════════════════════════════════════════════
+   Every drawer follows the interview scheduling drawer: a navy head holding
+   the title and a round close button, and a white body under it. The head is
+   each drawer's own first block, restyled here so no screen needs changing;
+   that is why these rules outrank the inline styles those blocks carry. */
+.slideover--head > div:first-child {
+  flex: none;
+  padding: 20px 20px 18px !important;
+  border-bottom: 0 !important;
+  background: var(--bofa-navy) !important;
+  color: #fff !important;
+}
+.slideover--head > div:first-child *:not(.avatar):not(.btn--primary) {
+  color: #fff !important;
+}
+.slideover--head > div:first-child .sub,
+.slideover--head > div:first-child .muted,
+.slideover--head > div:first-child small {
+  opacity: 0.78;
+}
+.slideover--head > div:first-child .avatar {
+  background: #fff !important;
+  color: var(--bofa-navy) !important;
+}
+.slideover--head > div:first-child .badge,
+.slideover--head > div:first-child .chip,
+.slideover--head > div:first-child .btn:not(.btn--primary) {
+  border-color: transparent !important;
+  background: rgba(255, 255, 255, 0.14) !important;
+}
+.slideover--head > div:first-child .badge::before {
+  background: #fff !important;
+}
+.slideover--head > div:first-child .btn--primary {
+  border-color: #fff !important;
+  background: #fff !important;
+  color: var(--bofa-navy) !important;
+}
+.slideover--head > div:first-child a {
+  text-decoration: underline;
+}
+/* The close button, wherever the drawer put it in its head. */
+.slideover--head > div:first-child button[aria-label="Close"] {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+}
+.slideover--head > div:first-child button[aria-label="Close"]:hover {
+  background: rgba(255, 255, 255, 0.22) !important;
+}
+
+
+/* ══ Availability: the interview list on the page, one interview in the drawer ══ */
+.plan {
+  display: block;
+}
+.plan__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plan__rows .plan__item {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+}
+.plan__rows .plan__item:hover,
+.plan__rows .plan__item[aria-current="true"] {
+  border-color: var(--bofa-navy);
+  background: #fff;
+}
+.plan__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.plan__state::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line-3, #c3ccda);
+}
+.plan__state[data-state="ok"]::before {
+  background: #1a7f4b;
+}
+.plan__state[data-state="blocked"] {
+  color: var(--bofa-red);
+}
+.plan__state[data-state="blocked"]::before {
+  background: var(--bofa-red);
+}
+.plan__go {
+  flex: none;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--ink-4);
+}
+.plan__hourlinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 12px;
+}
+.plan__hourlinks button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--bofa-navy);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.plan__hourlinks button:hover {
+  text-decoration: underline;
+}
+.plan__days {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.plan__dayrow b {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-1);
+}
+.plan__dayrow .plan__times {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.plan__dayrow .plan__times span {
+  padding: 5px 10px;
+  border-radius: 999px;
+}
+.plan__dayrow .plan__times em {
+  align-self: center;
+}
+
+
+/* ══ Availability: the team's week, and every job's interviews ═════════════ */
+.av {
+  padding: 0;
+  overflow: hidden;
+}
+.av__bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.av__bar .av__find {
+  max-width: 280px;
+  margin-top: 0;
+}
+.av__legend {
+  display: flex;
+  gap: 16px;
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.av__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.av__legend i {
+  width: 14px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--app-sunken);
+}
+.av__legend i[data-k="free"] {
+  background: var(--bofa-navy);
+}
+.av__grid {
+  display: grid;
+  align-items: stretch;
+}
+.av__corner,
+.av__dayhead {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--ink-4);
+}
+.av__corner {
+  padding-left: 18px;
+}
+.av__dayhead {
+  text-align: center;
+}
+.av__dayhead b {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-0);
+}
+.av__dayhead[data-today] b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bofa-navy);
+  color: #fff;
+}
+.av__wait {
+  grid-column: 1 / -1;
+  padding: 28px 18px;
+  font-size: 13px;
+  color: var(--ink-4);
+}
+.av__row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.av__row:last-child {
+  border-bottom: 0;
+}
+.av__row:hover {
+  background: var(--app-sunken);
+}
+.av__who {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 10px 12px 18px;
+}
+.av__who strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-0);
+}
+.av__who small {
+  display: block;
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink-4);
+}
+.av__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px 8px;
+}
+.av__strip {
+  display: flex;
+  gap: 1px;
+  height: 18px;
+  overflow: hidden;
+  border-radius: 6px;
+}
+.av__strip i {
+  flex: 1;
+  background: #e6eaf1;
+}
+.av__strip i[data-free] {
+  background: var(--bofa-navy);
+}
+.av__cell em {
+  font-style: normal;
+  font-size: 11.5px;
+  text-align: center;
+  color: var(--ink-3);
+}
+.av__cell:not([data-state="OPEN"]) .av__strip i {
+  background: #eef0f4;
+}
+.av__cell:not([data-state="OPEN"]) em {
+  color: var(--ink-4);
+}
+
+.av__jobshead,
+.av__job {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.av__jobshead {
+  padding-block: 12px;
+  font-size: 12.5px;
+  color: var(--ink-4);
+}
+.av__job:last-child {
+  border-bottom: 0;
+}
+.av__jobname strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-0);
+}
+.av__jobname small {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-4);
+}
+.av__steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.av__stepwrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.av__then {
+  color: var(--ink-4);
+}
+.av__step {
+  padding: 8px 16px;
+  border: 1px solid var(--line-3, var(--line));
+  border-radius: 999px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.av__step:hover {
+  border-color: var(--bofa-navy);
+}
+.av__step strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-0);
+}
+.av__step small {
+  display: block;
+  font-size: 11.5px;
+  color: var(--ink-4);
+}
+.av__step[data-empty] small {
+  color: var(--bofa-red);
+}
+.av__addstep {
+  height: 36px;
+  padding: 0 14px;
+  border: 1.5px dashed var(--line-3, #c3ccda);
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.av__addstep:hover {
+  border-color: var(--bofa-navy);
+  color: var(--bofa-navy);
+}
+
+.av__fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.av__fields--rule {
+  grid-template-columns: 1fr 1fr 1fr;
+  margin-top: 12px;
+}
+.av__fields label {
+  min-width: 0;
+}
+.av__fields label > span {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.av__fields .sched__find {
+  margin-top: 4px;
+}
+.av__wide {
+  grid-column: 1 / -1;
+}
+.av__rules {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.av__rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 14px;
+  border-radius: 14px;
+  background: var(--app-sunken);
+  font-size: 13px;
+  color: var(--ink-1);
+}
+.av__rule b {
+  width: 34px;
+  font-weight: 600;
+}
+.av__rule span {
+  flex: 1;
+}
+.av__rule em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.av__rule[data-kind="NO_INTERVIEWS"] em {
+  color: var(--bofa-red);
+}
+.av__takes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.av__takes span {
+  padding: 8px 14px;
+  border-radius: 14px;
+  background: var(--app-sunken);
+  font-size: 13px;
+  color: var(--ink-1);
+}
+
+
+/* ══ Availability: jobs and interviewers as desk lists, set up in the drawer ══ */
+.avp {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.sched--drawer > section:not(:first-child) .avd__tab {
+  padding: 0 16px;
+  border: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.avd__add {
+  height: 36px;
+  padding: 0 14px;
+  border: 1.5px dashed var(--line-3, #c3ccda);
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.avd__add:hover {
+  border-color: var(--bofa-navy);
+  color: var(--bofa-navy);
+}
+.avd__hours {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.avd__hours button {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--bofa-navy);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.avd__hours button:hover {
+  text-decoration: underline;
+}
+.avd__times span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--navy-050);
+  color: var(--bofa-navy);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

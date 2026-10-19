@@ -18,7 +18,7 @@ const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour:
 /** The drawer: slides in over the desk, and closes with its X, Escape or a click outside. */
 export default function InterviewScheduleDrawer(props: PanelProps & { fresh: Fresh | null; onClose: () => void }) {
   return (
-    <SlideOver label="Schedule an interview" onClose={props.onClose} width={400} bare>
+    <SlideOver label="Schedule an interview" onClose={props.onClose} head={false}>
       {props.fresh ? <FreshPanel fresh={props.fresh} onPick={props.onPick} /> : <Panel {...props} />}
     </SlideOver>
   )
@@ -205,16 +205,6 @@ function Panel({ waiting, others, load, appOf, picked, onPick }: PanelProps) {
         <>
           <section>
             <div className="sched__label">Interviewers</div>
-            <div className="sched__people">
-              {onPanel.map((l) => (
-                <span key={l.userId} className="sched__person" aria-pressed="true" title={`${l.name} · ${l.next7Days} booked in the next 7 days`}>
-                  <b>{l.initials}</b>
-                  {l.name}
-                  <button type="button" className="sched__drop" aria-label={`Remove ${l.name}`} onClick={() => { setPanel((cur) => cur.filter((x) => x !== l.userId)); setDay(null) }}>×</button>
-                </span>
-              ))}
-              {onPanel.length === 0 && <span className="sched__none">Nobody chosen: the job's hiring team is used.</span>}
-            </div>
             <input className="sched__find" type="search" placeholder="Search a name to add an interviewer" value={find} onChange={(e) => setFind(e.target.value)} aria-label="Search interviewers" />
             {find.trim() !== '' && (
               <div className="sched__found">
@@ -231,6 +221,16 @@ function Panel({ waiting, others, load, appOf, picked, onPick }: PanelProps) {
                 ))}
               </div>
             )}
+            <div className="sched__people">
+              {onPanel.map((l) => (
+                <span key={l.userId} className="sched__person" aria-pressed="true" title={`${l.name} · ${l.next7Days} booked in the next 7 days`}>
+                  <b>{l.initials}</b>
+                  {l.name}
+                  <button type="button" className="sched__drop" aria-label={`Remove ${l.name}`} onClick={() => { setPanel((cur) => cur.filter((x) => x !== l.userId)); setDay(null) }}>×</button>
+                </span>
+              ))}
+              {onPanel.length === 0 && <span className="sched__none">Nobody chosen: the job's hiring team is used.</span>}
+            </div>
           </section>
 
           <section>

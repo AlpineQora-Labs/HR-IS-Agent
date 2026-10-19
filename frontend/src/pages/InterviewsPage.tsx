@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { defaultJobId } from '@/lib/jobs'
 import SlideOver, { useSlideOverClose } from '@/components/SlideOver'
 import { SchedulingRadar } from '@/components/SchedulingRadar'
 import InterviewDesk from './InterviewDesk'
+import InterviewScheduleDrawer from './InterviewSchedulePanel'
 import { useStore } from '@/state/store'
-import { useApplications, useJobInterviews, useJobs, useProposeTimes, useRescheduleInterview, useSlots, useTransitionInterview } from '@/api/hooks'
+import { useAllSlots, useApplications, useJobInterviews, useJobs, useProposeTimes, useRescheduleInterview, useSchedulingOverview, useTransitionInterview } from '@/api/hooks'
 import { date } from '@/lib/format'
-import type { Interview, Slot } from '@/api/types'
+import type { AttentionItem, Interview, Slot } from '@/api/types'
 
 const statusBadge = (status: string) => {
   const s = status.toUpperCase()
@@ -188,8 +188,9 @@ function TimeGrid({
                     <button
                       key={ev.id}
                       onClick={() => onSelect(ev)}
-                      title={`${ev.label} · ${time(ev.start.toISOString())}`}
+                      title={`${ev.label} · ${time(ev.start.toISOString())}${ev.sub ? ` · ${ev.sub}` : ''}`}
                       style={{
+                        boxShadow: viaBar(ev),
                         position: 'absolute',
                         top: (minutesFromTop / 60) * HOUR_PX,
                         height: Math.max(20, (durMin / 60) * HOUR_PX - 2),
@@ -287,6 +288,7 @@ function MonthGrid({
                       key={ev.id}
                       onClick={() => onSelect(ev)}
                       style={{
+                        boxShadow: viaBar(ev),
                         display: 'flex',
                         alignItems: 'center',
                         gap: 5,
@@ -385,14 +387,30 @@ function FactRow({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
+/** A bar down a block's left edge: green when the candidate picked from automatic times, navy when the team booked it. */
+const viaBar = (ev: CalEvent) => {
+  const via = ev.interview?.bookedVia
+  if (!via) return undefined
+  return `inset 3px 0 0 ${via === 'TEAM' ? 'var(--bofa-navy)' : 'var(--c-green)'}`
+}
+
+/** How an interview's time was set, short enough for a calendar block. */
+const VIA_SHORT: Record<string, string> = { CHAT: 'Auto · chat', TEXT: 'Auto · text', WEB_PAGE: 'Auto · web page', TEAM: 'By the team' }
+
 function InterviewCalendar({
   interviews,
   slots,
   nameByApp,
+  jobByApp,
+  onOpenInterview,
 }: {
   interviews: Interview[]
   slots: Slot[]
   nameByApp: Record<string, string>
+  /** The job of each application, shown on a block when the calendar covers more than one job. */
+  jobByApp?: Record<string, string>
+  /** An interview was clicked: the page opens its drawer. */
+  onOpenInterview: (iv: Interview) => void
 }) {
   const events = useMemo<CalEvent[]>(() => {
     const out: CalEvent[] = []
@@ -418,7 +436,9 @@ function InterviewCalendar({
         id: `iv-${iv.id}`,
         kind: 'interview',
         label: nameByApp[iv.applicationId] || iv.type || 'Interview',
-        sub: iv.type || iv.interviewers?.join(', ') || '',
+        sub: [iv.bookedVia ? VIA_SHORT[iv.bookedVia] : null, jobByApp?.[iv.applicationId], (iv.type || '').replace(/_/g, ' ').toLowerCase()]
+          .filter(Boolean)
+          .join(' · '),
         start,
         end,
         typeKey: iv.type || 'INTERVIEW',
@@ -426,7 +446,7 @@ function InterviewCalendar({
       })
     }
     return out
-  }, [interviews, slots, nameByApp])
+  }, [interviews, slots, nameByApp, jobByApp])
 
   // Assign a stable color to each interview type for the legend + blocks.
   const typeColors = useMemo(() => {
@@ -448,6 +468,8 @@ function InterviewCalendar({
   // Opens on the current week; an old interview does not drag the calendar back to its date.
   const [cursor, setCursor] = useState(() => new Date())
   const [selected, setSelected] = useState<CalEvent | null>(null)
+  // An interview opens the same drawer as on the desk; an open or booked slot shows its details.
+  const pick = (ev: CalEvent) => (ev.kind === 'interview' && ev.interview ? onOpenInterview(ev.interview) : setSelected(ev))
 
   function shift(dir: number) {
     const d = new Date(cursor)
@@ -487,20 +509,28 @@ function InterviewCalendar({
           {legendTypes.map(([type, hue]) => (
             <span key={type} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 11, height: 11, borderRadius: 3, background: hue.bg, border: `1px solid ${hue.fg}` }} />
-              {type}
+              {type.replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase())}
             </span>
           ))}
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <span style={{ width: 11, height: 11, borderRadius: 3, background: 'var(--ok-bg)', border: '1px solid var(--ok-line)' }} />
             Open slot
           </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 4, height: 13, borderRadius: 2, background: 'var(--c-green)' }} />
+            Scheduled automatically
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 4, height: 13, borderRadius: 2, background: 'var(--bofa-navy)' }} />
+            Booked by the team
+          </span>
         </div>
       ) : null}
 
       {scale === 'month' ? (
-        <MonthGrid monthDate={cursor} events={events} hueOf={hueOf} onSelect={setSelected} />
+        <MonthGrid monthDate={cursor} events={events} hueOf={hueOf} onSelect={pick} />
       ) : (
-        <TimeGrid days={scale === 'day' ? [cursor] : weekDays} events={events} hueOf={hueOf} onSelect={setSelected} />
+        <TimeGrid days={scale === 'day' ? [cursor] : weekDays} events={events} hueOf={hueOf} onSelect={pick} />
       )}
 
       {selected && <EventDetail ev={selected} onClose={() => setSelected(null)} />}
@@ -689,20 +719,34 @@ export default function InterviewsPage() {
   // The desk (what needs doing) comes first; the calendar and the list are other views of the same interviews.
   const [view, setView] = useState<'desk' | 'calendar' | 'list'>('desk')
 
-  const effectiveJobId = jobId || defaultJobId(jobs)
-
-  // Every interview for the job = the interviews of all its applications.
-  const { data: apps } = useApplications(effectiveJobId ? { jobId: effectiveJobId } : undefined)
+  // The calendar and the list cover every job unless one is picked, like the desk.
+  const { data: apps } = useApplications(jobId ? { jobId } : undefined)
   const appIds = useMemo(() => (apps ?? []).map((a) => a.id), [apps])
-  const nameByApp = useMemo(
-    () => Object.fromEntries((apps ?? []).map((a) => [a.id, a.candidateName])),
-    [apps],
-  )
+  const nameByApp = useMemo(() => Object.fromEntries((apps ?? []).map((a) => [a.id, a.candidateName])), [apps])
+  const jobByApp = useMemo(() => Object.fromEntries((apps ?? []).map((a) => [a.id, a.jobTitle])), [apps])
+  const appById = useMemo(() => new Map((apps ?? []).map((a) => [a.id, a])), [apps])
 
   const { interviews, isLoading: ivLoading } = useJobInterviews(appIds)
-  const { data: slots, isLoading: slotLoading } = useSlots(effectiveJobId)
-
+  const { slots, isLoading: slotLoading } = useAllSlots(useMemo(() => (jobId ? [jobId] : (jobs ?? []).map((j) => j.id)), [jobId, jobs]))
   const slotsByJob = useMemo(() => slots ?? [], [slots])
+
+  // Candidates invited with no time yet: they have no place on the grid, so they are listed above it.
+  const { data: overview } = useSchedulingOverview()
+  const waiting = useMemo(
+    () => (overview?.awaitingCandidate ?? []).filter((w) => !jobId || appById.get(w.applicationId)?.jobId === jobId),
+    [overview, jobId, appById],
+  )
+  // The drawer: on a waiting candidate, or on an interview clicked on the calendar.
+  const [picked, setPicked] = useState<string | null>(null)
+  const [held, setHeld] = useState<AttentionItem | null>(null)
+  const openInterview = (iv: Interview) => {
+    const app = appById.get(iv.applicationId)
+    setHeld({
+      interviewId: iv.id, applicationId: iv.applicationId, candidateName: app?.candidateName ?? 'Candidate', jobTitle: app?.jobTitle ?? '',
+      status: iv.status, scheduledAt: iv.scheduledAt, waitingHours: 0, meetingLink: iv.meetingLink, interviewers: iv.interviewers,
+    })
+    setPicked(iv.id)
+  }
 
   return (
     <div>
@@ -717,7 +761,7 @@ export default function InterviewsPage() {
             <p className="sub">
               {view === 'desk'
                 ? 'What needs doing about interviews across every job, and the week ahead.'
-                : 'Scheduled interviews and open interviewer times, for one job at a time.'}
+                : 'Interviews with a time and open interviewer times, for every job or the one you pick.'}
             </p>
           </div>
           <div className="segmented" role="group" aria-label="View">
@@ -737,12 +781,13 @@ export default function InterviewsPage() {
         <select
           className="select"
           style={{ width: 280 }}
-          value={effectiveJobId ?? ''}
+          value={jobId}
           onChange={(e) => setJobId(e.target.value)}
         >
+          <option value="">All jobs</option>
           {(jobs ?? []).map((j) => (
             <option key={j.id} value={j.id}>
-              {j.title}
+              {j.jobNo ? `${j.jobNo} · ` : ''}{j.title}
             </option>
           ))}
         </select>
@@ -750,9 +795,22 @@ export default function InterviewsPage() {
 
       {view === 'desk' ? null : view === 'calendar' ? (
         <>
-          <InterviewCalendar interviews={interviews} slots={slotsByJob} nameByApp={nameByApp} />
+          {waiting.length > 0 && (
+            <div className="cal-waiting">
+              <span className="cal-waiting__label">No time yet · {waiting.length}</span>
+              {waiting.map((w) => (
+                <button key={w.interviewId} type="button" className="cal-waiting__who" title={`${w.jobTitle} · invited, no time picked`}
+                  onClick={() => { setHeld(null); setPicked(w.interviewId) }}>
+                  {w.candidateName}
+                </button>
+              ))}
+            </div>
+          )}
+          <InterviewCalendar interviews={interviews} slots={slotsByJob} nameByApp={nameByApp}
+            jobByApp={jobId ? undefined : jobByApp} onOpenInterview={openInterview} />
           <p className="sub" style={{ marginTop: 12, fontSize: 12.5 }}>
-            Every scheduled interview and open slot for this job. Switch Day / Week / Month; click any event for details.
+            Every interview with a time, and every open interviewer slot, for {jobId ? 'this job' : 'all jobs'}. Each interview says how its
+            time was set. Click one to open it; candidates with no time yet are listed above the grid.
           </p>
         </>
       ) : (
@@ -765,8 +823,21 @@ export default function InterviewsPage() {
           <h3 className="h3" style={{ margin: '28px 0 12px' }}>
             Open interview slots
           </h3>
-          <SlotsList slots={slotsByJob} isLoading={slotLoading && !!effectiveJobId} />
+          <SlotsList slots={slotsByJob} isLoading={slotLoading} />
         </>
+      )}
+
+      {picked && view !== 'desk' && (
+        <InterviewScheduleDrawer
+          waiting={waiting}
+          others={held ? [held] : []}
+          load={overview?.load ?? []}
+          appOf={(applicationId) => appById.get(applicationId)}
+          picked={picked}
+          fresh={null}
+          onPick={(id) => { setHeld(null); setPicked(id) }}
+          onClose={() => { setPicked(null); setHeld(null) }}
+        />
       )}
     </div>
   )

@@ -13,18 +13,26 @@ export function useSlideOverClose() {
   return useContext(SlideOverCloseContext)
 }
 
+/* Every drawer in the app is one size and sits in one place, as the interview scheduling drawer does:
+   400 wide, starting a little above the page card, with no outline; its heading is a navy head. */
+const DRAWER_WIDTH = 400
+const DRAWER_RAISE = 16
+
 export default function SlideOver({
   label,
   onClose,
-  width = 440,
-  bare = false,
+  head = true,
   children,
 }: {
   label: string
   onClose: () => void
+  /** Kept so callers need not change; every drawer is the same width now (DRAWER_WIDTH). */
   width?: number
-  /** No outline of its own: for a drawer whose content colours its own edge, like a navy head. */
-  bare?: boolean
+  /**
+   * Whether the drawer's first child is its heading, to be drawn as the navy head. False for a
+   * drawer whose content brings a head of its own or has none.
+   */
+  head?: boolean
   children: React.ReactNode
 }) {
   const [closing, setClosing] = useState(false)
@@ -65,18 +73,19 @@ export default function SlideOver({
           around, so it reads as a card hovering over the app rather than a wall
           sliding in. overflow:hidden keeps scrolling content inside the radius. */}
       <aside
+        className={head ? 'slideover slideover--head' : 'slideover'}
         role="dialog"
         aria-modal="true"
         aria-label={label}
         style={{
           position: 'fixed',
-          top: 'calc(var(--shell-chrome-h, 0px) + 12px)',
+          top: `calc(var(--shell-chrome-h, 0px) - ${DRAWER_RAISE - 12}px)`,
           right: 12,
           bottom: 12,
-          width,
+          width: DRAWER_WIDTH,
           maxWidth: 'calc(92vw - 12px)',
           background: 'var(--app-panel)',
-          border: bare ? 0 : '1px solid var(--line)',
+          border: 0,
           borderRadius: 16,
           overflow: 'hidden',
           boxShadow: '-24px 0 64px rgba(16,22,38,0.22), 0 8px 28px rgba(16,22,38,0.14)',

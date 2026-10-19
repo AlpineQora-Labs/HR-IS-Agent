@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import ConfirmButton from '@/components/ConfirmButton'
+import SlideOver, { useSlideOverClose } from '@/components/SlideOver'
+import { Link, useParams } from 'react-router-dom'
 import { api } from '@/api/client'
 
-/* Interviewer availability — per-person working window + load caps, recurring
-   weekly rules ("no Monday mornings", dedicated interview blocks) and a week
-   calendar that reads tentative / busy / vacation / in-office / interviews.
-   Rules feed straight into the scheduling engine: proposals never land inside
-   a blackout, and when someone has interview blocks, only inside them. */
+/* Availability: the team's week of free interview time, each person's hours and weekly
+   preferences, and the interviews each job runs. A person or an interview opens in the drawer.
+   Everything set here feeds the scheduling engine, so candidates are only offered times that hold. */
 
 interface Settings {
   workStart: string
@@ -41,14 +41,6 @@ interface Detail {
   rules: Rule[]
 }
 
-interface CalEvent {
-  id: string
-  title: string
-  startsAt: string
-  endsAt: string
-  kind: string
-}
-
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const TIMEZONES = [
   'America/New_York',
@@ -62,45 +54,11 @@ const TIMEZONES = [
 const roleLabel = (r: string) =>
   r.replace(/_/g, ' ').toLowerCase().replace(/\b./g, (c) => c.toUpperCase())
 
-/* Week-view geometry: 8:00–18:00, 44px per hour. */
-const DAY_START = 8
-const DAY_END = 18
-const HOUR_PX = 44
-
-/* Calendar-status treatments — muted, no loud fills. */
-const EVENT_STYLE: Record<string, React.CSSProperties> = {
-  BUSY: { background: '#eceff4', border: '1px solid #d6dbe4', color: 'var(--ink-2)' },
-  INTERVIEW: { background: 'var(--bofa-navy, #012169)', border: '1px solid var(--bofa-navy, #012169)', color: '#fff' },
-  TENTATIVE: { background: '#fff', border: '1.5px dashed #aab2c0', color: 'var(--ink-3)' },
-  VACATION: { background: 'repeating-linear-gradient(-45deg, #f6f0e2, #f6f0e2 5px, #efe6cf 5px, #efe6cf 10px)', border: '1px solid #e2d6b4', color: '#6d5c1e' },
-  IN_OFFICE: { background: '#eef4ee', border: '1px solid #d3e2d3', color: '#2e5a34' },
-}
-
-const KIND_LABEL: Record<string, string> = {
-  BUSY: 'Busy',
-  INTERVIEW: 'Interview',
-  TENTATIVE: 'Tentative',
-  VACATION: 'Vacation',
-  IN_OFFICE: 'In office',
-}
-
-const mondayOf = (d: Date) => {
-  const out = new Date(d)
-  out.setHours(0, 0, 0, 0)
-  out.setDate(out.getDate() - ((out.getDay() + 6) % 7))
-  return out
-}
-
 const isoDate = (d: Date) => {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
-}
-
-const minutesOf = (t: string) => {
-  const [h, m] = t.split(':').map(Number)
-  return h * 60 + m
 }
 
 interface PlanMember {
@@ -128,24 +86,8 @@ interface Requisition {
   roundCount: number
 }
 
-/* Interview setup — pick a requisition from the grid, then define its plan
-   as VERTICAL STAGES on a timeline spine: Candidate ready, Round 1..N,
-   Advance to offer. Each stage carries the interviewers aligned at intake and
-   the engine's live read of their calendars. */
-
-interface RoundHealth {
-  nextAvailable: string | null
-  openSlots: number
-  blocked: boolean
-}
-
 const initialsOf = (name: string) =>
   name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
-
-const nextLabel = (iso: string) => {
-  const d = new Date(iso)
-  return `${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
-}
 
 const totalLabel = (rounds: PlanRound[]) => {
   const min = rounds.reduce((t, r) => t + r.durationMin, 0)
@@ -155,728 +97,541 @@ const totalLabel = (rounds: PlanRound[]) => {
   return `${h ? `${h}h` : ''}${h && m ? ' ' : ''}${m ? `${m}m` : ''} of interviews`
 }
 
-const SPINE_W = 46
-
-/* One row of the timeline: spine cell (line + node) beside the content. */
-function SpineRow({
-  node,
-  last = false,
-  gap = 14,
-  children,
-}: {
-  node: React.ReactNode
-  last?: boolean
-  gap?: number
-  children: React.ReactNode
-}) {
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: `${SPINE_W}px 1fr` }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {node}
-        {!last && <div style={{ width: 1.5, flex: 1, background: '#ccd4e0', minHeight: 14 }} />}
-      </div>
-      <div style={{ paddingBottom: last ? 0 : gap, minWidth: 0 }}>{children}</div>
-    </div>
-  )
+interface DayOpen {
+  day: string
+  state: 'OPEN' | 'FULL' | 'OUTSIDE' | 'PAST'
+  why: string | null
+  times: string[]
 }
 
-function StageDot() {
-  return (
-    <span
-      style={{
-        width: 11, height: 11, borderRadius: 999, background: 'var(--bofa-navy, #012169)',
-        marginTop: 5, flexShrink: 0,
-      }}
-    />
-  )
+const hourLabel = (hhmm: string) => {
+  const [h, m] = hhmm.split(':').map(Number)
+  const d = new Date(2000, 0, 1, h, m || 0)
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: m ? '2-digit' : undefined })
+}
+const zoneLabel = (tz: string) => (tz.split('/')[1] ?? tz).replace(/_/g, ' ')
+
+interface PersonWeek {
+  userId: string
+  days: DayOpen[]
 }
 
-function StageNumber({ n }: { n: number }) {
-  return (
-    <span
-      style={{
-        width: 26, height: 26, borderRadius: 999, flexShrink: 0,
-        border: '1.5px solid var(--bofa-navy, #012169)', color: 'var(--bofa-navy, #012169)',
-        background: '#fff', fontSize: 12.5, fontWeight: 700,
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      }}
-    >
-      {n}
-    </span>
-  )
-}
+type Plans = Record<string, PlanRound[]>
 
-function StageCard({
-  round,
-  health,
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+const dayLabel = (iso: string) =>
+  new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+
+/* A job's interview setup in the same drawer as interview scheduling: its interviews across the
+   top, then the picked one's length, interviewers and the days and times they are all free. */
+function JobDrawer({
+  job,
+  rounds,
   users,
-  onRename,
-  onDuration,
-  onRemove,
-  onMembers,
+  refresh,
+  onPerson,
 }: {
-  round: PlanRound
-  health: RoundHealth | undefined
+  job: Requisition
+  rounds: PlanRound[]
   users: UserRow[]
-  onRename: (name: string) => void
-  onDuration: (min: number) => void
-  onRemove: () => void
-  onMembers: (userIds: string[]) => void
+  refresh: () => void
+  onPerson: (userId: string) => void
 }) {
-  const [adding, setAdding] = useState(false)
-  const hasPeople = round.members.length > 0
-  return (
-    <div
-      style={{
-        background: '#fff', border: '1px solid var(--line, #dfe4ec)', borderRadius: 12,
-        boxShadow: '0 1px 2px rgba(16,22,38,0.04)', padding: '14px 18px',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <input
-          className="input"
-          style={{ fontWeight: 650, fontSize: 14, width: 300 }}
-          defaultValue={round.name}
-          onBlur={(e) => {
-            const v = e.target.value.trim()
-            if (v && v !== round.name) onRename(v)
-          }}
-        />
-        <input
-          className="input"
-          type="number"
-          min={15}
-          step={15}
-          style={{ width: 68 }}
-          defaultValue={round.durationMin}
-          onBlur={(e) => {
-            const v = Number(e.target.value)
-            if (v >= 15 && v !== round.durationMin) onDuration(v)
-          }}
-        />
-        <span style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>min</span>
-        <span style={{ marginLeft: 'auto', fontSize: 12 }}>
-          {!hasPeople ? (
-            <span style={{ color: 'var(--ink-4)' }}>No interviewers yet</span>
-          ) : !health ? (
-            <span style={{ color: 'var(--ink-4)' }}>Checking calendars…</span>
-          ) : health.blocked ? (
-            <span style={{ color: '#a33a3a', fontWeight: 600 }}>● Calendars blocked — no open times</span>
-          ) : (
-            <span style={{ color: 'var(--ink-3)' }}>
-              <span style={{ color: '#2e7d43' }}>●</span> Next open: {health.nextAvailable ? nextLabel(health.nextAvailable) : '—'}
-            </span>
-          )}
-        </span>
-        <button className="btn btn--ghost btn--sm" onClick={onRemove} aria-label={`Remove round ${round.roundNo}`}>
-          Remove
-        </button>
-      </div>
+  const close = useSlideOverClose()
+  const [picked, setPicked] = useState<string | null>(null)
+  const round = rounds.find((r) => r.id === picked) ?? rounds[0] ?? null
+  const [find, setFind] = useState('')
+  const [openings, setOpenings] = useState<DayOpen[] | null>(null)
+  const [month, setMonth] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d })
+  const [day, setDay] = useState<string | null>(null)
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
-        {round.members.map((m) => (
-          <span
-            key={m.userId}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 10px 4px 4px',
-              border: '1px solid var(--line, #e2e7ee)', borderRadius: 999, background: '#fafbfd',
-            }}
-          >
-            <span className="avatar" style={{ width: 24, height: 24, fontSize: 9.5 }}>{initialsOf(m.name)}</span>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-1)' }}>{m.name}</span>
-            <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>{roleLabel(m.role)}</span>
-            <button
-              onClick={() => onMembers(round.members.filter((x) => x.userId !== m.userId).map((x) => x.userId))}
-              style={{ font: 'inherit', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--ink-4)', padding: 0, lineHeight: 1 }}
-              aria-label={`Remove ${m.name}`}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-        {adding ? (
-          <select
-            className="input"
-            style={{ width: 230 }}
-            autoFocus
-            defaultValue=""
-            onBlur={() => setAdding(false)}
-            onChange={(e) => {
-              if (e.target.value) onMembers([...round.members.map((m) => m.userId), e.target.value])
-              setAdding(false)
-            }}
-          >
-            <option value="" disabled>Add interviewer…</option>
-            {users
-              .filter((u) => !round.members.some((m) => m.userId === u.id))
-              .map((u) => (
-                <option key={u.id} value={u.id}>{u.name} — {roleLabel(u.role)}</option>
-              ))}
-          </select>
-        ) : (
-          <button className="btn btn--outline btn--sm" onClick={() => setAdding(true)}>+ Interviewer</button>
-        )}
-      </div>
-      {round.members.some((m) => (m.notes ?? []).length > 0) && (
-        <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--line, #eef1f6)', display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {round.members
-            .filter((m) => (m.notes ?? []).length > 0)
-            .map((m) => (
-              <div key={m.userId} style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>
-                <span style={{ fontWeight: 600, color: 'var(--ink-3)' }}>{m.name}</span> — {(m.notes ?? []).join(' · ')}
-              </div>
-            ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function InterviewPlans({ users, refreshUsers, openId }: { users: UserRow[]; refreshUsers: () => void; openId: string | null }) {
-  const navigate = useNavigate()
-  const setOpenId = (id: string | null) => navigate(id ? `/availability/${id}` : '/availability')
-  const [reqs, setReqs] = useState<Requisition[]>([])
-  const [rounds, setRounds] = useState<PlanRound[]>([])
-  const [health, setHealth] = useState<Record<string, RoundHealth>>({})
-
-  const loadReqs = useCallback(() => {
-    api.get<Requisition[]>('/interview-plan/requisitions').then((r) => setReqs(r.data))
-  }, [])
-  useEffect(loadReqs, [loadReqs])
-
-  const loadPlan = useCallback(() => {
-    if (!openId) return
-    api.get<PlanRound[]>('/interview-plan', { params: { jobId: openId } }).then((r) => {
-      setRounds(r.data)
-      for (const round of r.data) {
-        if (round.members.length === 0) continue
-        api.get<RoundHealth>(`/interview-plan/rounds/${round.id}/health`)
-          .then((h) => setHealth((cur) => ({ ...cur, [round.id]: h.data })))
-          .catch(() => {})
-      }
-    })
-  }, [openId])
-  useEffect(loadPlan, [loadPlan])
-
-  const refresh = () => {
-    loadPlan()
-    loadReqs()
-  }
-
-  const open = reqs.find((r) => r.jobId === openId) ?? null
-
-  if (open) {
-    const total = totalLabel(rounds)
-    return (
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card__head" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button className="btn btn--outline btn--sm" onClick={() => setOpenId(null)}>‹ Requisitions</button>
-          <div style={{ minWidth: 0, marginRight: 'auto' }}>
-            <h3 style={{ margin: 0 }}>{open.title} — interview plan</h3>
-            <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 2 }}>
-              {[`${rounds.length} round${rounds.length === 1 ? '' : 's'}`, total,
-                open.recruiterName && `Recruiter ${open.recruiterName}`,
-                open.hiringManagerName && `HM ${open.hiringManagerName}`]
-                .filter(Boolean)
-                .join(' · ')}
-            </div>
-          </div>
-        </div>
-        <div className="card__body">
-          <div style={{ maxWidth: 860 }}>
-          <SpineRow node={<StageDot />}>
-            <div style={{ fontSize: 12.5, fontWeight: 650, color: 'var(--ink-3)', paddingTop: 3 }}>Candidate ready for interviews</div>
-          </SpineRow>
-          {rounds.map((round) => (
-            <SpineRow key={round.id} node={<StageNumber n={round.roundNo} />}>
-              <StageCard
-                round={round}
-                health={health[round.id]}
-                users={users}
-                onRename={(name) => api.put(`/interview-plan/rounds/${round.id}`, { name }).then(refresh)}
-                onDuration={(durationMin) => api.put(`/interview-plan/rounds/${round.id}`, { durationMin }).then(refresh)}
-                onRemove={() => api.delete(`/interview-plan/rounds/${round.id}`).then(refresh)}
-                onMembers={(userIds) => api.put(`/interview-plan/rounds/${round.id}/members`, { userIds }).then(refresh)}
-              />
-            </SpineRow>
-          ))}
-          <SpineRow
-            node={
-              <span
-                style={{
-                  width: 26, height: 26, borderRadius: 999, flexShrink: 0,
-                  border: '1.5px dashed #aab4c4', color: 'var(--ink-3)', background: '#fff',
-                  fontSize: 15, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                +
-              </span>
-            }
-          >
-            <button
-              className="btn btn--outline btn--sm"
-              style={{ marginTop: 1 }}
-              onClick={() => api.post(`/interview-plan/${open.jobId}/rounds`, {}).then(refresh)}
-            >
-              Add round
-            </button>
-          </SpineRow>
-          <SpineRow node={<StageDot />} last>
-            <div style={{ fontSize: 12.5, fontWeight: 650, color: 'var(--ink-3)', paddingTop: 3 }}>Advance to offer</div>
-          </SpineRow>
-          <p style={{ fontSize: 12, color: 'var(--ink-4)', margin: '16px 0 0', maxWidth: 640 }}>
-            Each round is scheduled against every listed interviewer's calendar — working windows, weekly preferences,
-            vacations and load caps all apply. Blocked rounds notify their interviewers automatically.
-          </p>
-          </div>
-
-          <div style={{ marginTop: 22, paddingTop: 4, borderTop: '1px solid var(--line, #edf0f4)' }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: 'var(--ink-0)', margin: '16px 0 2px' }}>
-              Interviewers on this plan
-            </div>
-            <div style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>
-              Their working windows, weekly preferences and calendars — these shape the times candidates are offered.
-            </div>
-            <InterviewerAvailability
-              users={users}
-              focusIds={[...new Set(rounds.flatMap((r) => r.members.map((m) => m.userId)))]}
-              refreshUsers={refreshUsers}
-            />
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="card" style={{ marginBottom: 16 }}>
-      <div className="card__head"><h3>Interview setup</h3></div>
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Requisition</th>
-              <th>Recruiter</th>
-              <th>Hiring manager</th>
-              <th className="t-right">Rounds</th>
-              <th>Plan</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reqs.length === 0 ? (
-              <tr>
-                <td colSpan={5} style={{ textAlign: 'center', color: 'var(--ink-4)', padding: '30px 18px' }}>
-                  No open requisitions.
-                </td>
-              </tr>
-            ) : (
-              reqs.map((r) => (
-                <tr key={r.jobId} onClick={() => setOpenId(r.jobId)} style={{ cursor: 'pointer' }}>
-                  <td>
-                    <span className="t-strong" style={{ display: 'block' }}>{r.title}</span>
-                    <span className="t-muted" style={{ display: 'block', fontSize: 12 }}>{r.department || '—'}</span>
-                  </td>
-                  <td className="t-muted">{r.recruiterName || '—'}</td>
-                  <td className="t-muted">{r.hiringManagerName || '—'}</td>
-                  <td className="t-num t-right">{r.roundCount || '—'}</td>
-                  <td>
-                    {r.roundCount > 0
-                      ? <span className="badge badge--ok">Configured</span>
-                      : <span className="badge badge--warn">Not set</span>}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
-/* Interviewer availability — working window, weekly preferences and the week
-   calendar. Rendered INSIDE a requisition's plan view, scoped to the people
-   on that plan (falls back to everyone while the plan is empty). */
-function InterviewerAvailability({
-  users,
-  focusIds,
-  refreshUsers,
-}: {
-  users: UserRow[]
-  focusIds?: string[]
-  refreshUsers: () => void
-}) {
-  const list = focusIds && focusIds.length ? users.filter((u) => focusIds.includes(u.id)) : users
-  const listKey = list.map((u) => u.id).join(',')
-  const [selected, setSelected] = useState<string | null>(null)
-  const [detail, setDetail] = useState<Detail | null>(null)
-  const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()))
-  const [events, setEvents] = useState<CalEvent[]>([])
-  const [form, setForm] = useState<Settings | null>(null)
-  const [savedTick, setSavedTick] = useState(0)
-  const [error, setError] = useState<string | null>(null)
-
-  // add-rule row state
-  const [ruleDay, setRuleDay] = useState(1)
-  const [ruleFrom, setRuleFrom] = useState('09:00')
-  const [ruleTo, setRuleTo] = useState('12:00')
-  const [ruleKind, setRuleKind] = useState<Rule['kind']>('NO_INTERVIEWS')
-
+  const memberKey = round ? round.members.map((m) => m.userId).join(',') : ''
   useEffect(() => {
-    setSelected((cur) => (cur && list.some((u) => u.id === cur) ? cur : (list[0]?.id ?? null)))
+    setOpenings(null)
+    setDay(null)
+    if (!round || round.members.length === 0) return
+    let live = true
+    api.get<DayOpen[]>(`/interview-plan/rounds/${round.id}/openings`, { params: { days: 60 } })
+      .then((r) => { if (live) setOpenings(r.data) })
+      .catch(() => { if (live) setOpenings([]) })
+    return () => { live = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listKey])
+  }, [round?.id, round?.durationMin, memberKey])
+  useEffect(() => setFind(''), [round?.id])
 
-  const loadDetail = useCallback(() => {
-    if (!selected) return
-    api.get<Detail>(`/availability/${selected}`).then((r) => {
-      setDetail(r.data)
-      setForm(r.data.settings)
-    })
-  }, [selected])
-  useEffect(loadDetail, [loadDetail])
+  const byDay = useMemo(() => new Map((openings ?? []).map((d) => [d.day, d])), [openings])
+  const cells = useMemo(() => {
+    const start = new Date(month)
+    start.setDate(1 - month.getDay())
+    return Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d })
+  }, [month])
+  const today = isoDate(new Date())
+  const shownDay = day ?? (openings ?? []).find((d) => d.times.length > 0)?.day ?? null
+  const shown = shownDay ? byDay.get(shownDay) : undefined
+  const times = shown?.times ?? []
+  const openDays = (openings ?? []).filter((d) => d.times.length > 0).length
+  const shift = (n: number) => setMonth((m) => { const d = new Date(m); d.setMonth(d.getMonth() + n); return d })
 
-  useEffect(() => {
-    if (!selected) return
-    api
-      .get<CalEvent[]>(`/availability/${selected}/calendar`, { params: { weekStart: isoDate(weekStart) } })
-      .then((r) => setEvents(r.data))
-  }, [selected, weekStart, savedTick])
-
-  const saveSettings = async () => {
-    if (!selected || !form) return
-    setError(null)
-    try {
-      await api.put(`/availability/${selected}/settings`, form)
-      setSavedTick((t) => t + 1)
-      refreshUsers()
-      loadDetail()
-    } catch (e) {
-      setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not save settings.')
-    }
-  }
-
-  const addRule = async () => {
-    if (!selected) return
-    setError(null)
-    try {
-      await api.post(`/availability/${selected}/rules`, {
-        dayOfWeek: ruleDay,
-        startTime: ruleFrom,
-        endTime: ruleTo,
-        kind: ruleKind,
-      })
-      loadDetail()
-      refreshUsers()
-    } catch (e) {
-      setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not add rule.')
-    }
-  }
-
-  const deleteRule = async (id: string) => {
-    await api.delete(`/availability/rules/${id}`)
-    loadDetail()
-    refreshUsers()
-  }
-
-  const tz = detail?.settings.timezone ?? 'America/New_York'
-
-  /* Events positioned into weekday columns, clamped to the visible band. */
-  const positioned = useMemo(() => {
-    const cols: { ev: CalEvent; top: number; height: number; label: string }[][] = DAYS.slice(0, 5).map(() => [])
-    for (const ev of events) {
-      const s = new Date(ev.startsAt)
-      const e = new Date(ev.endsAt)
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: tz, weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: false,
-      }).formatToParts(s)
-      const weekday = parts.find((p) => p.type === 'weekday')?.value ?? 'Mon'
-      const col = DAYS.indexOf(weekday)
-      if (col < 0 || col > 4) continue
-      const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 9)
-      const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0)
-      const durMin = Math.max(30, (e.getTime() - s.getTime()) / 60000)
-      const startMin = Math.max(hour * 60 + minute, DAY_START * 60)
-      const endMin = Math.min(hour * 60 + minute + durMin, DAY_END * 60)
-      if (endMin <= DAY_START * 60 || startMin >= DAY_END * 60) continue
-      const label = s.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz })
-      cols[col].push({
-        ev,
-        top: ((startMin - DAY_START * 60) / 60) * HOUR_PX,
-        height: Math.max(20, ((endMin - startMin) / 60) * HOUR_PX - 2),
-        label,
-      })
-    }
-    return cols
-  }, [events, tz])
-
-  /* Weekly rules painted as background stripes per weekday column. */
-  const ruleBands = useMemo(() => {
-    const cols: { rule: Rule; top: number; height: number }[][] = DAYS.slice(0, 5).map(() => [])
-    for (const r of detail?.rules ?? []) {
-      if (r.dayOfWeek > 5) continue
-      const start = Math.max(minutesOf(r.startTime), DAY_START * 60)
-      const end = Math.min(minutesOf(r.endTime), DAY_END * 60)
-      if (end <= start) continue
-      cols[r.dayOfWeek - 1].push({
-        rule: r,
-        top: ((start - DAY_START * 60) / 60) * HOUR_PX,
-        height: ((end - start) / 60) * HOUR_PX,
-      })
-    }
-    return cols
-  }, [detail])
-
-  const weekLabel = useMemo(() => {
-    const end = new Date(weekStart)
-    end.setDate(end.getDate() + 4)
-    const f = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    return `${f(weekStart)} – ${f(end)}`
-  }, [weekStart])
-
-  const shiftWeek = (dir: number) => {
-    setWeekStart((w) => {
-      const n = new Date(w)
-      n.setDate(n.getDate() + dir * 7)
-      return n
-    })
-  }
+  const put = (body: object) => round && api.put(`/interview-plan/rounds/${round.id}`, body).then(refresh)
+  const setMembers = (userIds: string[]) => round && api.put(`/interview-plan/rounds/${round.id}/members`, { userIds }).then(refresh)
+  const lengths = round ? [...new Set([30, 45, 60, 90, round.durationMin])].sort((x, y) => x - y) : []
+  const q = find.trim().toLowerCase()
+  const found = q && round ? users.filter((u) => !round.members.some((m) => m.userId === u.id) && u.name.toLowerCase().includes(q)).slice(0, 6) : []
 
   return (
-      <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: 16, alignItems: 'start', marginTop: 16 }}>
-        {/* interviewer list */}
-        <div className="card">
-          <div className="card__head"><h3>Interviewers</h3></div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {list.map((u) => (
-              <button
-                key={u.id}
-                onClick={() => setSelected(u.id)}
-                style={{
-                  font: 'inherit', textAlign: 'left', cursor: 'pointer', border: 'none',
-                  background: u.id === selected ? '#f0f3f8' : 'transparent',
-                  borderLeft: u.id === selected ? '3px solid var(--bofa-navy, #012169)' : '3px solid transparent',
-                  padding: '10px 14px',
-                }}
-              >
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-1)' }}>{u.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 1 }}>
-                  {roleLabel(u.role)}
-                  {u.ruleCount > 0 ? ` · ${u.ruleCount} rule${u.ruleCount > 1 ? 's' : ''}` : ''}
-                </div>
-              </button>
-            ))}
-          </div>
+    <aside className="dash-panel sched sched--drawer">
+      <section>
+        <div className="sched__head">
+          <div className="dash-panel__title">Interview setup</div>
+          <button type="button" className="sched__close" aria-label="Close" onClick={() => close?.()}>×</button>
         </div>
+        <div className="dash-panel__sub">Who interviews for this job, and when they are free</div>
+        <div className="sched__who">
+          <span className="sched__avatar">{initialsOf(job.title)}</span>
+          <span style={{ minWidth: 0 }}>
+            <strong>{job.title}</strong>
+            <small>{[job.department, totalLabel(rounds)].filter(Boolean).join(' · ') || 'No interviews yet'}</small>
+          </span>
+        </div>
+        <div className="sched__links">
+          <Link to={`/jobs/${job.jobId}`}>Job →</Link>
+        </div>
+      </section>
 
-        {detail && form && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
-            {error && (
-              <div style={{ border: '1px solid #ead9ac', background: '#fdf5e3', color: '#7a5c00', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
-                {error}
+      <section>
+        <div className="sched__label">Interviews for this job</div>
+        <div className="sched__people">
+          {rounds.map((r) => (
+            <button key={r.id} type="button" className="sched__person avd__tab" aria-pressed={round?.id === r.id} onClick={() => setPicked(r.id)}>
+              {r.name}
+            </button>
+          ))}
+          <button type="button" className="avd__add"
+            onClick={() => api.post<PlanRound>(`/interview-plan/${job.jobId}/rounds`, {}).then((r) => { refresh(); if (r.data?.id) setPicked(r.data.id) })}>
+            + Add
+          </button>
+        </div>
+        {!round && <p className="sched__note">This job has no interviews yet. Add the first one.</p>}
+      </section>
+
+      {round && (
+        <>
+          <section key={`set-${round.id}`}>
+            <div className="sched__label">Name</div>
+            <input className="sched__find" defaultValue={round.name} placeholder="Name this interview" aria-label="Interview name"
+              onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== round.name) put({ name: v }) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
+            <div className="sched__label" style={{ marginTop: 16 }}>Length</div>
+            <div className="plan-step__lengths" role="group" aria-label="Length">
+              {lengths.map((m) => (
+                <button key={m} type="button" aria-pressed={round.durationMin === m} onClick={() => m !== round.durationMin && put({ durationMin: m })}>
+                  {m} min
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <div className="sched__label">Interviewers</div>
+            <input className="sched__find" type="search" placeholder="Search a name to add an interviewer" value={find} onChange={(e) => setFind(e.target.value)} aria-label="Search interviewers" />
+            {q !== '' && (
+              <div className="sched__found">
+                {found.length === 0 && <span className="sched__none">No one else matches “{find.trim()}”.</span>}
+                {found.map((u) => (
+                  <button key={u.id} type="button" onClick={() => { setMembers([...round.members.map((m) => m.userId), u.id]); setFind('') }}>
+                    <b>{initialsOf(u.name)}</b>
+                    <span>
+                      <strong>{u.name}</strong>
+                      <small>{roleLabel(u.role)} · {hourLabel(u.settings.workStart)} to {hourLabel(u.settings.workEnd)}, {zoneLabel(u.settings.timezone)}</small>
+                    </span>
+                    <i>Add</i>
+                  </button>
+                ))}
               </div>
             )}
-
-            {/* settings */}
-            <div className="card">
-              <div className="card__head">
-                <h3>Working window & load</h3>
-                <button className="btn btn--primary btn--sm" onClick={saveSettings}>Save</button>
-              </div>
-              <div className="card__body" style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                <label className="field" style={{ width: 110 }}>
-                  <span className="field__label">Work start</span>
-                  <input className="input" type="time" value={form.workStart} onChange={(e) => setForm({ ...form, workStart: e.target.value })} />
-                </label>
-                <label className="field" style={{ width: 110 }}>
-                  <span className="field__label">Work end</span>
-                  <input className="input" type="time" value={form.workEnd} onChange={(e) => setForm({ ...form, workEnd: e.target.value })} />
-                </label>
-                <label className="field" style={{ width: 190 }}>
-                  <span className="field__label">Timezone</span>
-                  <select className="input" value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })}>
-                    {(TIMEZONES.includes(form.timezone) ? TIMEZONES : [form.timezone, ...TIMEZONES]).map((z) => (
-                      <option key={z} value={z}>{z.replace('_', ' ')}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field" style={{ width: 120 }}>
-                  <span className="field__label">Max per day</span>
-                  <input className="input" type="number" min={1} value={form.maxPerDay} onChange={(e) => setForm({ ...form, maxPerDay: Number(e.target.value) })} />
-                </label>
-                <label className="field" style={{ width: 120 }}>
-                  <span className="field__label">Max per week</span>
-                  <input className="input" type="number" min={1} value={form.maxPerWeek} onChange={(e) => setForm({ ...form, maxPerWeek: Number(e.target.value) })} />
-                </label>
-              </div>
+            <div className="sched__people">
+              {round.members.map((m) => (
+                <span key={m.userId} className="sched__person" aria-pressed="true">
+                  <b>{initialsOf(m.name)}</b>
+                  {m.name}
+                  <button type="button" className="sched__drop" aria-label={`Remove ${m.name}`}
+                    onClick={() => setMembers(round.members.filter((x) => x.userId !== m.userId).map((x) => x.userId))}>×</button>
+                </span>
+              ))}
+              {round.members.length === 0 && <span className="sched__none">Nobody yet. Add the people who take this interview.</span>}
             </div>
-
-            {/* weekly rules */}
-            <div className="card">
-              <div className="card__head"><h3>Weekly preferences</h3></div>
-              <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {detail.rules.length === 0 && (
-                  <div style={{ fontSize: 13, color: 'var(--ink-4)' }}>
-                    No rules yet — interviews can be booked anywhere inside the working window.
-                  </div>
-                )}
-                {detail.rules.map((r) => (
-                  <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, padding: '6px 0', borderBottom: '1px solid var(--line, #edf0f4)' }}>
-                    <span style={{ width: 40, fontWeight: 600 }}>{DAYS[r.dayOfWeek - 1]}</span>
-                    <span style={{ width: 110, color: 'var(--ink-2)' }}>{r.startTime} – {r.endTime}</span>
-                    <span className={`badge ${r.kind === 'NO_INTERVIEWS' ? 'badge--danger' : 'badge--ok'}`}>
-                      {r.kind === 'NO_INTERVIEWS' ? "Can't interview" : 'Dedicated interview time'}
-                    </span>
-                    <button className="btn btn--ghost btn--sm" style={{ marginLeft: 'auto' }} onClick={() => deleteRule(r.id)}>
-                      Remove
-                    </button>
-                  </div>
-                ))}
-                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', paddingTop: 8 }}>
-                  <label className="field" style={{ width: 90 }}>
-                    <span className="field__label">Day</span>
-                    <select className="input" value={ruleDay} onChange={(e) => setRuleDay(Number(e.target.value))}>
-                      {DAYS.slice(0, 5).map((d, i) => <option key={d} value={i + 1}>{d}</option>)}
-                    </select>
-                  </label>
-                  <label className="field" style={{ width: 105 }}>
-                    <span className="field__label">From</span>
-                    <input className="input" type="time" value={ruleFrom} onChange={(e) => setRuleFrom(e.target.value)} />
-                  </label>
-                  <label className="field" style={{ width: 105 }}>
-                    <span className="field__label">To</span>
-                    <input className="input" type="time" value={ruleTo} onChange={(e) => setRuleTo(e.target.value)} />
-                  </label>
-                  <label className="field" style={{ width: 210 }}>
-                    <span className="field__label">Type</span>
-                    <select className="input" value={ruleKind} onChange={(e) => setRuleKind(e.target.value as Rule['kind'])}>
-                      <option value="NO_INTERVIEWS">Can't interview</option>
-                      <option value="INTERVIEW_BLOCK">Dedicated interview time</option>
-                    </select>
-                  </label>
-                  <button className="btn btn--outline btn--sm" onClick={addRule}>Add rule</button>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--ink-4)' }}>
-                  "Can't interview" blocks that window every week. When someone has dedicated interview time, candidates are only offered slots inside it.
-                </div>
-              </div>
-            </div>
-
-            {/* week calendar */}
-            <div className="card">
-              <div className="card__head" style={{ display: 'flex', alignItems: 'center' }}>
-                <h3>Calendar</h3>
-                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <button className="btn btn--ghost btn--sm" onClick={() => shiftWeek(-1)}>‹</button>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-2)', minWidth: 110, textAlign: 'center' }}>{weekLabel}</span>
-                  <button className="btn btn--ghost btn--sm" onClick={() => shiftWeek(1)}>›</button>
-                </div>
-              </div>
-              <div className="card__body">
-                <div style={{ display: 'grid', gridTemplateColumns: '48px repeat(5, 1fr)', gap: 0 }}>
-                  <div />
-                  {DAYS.slice(0, 5).map((d, i) => {
-                    const day = new Date(weekStart)
-                    day.setDate(day.getDate() + i)
-                    return (
-                      <div key={d} style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 650, color: 'var(--ink-3)', paddingBottom: 6 }}>
-                        {d} {day.getDate()}
-                      </div>
-                    )
-                  })}
-                  {/* hour gutter */}
-                  <div style={{ position: 'relative', height: (DAY_END - DAY_START) * HOUR_PX }}>
-                    {Array.from({ length: DAY_END - DAY_START }, (_, i) => (
-                      <div key={i} style={{ position: 'absolute', top: i * HOUR_PX - 6, right: 8, fontSize: 10.5, color: 'var(--ink-4)' }}>
-                        {DAY_START + i}:00
-                      </div>
-                    ))}
-                  </div>
-                  {DAYS.slice(0, 5).map((d, col) => (
-                    <div key={d} style={{ position: 'relative', height: (DAY_END - DAY_START) * HOUR_PX, borderLeft: '1px solid var(--line, #edf0f4)' }}>
-                      {Array.from({ length: DAY_END - DAY_START }, (_, i) => (
-                        <div key={i} style={{ position: 'absolute', top: i * HOUR_PX, left: 0, right: 0, borderTop: '1px solid #f2f4f8' }} />
-                      ))}
-                      {/* rule bands under events */}
-                      {ruleBands[col].map(({ rule, top, height }) => (
-                        <div
-                          key={rule.id}
-                          title={rule.kind === 'NO_INTERVIEWS' ? "Can't interview (weekly)" : 'Dedicated interview time (weekly)'}
-                          style={{
-                            position: 'absolute', top, height, left: 1, right: 1, borderRadius: 4,
-                            ...(rule.kind === 'NO_INTERVIEWS'
-                              ? { background: 'repeating-linear-gradient(-45deg, rgba(184,74,74,0.07), rgba(184,74,74,0.07) 5px, rgba(184,74,74,0.13) 5px, rgba(184,74,74,0.13) 10px)' }
-                              : { background: 'rgba(58,124,74,0.07)', border: '1px dashed rgba(58,124,74,0.45)' }),
-                          }}
-                        />
-                      ))}
-                      {positioned[col].map(({ ev, top, height, label }) => (
-                        <div
-                          key={ev.id}
-                          title={`${KIND_LABEL[ev.kind] ?? ev.kind} · ${ev.title}`}
-                          style={{
-                            position: 'absolute', top, height, left: 3, right: 3, borderRadius: 6,
-                            padding: '3px 7px', fontSize: 11, lineHeight: 1.25, overflow: 'hidden',
-                            ...(EVENT_STYLE[ev.kind] ?? EVENT_STYLE.BUSY),
-                          }}
-                        >
-                          <div style={{ fontWeight: 650, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{ev.title}</div>
-                          {height > 34 && <div style={{ opacity: 0.75 }}>{label}</div>}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-                {/* legend */}
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 14, fontSize: 12, color: 'var(--ink-3)' }}>
-                  {(['INTERVIEW', 'BUSY', 'TENTATIVE', 'VACATION', 'IN_OFFICE'] as const).map((k) => (
-                    <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ width: 12, height: 12, borderRadius: 3, display: 'inline-block', ...(EVENT_STYLE[k]) }} />
-                      {KIND_LABEL[k]}
-                    </span>
-                  ))}
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 12, height: 12, borderRadius: 3, display: 'inline-block', background: 'repeating-linear-gradient(-45deg, rgba(184,74,74,0.07), rgba(184,74,74,0.07) 3px, rgba(184,74,74,0.16) 3px, rgba(184,74,74,0.16) 6px)' }} />
-                    Can't interview
+            {round.members.map((m) => {
+              const u = users.find((x) => x.id === m.userId)
+              return (
+                <div key={m.userId} className="avd__hours">
+                  <span>
+                    {m.name.split(' ')[0]}: {u ? `${hourLabel(u.settings.workStart)} to ${hourLabel(u.settings.workEnd)}, ${zoneLabel(u.settings.timezone)}, up to ${u.settings.maxPerDay} a day` : 'hours not set'}
                   </span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 12, height: 12, borderRadius: 3, display: 'inline-block', background: 'rgba(58,124,74,0.07)', border: '1px dashed rgba(58,124,74,0.45)' }} />
-                    Dedicated interview time
-                  </span>
+                  <button type="button" onClick={() => onPerson(m.userId)}>Change</button>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 8 }}>
-                  Times shown in {tz.replace('_', ' ')}. Tentative and in-office entries don't block scheduling; busy, vacation and interviews do.
+              )
+            })}
+          </section>
+
+          <section>
+            <div className="sched__month">
+              <span className="sched__label" style={{ margin: 0 }}>{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+              <span>
+                <button type="button" aria-label="Previous month" onClick={() => shift(-1)}>‹</button>
+                <button type="button" aria-label="Next month" onClick={() => shift(1)}>›</button>
+              </span>
+            </div>
+            <div className="sched__grid">
+              {DOW.map((d) => <span key={d} className="sched__dow">{d}</span>)}
+              {cells.map((d) => {
+                const k = isoDate(d)
+                const info = byDay.get(k)
+                const state = info && info.times.length > 0 ? 'open' : info?.state === 'FULL' ? 'full' : 'none'
+                return (
+                  <button key={k} type="button" className="sched__day" data-state={state} data-out={d.getMonth() !== month.getMonth() || undefined}
+                    data-today={k === today || undefined} aria-pressed={k === shownDay} disabled={!info || info.state === 'PAST'}
+                    title={info ? (info.times.length > 0 ? `${info.times.length} ${info.times.length === 1 ? 'time' : 'times'} free` : info.why ?? undefined) : undefined}
+                    onClick={() => setDay(k)}>
+                    {d.getDate()}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="sched__legend">
+              <span data-state="open">Free times</span>
+              <span data-state="full">Interviewers booked up</span>
+            </div>
+          </section>
+
+          <section>
+            <div className="sched__label">
+              {shownDay ? `${dayLabel(shownDay)} · ${times.length} ${times.length === 1 ? 'time' : 'times'} free` : 'Free times'}
+            </div>
+            {times.length === 0 ? (
+              <div className="dash-panel__empty">
+                {round.members.length === 0
+                  ? 'Add an interviewer to see when this interview can happen.'
+                  : openings === null
+                    ? 'Checking the calendars…'
+                    : shown?.why ?? (openDays === 0 ? 'These interviewers have no free time in the next 60 days.' : 'Pick a highlighted day.')}
+              </div>
+            ) : (
+              <div className="sched__times avd__times">
+                {times.map((t) => <span key={t}>{clock(t)}</span>)}
+              </div>
+            )}
+            <p className="sched__note">
+              {round.members.length > 0 && openings !== null ? `${openDays} ${openDays === 1 ? 'day has' : 'days have'} free time in the next 60 days. ` : ''}
+              These are the times candidates are offered. Every interviewer listed must be free.
+            </p>
+            <ConfirmButton label={`Remove “${round.name}”`} confirmLabel="Remove it?" className="sched__again"
+              onConfirm={() => api.delete(`/interview-plan/rounds/${round.id}`).then(() => { setPicked(null); refresh() })} />
+          </section>
+        </>
+      )}
+    </aside>
+  )
+}
+
+const RULE_LABEL: Record<Rule['kind'], string> = {
+  NO_INTERVIEWS: "Can't interview",
+  INTERVIEW_BLOCK: 'Interview time',
+}
+
+/* One interviewer in the drawer: working hours, limits, weekly preferences and their free time. */
+function PersonDrawer({
+  user,
+  week,
+  takes,
+  onSaved,
+}: {
+  user: UserRow
+  week: DayOpen[]
+  takes: string[]
+  onSaved: () => void
+}) {
+  const close = useSlideOverClose()
+  const [form, setForm] = useState<Settings>(user.settings)
+  const [rules, setRules] = useState<Rule[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [rule, setRule] = useState({ dayOfWeek: 1, startTime: '09:00', endTime: '12:00', kind: 'NO_INTERVIEWS' as Rule['kind'] })
+
+  const load = useCallback(() => {
+    api.get<Detail>(`/availability/${user.id}`).then((r) => setRules(r.data.rules))
+  }, [user.id])
+  useEffect(load, [load])
+
+  const fail = (e: unknown, fallback: string) =>
+    setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback)
+  const dirty = JSON.stringify(form) !== JSON.stringify(user.settings)
+  const save = async () => {
+    setError(null)
+    setSaving(true)
+    try {
+      await api.put(`/availability/${user.id}/settings`, form)
+      onSaved()
+    } catch (e) {
+      fail(e, 'Could not save the hours.')
+    } finally {
+      setSaving(false)
+    }
+  }
+  const addRule = async () => {
+    setError(null)
+    try {
+      await api.post(`/availability/${user.id}/rules`, rule)
+      load()
+      onSaved()
+    } catch (e) {
+      fail(e, 'Could not add that.')
+    }
+  }
+  const openDays = week.filter((d) => d.times.length > 0)
+
+  return (
+    <aside className="dash-panel sched sched--drawer">
+      <section>
+        <div className="sched__head">
+          <div className="dash-panel__title">Interviewer</div>
+          <button type="button" className="sched__close" aria-label="Close" onClick={() => close?.()}>×</button>
+        </div>
+        <div className="dash-panel__sub">Hours, limits and weekly preferences</div>
+        <div className="sched__who">
+          <span className="sched__avatar">{initialsOf(user.name)}</span>
+          <span style={{ minWidth: 0 }}>
+            <strong>{user.name}</strong>
+            <small>{user.title || roleLabel(user.role)}</small>
+          </span>
+        </div>
+      </section>
+
+      <section>
+        <div className="sched__label">Working hours</div>
+        <div className="av__fields">
+          <label>
+            <span>From</span>
+            <input className="sched__find" type="time" value={form.workStart} onChange={(e) => setForm({ ...form, workStart: e.target.value })} />
+          </label>
+          <label>
+            <span>To</span>
+            <input className="sched__find" type="time" value={form.workEnd} onChange={(e) => setForm({ ...form, workEnd: e.target.value })} />
+          </label>
+          <label className="av__wide">
+            <span>Time zone</span>
+            <select className="sched__find" value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })}>
+              {(TIMEZONES.includes(form.timezone) ? TIMEZONES : [form.timezone, ...TIMEZONES]).map((z) => (
+                <option key={z} value={z}>{zoneLabel(z)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Most interviews a day</span>
+            <input className="sched__find" type="number" min={1} value={form.maxPerDay} onChange={(e) => setForm({ ...form, maxPerDay: Number(e.target.value) })} />
+          </label>
+          <label>
+            <span>Most a week</span>
+            <input className="sched__find" type="number" min={1} value={form.maxPerWeek} onChange={(e) => setForm({ ...form, maxPerWeek: Number(e.target.value) })} />
+          </label>
+        </div>
+        <button type="button" className="dash-panel__btn sched__go" disabled={!dirty || saving} onClick={save}>
+          {saving ? 'Saving…' : dirty ? 'Save hours' : 'Hours are saved'}
+        </button>
+        {error && <p className="sched__note" style={{ color: 'var(--bofa-red)' }}>{error}</p>}
+      </section>
+
+      <section>
+        <div className="sched__label">Every week</div>
+        {rules.length === 0 && <div className="sched__none">Nothing set: interviews can fall anywhere in the working hours.</div>}
+        <div className="av__rules">
+          {rules.map((r) => (
+            <div key={r.id} className="av__rule" data-kind={r.kind}>
+              <b>{DAYS[r.dayOfWeek - 1]}</b>
+              <span>{hourLabel(r.startTime)} to {hourLabel(r.endTime)}</span>
+              <em>{RULE_LABEL[r.kind]}</em>
+              <button type="button" className="sched__drop" aria-label="Remove"
+                onClick={() => api.delete(`/availability/rules/${r.id}`).then(() => { load(); onSaved() })}>×</button>
+            </div>
+          ))}
+        </div>
+        <div className="av__fields av__fields--rule">
+          <label>
+            <span>Day</span>
+            <select className="sched__find" value={rule.dayOfWeek} onChange={(e) => setRule({ ...rule, dayOfWeek: Number(e.target.value) })}>
+              {DAYS.slice(0, 5).map((d, i) => <option key={d} value={i + 1}>{d}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>From</span>
+            <input className="sched__find" type="time" value={rule.startTime} onChange={(e) => setRule({ ...rule, startTime: e.target.value })} />
+          </label>
+          <label>
+            <span>To</span>
+            <input className="sched__find" type="time" value={rule.endTime} onChange={(e) => setRule({ ...rule, endTime: e.target.value })} />
+          </label>
+          <label className="av__wide">
+            <span>What it is</span>
+            <select className="sched__find" value={rule.kind} onChange={(e) => setRule({ ...rule, kind: e.target.value as Rule['kind'] })}>
+              <option value="NO_INTERVIEWS">Can't interview then</option>
+              <option value="INTERVIEW_BLOCK">Time kept for interviews</option>
+            </select>
+          </label>
+        </div>
+        <button type="button" className="sched__again" onClick={addRule}>Add to every week</button>
+        <p className="sched__note">
+          When someone keeps time for interviews, candidates are only offered times inside it.
+        </p>
+      </section>
+
+      <section>
+        <div className="sched__label">Takes these interviews</div>
+        {takes.length === 0
+          ? <div className="sched__none">None yet. Add them to an interview under Jobs.</div>
+          : <div className="av__takes">{takes.map((t) => <span key={t}>{t}</span>)}</div>}
+      </section>
+
+      <section>
+        <div className="sched__label">Free in the next 7 days</div>
+        {openDays.length === 0 ? (
+          <div className="dash-panel__empty">No time is free in the next 7 days.</div>
+        ) : (
+          <div className="plan__days">
+            {openDays.map((d) => (
+              <div key={d.day} className="plan__dayrow">
+                <b>{new Date(d.day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</b>
+                <div className="plan__times">
+                  {d.times.slice(0, 8).map((t) => (
+                    <span key={t}>{new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                  ))}
+                  {d.times.length > 8 && <em>+{d.times.length - 8} more</em>}
                 </div>
               </div>
-            </div>
+            ))}
           </div>
         )}
-      </div>
+      </section>
+    </aside>
   )
 }
 
 export default function AvailabilityPage() {
   const { jobId } = useParams()
   const [users, setUsers] = useState<UserRow[]>([])
+  const [weeks, setWeeks] = useState<PersonWeek[] | null>(null)
+  const [reqs, setReqs] = useState<Requisition[]>([])
+  const [plans, setPlans] = useState<Plans>({})
+  const [person, setPerson] = useState<string | null>(null)
+  const [openJob, setOpenJob] = useState<string | null>(jobId ?? null)
 
-  const refreshUsers = useCallback(() => {
+  const loadPeople = useCallback(() => {
     api.get<UserRow[]>('/availability/users').then((r) => setUsers(r.data))
+    api.get<PersonWeek[]>('/availability/week', { params: { days: 7 } }).then((r) => setWeeks(r.data)).catch(() => setWeeks([]))
   }, [])
-  useEffect(refreshUsers, [refreshUsers])
+  const loadPlans = useCallback(() => {
+    api.get<Requisition[]>('/interview-plan/requisitions').then((r) => {
+      setReqs(r.data)
+      for (const req of r.data) {
+        api.get<PlanRound[]>('/interview-plan', { params: { jobId: req.jobId } })
+          .then((p) => setPlans((cur) => ({ ...cur, [req.jobId]: p.data })))
+          .catch(() => {})
+      }
+    })
+  }, [])
+  useEffect(loadPeople, [loadPeople])
+  useEffect(loadPlans, [loadPlans])
+
+  // The interviews each person takes, as "Recruiter screen · Personal Banker".
+  const takes: Record<string, string[]> = {}
+  for (const req of reqs) {
+    for (const r of plans[req.jobId] ?? []) {
+      for (const m of r.members) (takes[m.userId] ??= []).push(`${r.name} · ${req.title}`)
+    }
+  }
+
+  const job = reqs.find((r) => r.jobId === openJob) ?? null
+  const openUser = users.find((u) => u.id === person) ?? null
+  const nextFree = (userId: string) => {
+    const first = weeks?.find((w) => w.userId === userId)?.days.find((d) => d.times.length > 0)
+    return first ? `Next free ${new Date(first.times[0]).toLocaleDateString('en-US', { weekday: 'short' })}, ${clock(first.times[0])}` : 'No free time this week'
+  }
 
   return (
     <div className="page">
-      <div className="page__head">
-        <div>
-          <h1 className="page__title">Availability</h1>
-          <p className="page__sub">
-            Interview setup by requisition. Open a requisition to define its rounds and manage its interviewers'
-            working windows, weekly preferences and calendars.
-          </p>
+      <div className="page-head">
+        <div className="crumb">
+          <span className="dot" />
+          Hiring · Availability
+        </div>
+        <div className="page-head__row">
+          <div>
+            <h1>Availability</h1>
+            <p className="sub">Who interviews for each job, and when they are free. Pick a job or a person to set it up.</p>
+          </div>
         </div>
       </div>
 
-      <InterviewPlans users={users} refreshUsers={refreshUsers} openId={jobId ?? null} />
+      <div className="avp">
+        <div className="card">
+          <div className="card__head">
+            <h3 style={{ fontSize: 15 }}>Jobs</h3>
+            <span className="eyebrow">{reqs.length} open</span>
+          </div>
+          <div>
+            {reqs.length === 0 && <div className="desk-empty">No open jobs.</div>}
+            {reqs.map((r) => {
+              const rounds = plans[r.jobId] ?? []
+              const missing = rounds.filter((x) => x.members.length === 0).length
+              return (
+                <div key={r.jobId} className="desk-row">
+                  <span className="avatar desk-row__avatar">{initialsOf(r.title)}</span>
+                  <span className="desk-row__main">
+                    <button type="button" className="desk-row__name desk-row__open" onClick={() => setOpenJob(r.jobId)}>{r.title}</button>
+                    <small>{rounds.length === 0 ? r.department || 'No interviews yet' : rounds.map((x) => x.name).join(', then ')}</small>
+                  </span>
+                  {rounds.length === 0
+                    ? <span className="badge badge--warn">Not set up</span>
+                    : missing > 0
+                      ? <span className="badge badge--warn">{missing} without interviewers</span>
+                      : <span className="badge badge--ok">{totalLabel(rounds)}</span>}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card__head">
+            <h3 style={{ fontSize: 15 }}>Interviewers</h3>
+            <span className="eyebrow">{users.length} people</span>
+          </div>
+          <div>
+            {users.map((u) => (
+              <div key={u.id} className="desk-row">
+                <span className="avatar desk-row__avatar">{initialsOf(u.name)}</span>
+                <span className="desk-row__main">
+                  <button type="button" className="desk-row__name desk-row__open" onClick={() => setPerson(u.id)}>{u.name}</button>
+                  <small>{hourLabel(u.settings.workStart)} to {hourLabel(u.settings.workEnd)}, {zoneLabel(u.settings.timezone)} · up to {u.settings.maxPerDay} a day</small>
+                </span>
+                <span className="desk-row__when">{weeks === null ? '' : nextFree(u.id)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {job && !openUser && (
+        <SlideOver label={job.title} onClose={() => setOpenJob(null)} head={false}>
+          <JobDrawer key={job.jobId} job={job} rounds={plans[job.jobId] ?? []} users={users}
+            refresh={() => { loadPlans(); loadPeople() }} onPerson={setPerson} />
+        </SlideOver>
+      )}
+      {openUser && (
+        <SlideOver label={openUser.name} onClose={() => setPerson(null)} head={false}>
+          <PersonDrawer key={openUser.id} user={openUser} takes={takes[openUser.id] ?? []}
+            week={weeks?.find((w) => w.userId === openUser.id)?.days ?? []} onSaved={loadPeople} />
+        </SlideOver>
+      )}
     </div>
   )
 }

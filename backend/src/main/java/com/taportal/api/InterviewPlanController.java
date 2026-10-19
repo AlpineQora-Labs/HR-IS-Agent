@@ -103,6 +103,30 @@ public class InterviewPlanController {
         return new RoundHealth(slots.isEmpty() ? null : slots.get(0)[0], slots.size(), slots.isEmpty());
     }
 
+    /**
+     * Day by day from today, every time all of a round's interviewers are free for an interview of
+     * its length, and for a day with none, why. Read only: it is what the plan screen shows as
+     * "when they are all free".
+     */
+    @GetMapping("/rounds/{roundId}/openings")
+    public List<SchedulingDtos.DayOpeningsDto> roundOpenings(
+            @PathVariable UUID roundId,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "7") int days) {
+        InterviewRound round = rounds.findById(roundId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Round not found"));
+        List<UUID> ids = members.findByRoundId(roundId).stream()
+                .map(InterviewRoundMember::getUserId)
+                .toList();
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        java.time.LocalDate from = java.time.LocalDate.now();
+        return availability.openings(ids, round.getDurationMin(), from, from.plusDays(Math.max(1, Math.min(days, 62)) - 1), null).stream()
+                .map(d -> new SchedulingDtos.DayOpeningsDto(
+                        d.day(), d.state().name(), d.why(), d.times().stream().map(t -> t[0]).toList()))
+                .toList();
+    }
+
     /** Requisitions with their hiring team, for the availability screen's plan list. */
     @GetMapping("/requisitions")
     public List<RequisitionRow> requisitions() {

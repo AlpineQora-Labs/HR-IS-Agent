@@ -182,17 +182,21 @@ function AdminRailNav() {
   )
 }
 
-/* The left side: the logo in its own capsule, then a card with the pages of the section picked in the top menu. */
+/* The left side, laid out like the AlpineOrion app's: the logo in its own capsule; a card that names the
+   section picked in the top menu and lists its pages; and, at the foot, Settings in a card of its own and
+   a small capsule with the control that collapses the menu. */
 function LeftMenu({
   groups,
   activeGroup,
   collapsed,
   onHome,
+  onToggle,
 }: {
   groups: { group: string; keys: string[] }[]
   activeGroup: string
   collapsed: boolean
   onHome: () => void
+  onToggle: () => void
 }) {
   const pages = (keys: string[]) =>
     keys.map((k) => <Item key={k} to={ROUTES[k]} Icon={ICONS[k]} label={MODULES.find((m) => m.key === k)!.label} />)
@@ -202,12 +206,24 @@ function LeftMenu({
       <div className="side-brand">
         <Brand collapsed={collapsed} onToggle={onHome} />
       </div>
-      <nav className="app__side">
-      <div className="app__side-scroll">
-        {activeGroup === 'Admin' ? <AdminLinks /> : pages(groups.find((g) => g.group === activeGroup)?.keys ?? [])}
-      </div>
-      <RailFoot />
+      <nav className="app__side side-card side-card--menu" aria-label="Section pages">
+        <div className="nav-title">{activeGroup === 'Admin' ? 'Settings' : GROUP_PILL_LABELS[activeGroup] ?? activeGroup}</div>
+        <div className="app__side-scroll">
+          {activeGroup === 'Admin' ? <AdminLinks /> : pages(groups.find((g) => g.group === activeGroup)?.keys ?? [])}
+        </div>
       </nav>
+      <div className="side-gap" />
+      <nav className="app__side side-card side-card--foot" aria-label="Settings">
+        <NavLink to="/admin" className="nav-item" title="Settings">
+          <IconAdmin className="ic" />
+          <span className="nav-label">Settings</span>
+        </NavLink>
+      </nav>
+      <div className="side-tools">
+        <button type="button" onClick={onToggle} aria-label={collapsed ? 'Expand the menu' : 'Collapse the menu'} title={collapsed ? 'Expand' : 'Collapse'}>
+          {collapsed ? <IconChevronRight className="ic" /> : <IconChevronLeft className="ic" />}
+        </button>
+      </div>
     </>
   )
 }
@@ -395,6 +411,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             activeGroup={activeGroup.group}
             collapsed={collapsed}
             onHome={() => navigate('/')}
+            onToggle={toggle}
           />
         ) : activeGroup.group === 'Admin' ? (
           <AdminRailNav />
