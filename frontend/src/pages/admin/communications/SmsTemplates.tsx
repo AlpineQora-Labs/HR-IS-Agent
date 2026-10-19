@@ -146,7 +146,29 @@ function SmsEditor({
             </div>
           )}
 
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f', marginBottom: 6 }}>Message</div>
+          {/* The fields as a dropdown above the message: pick one and it lands where the cursor is. The
+              value stays empty so the same field can be picked again, and the list reads as a menu, not a state. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginBottom: 6 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f' }}>Message</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#6e6e73', minWidth: 0 }}>
+              <span style={{ whiteSpace: 'nowrap' }}>Insert a field</span>
+              <select
+                className="input"
+                style={{ width: 380, fontSize: 12.5, padding: '5px 8px' }}
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) insert(e.target.value)
+                }}
+              >
+                <option value="">Choose a field, it goes where the cursor is</option>
+                {fields.map((f) => (
+                  <option key={f.name} value={f.name}>
+                    {`{{${f.name}}}`}{f.holds ? ` · ${f.holds}` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <textarea
             ref={message}
             className="input"
@@ -155,22 +177,6 @@ function SmsEditor({
             onChange={(e) => setBody(e.target.value)}
             placeholder="Hi {{candidate_name}}, …"
           />
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-            {fields.map((f) => (
-              <button
-                key={f.name}
-                type="button"
-                title={f.holds || undefined}
-                onClick={() => insert(f.name)}
-                style={{
-                  font: 'inherit', fontSize: 11.5, cursor: 'pointer', padding: '4px 10px',
-                  border: '1px solid #d2d2d7', borderRadius: 999, background: '#fff', color: '#1d1d1f',
-                }}
-              >
-                {'{{'}{f.name}{'}}'}
-              </button>
-            ))}
-          </div>
           <div style={{ fontSize: 12, color: !uncounted && preview?.note ? '#b3261e' : '#86868b', marginTop: 10 }}>
             {uncounted
               ? 'The length could not be counted.'
