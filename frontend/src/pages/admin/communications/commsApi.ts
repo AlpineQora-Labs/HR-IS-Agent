@@ -15,6 +15,18 @@ export interface SmsTemplate {
   sentWhen?: string | null
 }
 
+/** A template's wording as the server would send it, before its fields are filled in. */
+export interface SmsPreview {
+  /** The wording made plain: curly quotes straight, emoji left out. */
+  plainText: string
+  /** Its length as a carrier counts it. */
+  characters: number
+  /** How many messages a carrier would bill it as: the count the candidate's record shows. */
+  parts: number
+  /** Advice on the length, or null. */
+  note: string | null
+}
+
 /** What the server said went wrong, or a fallback when it said nothing. */
 export const refusal = (e: unknown, fallback: string) =>
   (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback
@@ -33,4 +45,5 @@ export const commsApi = {
   createSmsTemplate: (payload: Partial<SmsTemplate>) => api.post<SmsTemplate>('/sms-templates', payload).then((r) => r.data),
   updateSmsTemplate: (id: string, payload: Partial<SmsTemplate>) => api.put<SmsTemplate>(`/sms-templates/${id}`, payload).then((r) => r.data),
   deleteSmsTemplate: (id: string) => api.delete(`/sms-templates/${id}`).then(() => undefined),
+  previewSmsTemplate: (body: string) => api.post<SmsPreview>('/sms-templates/preview', { body }).then((r) => r.data),
 }

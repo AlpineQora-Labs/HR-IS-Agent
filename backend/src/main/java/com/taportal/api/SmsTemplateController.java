@@ -4,6 +4,7 @@ import com.taportal.domain.comms.SmsTemplate;
 import com.taportal.domain.comms.SmsTemplateRepository;
 import com.taportal.domain.comms.TemplateRules;
 import com.taportal.domain.journey.JourneyPoint;
+import com.taportal.domain.messaging.SmsText;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -31,6 +32,18 @@ public class SmsTemplateController {
             String templateKey, String sentWhen) {}
 
     public record SmsSave(String name, String category, String body, String status) {}
+
+    public record SmsPreviewRequest(String body) {}
+
+    /**
+     * A template's wording as it would be sent, before its fields are filled in.
+     *
+     * @param plainText  the wording made plain: curly quotes straight, emoji left out
+     * @param characters its length as a carrier counts it (^{}\[~]|€ take two)
+     * @param parts      how many messages a carrier would bill it as
+     * @param note       advice on the length, or null when there is none
+     */
+    public record SmsPreview(String plainText, int characters, int parts, String note) {}
 
     private final SmsTemplateRepository repository;
     private final TemplateRules rules;
@@ -64,6 +77,17 @@ public class SmsTemplateController {
                 null, req.body(), true);
         apply(t, req);
         return toDto(repository.save(t));
+    }
+
+    /**
+     * Counts a wording the way the candidate's record will (SmsText), so the
+     * editor and the record cannot disagree. Saves nothing.
+     */
+    @PostMapping("/preview")
+    public SmsPreview preview(@RequestBody SmsPreviewRequest req) {
+        SmsText.Measure m = SmsText.measure(req.body());
+        return new SmsPreview(m.plainText(), m.characters(), m.parts(),
+                m.tooLong() ? "keep candidate texts short" : null);
     }
 
     @DeleteMapping("/{id}")

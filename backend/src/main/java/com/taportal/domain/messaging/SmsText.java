@@ -73,10 +73,39 @@ public final class SmsText {
 
     /** How many messages a carrier would bill this as. */
     public static int parts(String text) {
+        int length = length(text);
+        return length <= 160 ? 1 : (length + 152) / 153;
+    }
+
+    /** The length a carrier counts: one of the extras ^{}\[~]|€ takes two characters. */
+    public static int length(String text) {
         int length = 0;
         for (int i = 0; i < text.length(); i++) {
             length += EXTENDED.indexOf(text.charAt(i)) >= 0 ? 2 : 1;
         }
-        return length <= 160 ? 1 : (length + 152) / 153;
+        return length;
+    }
+
+    /**
+     * A wording as it would go out: made {@link #plain}, then counted the way
+     * a carrier bills it. This is the count the candidate's record shows, so
+     * a template editor shows this one too rather than counting for itself.
+     */
+    public static Measure measure(String wording) {
+        String text = plain(wording);
+        return new Measure(text, length(text), text.isEmpty() ? 0 : parts(text));
+    }
+
+    /**
+     * @param plainText  the wording after {@link #plain}: what a phone is sent
+     * @param characters its length as a carrier counts it
+     * @param parts      how many messages a carrier would bill it as; none for no text
+     */
+    public record Measure(String plainText, int characters, int parts) {
+
+        /** Past two parts a text reads as a letter; candidates are sent short ones. */
+        public boolean tooLong() {
+            return parts > 2;
+        }
     }
 }

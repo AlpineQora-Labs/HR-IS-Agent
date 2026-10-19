@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef, SizeColumnsToFitGridStrategy } from 'ag-grid-community'
 import { useJourney } from '@/api/hooks'
-import { commsApi, refusal, type SmsTemplate } from './commsApi'
+import { commsApi, refusal, type SmsPreview, type SmsTemplate } from './commsApi'
 import { Button } from './TvButton'
 
 /* SMS templates — the text-message channel of Communications, rendered in
@@ -53,7 +53,28 @@ function SmsEditor({
   const fields = (journey?.fields ?? FIELDS_MEANWHILE.map((name) => ({ name, holds: '' })))
     .filter((f) => !point || point.has.includes(f.name))
 
-  const segments = Math.max(1, Math.ceil(body.length / 160))
+  // The length and parts are the server's count, the one the candidate's record shows; it is asked
+  // for once typing pauses. `body` says which wording a count is for.
+  const [preview, setPreview] = useState<(SmsPreview & { body: string }) | null>(null)
+  const [uncounted, setUncounted] = useState(false)
+  useEffect(() => {
+    let live = true
+    const pause = setTimeout(() => {
+      commsApi.previewSmsTemplate(body)
+        .then((p) => {
+          if (!live) return
+          setPreview({ ...p, body })
+          setUncounted(false)
+        })
+        .catch(() => {
+          if (live) setUncounted(true)
+        })
+    }, 300)
+    return () => {
+      live = false
+      clearTimeout(pause)
+    }
+  }, [body])
 
   /** Put a field where the cursor is, not at the end. */
   const insert = (name: string) => {
@@ -150,9 +171,15 @@ function SmsEditor({
               </button>
             ))}
           </div>
-          <div style={{ fontSize: 12, color: body.length > 320 ? '#b3261e' : '#86868b', marginTop: 10 }}>
-            {body.length} characters · {segments} SMS segment{segments > 1 ? 's' : ''}
-            {body.length > 320 ? ' — keep candidate texts short' : ''}
+          <div style={{ fontSize: 12, color: !uncounted && preview?.note ? '#b3261e' : '#86868b', marginTop: 10 }}>
+            {uncounted
+              ? 'The length could not be counted.'
+              : preview
+                ? `${preview.characters} characters · ${preview.parts} text part${preview.parts === 1 ? '' : 's'}${preview.note ? ` — ${preview.note}` : ''}`
+                : 'Counting…'}
+          </div>
+          <div style={{ fontSize: 11.5, color: '#a1a1a6', marginTop: 3 }}>
+            Counted on the template wording as it is sent, before fields are filled in. A field’s value changes the length.
           </div>
 
           {error && <div style={{ color: '#b3261e', fontSize: 13, marginTop: 12 }}>{error}</div>}
@@ -177,7 +204,8 @@ function SmsEditor({
                 padding: '10px 13px', fontSize: 13, lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
               }}
             >
-              {body || 'Your message appears here…'}
+              {/* What the phone is sent once the server has made the wording plain; the typed text until then. */}
+              {(preview && preview.body === body ? preview.plainText : body) || 'Your message appears here…'}
             </div>
             <div style={{ fontSize: 10.5, color: '#a1a1a6', marginTop: 8, textAlign: 'right' }}>Delivered</div>
           </div>

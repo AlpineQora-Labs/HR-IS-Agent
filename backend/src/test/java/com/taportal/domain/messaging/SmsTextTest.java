@@ -54,6 +54,44 @@ class SmsTextTest {
     }
 
     @Test
+    @DisplayName("a wording is counted as it would be sent, the way the candidate's record counts it")
+    void aWordingIsMeasuredAsSent() {
+        assertThat(SmsText.measure("a".repeat(160))).isEqualTo(new SmsText.Measure("a".repeat(160), 160, 1));
+        assertThat(SmsText.measure("a".repeat(161)).parts()).isEqualTo(2);
+        assertThat(SmsText.measure("a".repeat(306)).parts()).isEqualTo(2);
+        assertThat(SmsText.measure("a".repeat(307)).parts()).isEqualTo(3);
+        assertThat(SmsText.measure("a".repeat(320)).parts()).as("320 characters is three parts, not two").isEqualTo(3);
+    }
+
+    @Test
+    void aEuroSignCountsTwice() {
+        SmsText.Measure m = SmsText.measure("€" + "a".repeat(159));
+        assertThat(m.characters()).isEqualTo(161);
+        assertThat(m.parts()).isEqualTo(2);
+        assertThat(SmsText.measure("€" + "a".repeat(158)).parts()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("curly quotes are counted straight and an emoji is not counted, since neither is sent")
+    void theCountIsOfThePlainText() {
+        SmsText.Measure m = SmsText.measure("You’re “in” 📅");
+        assertThat(m.plainText()).isEqualTo("You're \"in\"");
+        assertThat(m.characters()).isEqualTo(11);
+    }
+
+    @Test
+    void pastTwoPartsIsTooLong() {
+        assertThat(SmsText.measure("a".repeat(306)).tooLong()).isFalse();
+        assertThat(SmsText.measure("a".repeat(307)).tooLong()).isTrue();
+    }
+
+    @Test
+    void noWordingIsNoParts() {
+        assertThat(SmsText.measure("  📅 ")).isEqualTo(new SmsText.Measure("", 0, 0));
+        assertThat(SmsText.measure(null).parts()).isZero();
+    }
+
+    @Test
     void nothingIsNothing() {
         assertThat(SmsText.plain(null)).isEmpty();
     }
