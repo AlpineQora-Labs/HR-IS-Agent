@@ -147,20 +147,32 @@ function SmsEditor({
           )}
 
           {/* The fields as a dropdown above the message: pick one and it lands where the cursor is. The
-              value stays empty so the same field can be picked again, and the list reads as a menu, not a state. */}
+              value stays empty so the same field can be picked again, and the list reads as a menu, not a state.
+              On Windows and Linux the arrow keys change a closed select's value and fire change at once, which
+              would insert the first field on the first press; so they open the list instead, and only a
+              committed choice inserts. Where showPicker is missing, Space or Alt+Down still opens it. */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginBottom: 6 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f' }}>Message</div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#6e6e73', minWidth: 0 }}>
+            <label style={{ flex: '1 1 auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, fontSize: 12.5, color: '#6e6e73', minWidth: 0 }}>
               <span style={{ whiteSpace: 'nowrap' }}>Insert a field</span>
               <select
                 className="input"
-                style={{ width: 380, fontSize: 12.5, padding: '5px 8px' }}
+                style={{ flex: '1 1 180px', minWidth: 0, maxWidth: 380, fontSize: 12.5, padding: '5px 8px' }}
                 value=""
+                onKeyDown={(e) => {
+                  if (e.altKey || !['ArrowDown', 'ArrowUp', 'Home', 'End', 'PageDown', 'PageUp'].includes(e.key)) return
+                  e.preventDefault()
+                  try {
+                    (e.currentTarget as HTMLSelectElement & { showPicker?: () => void }).showPicker?.()
+                  } catch {
+                    /* not allowed here: the list stays closed and nothing is inserted */
+                  }
+                }}
                 onChange={(e) => {
                   if (e.target.value) insert(e.target.value)
                 }}
               >
-                <option value="">Choose a field, it goes where the cursor is</option>
+                <option value="">Choose a field to insert at the cursor</option>
                 {fields.map((f) => (
                   <option key={f.name} value={f.name}>
                     {`{{${f.name}}}`}{f.holds ? ` · ${f.holds}` : ''}
