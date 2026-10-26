@@ -714,3 +714,35 @@ export interface ReminderResult {
   sent: MessageRow[]
   note: string | null
 }
+
+/* ---------------- The portal assistant (read-only) ---------------- */
+
+/** "Brief me", "Explain why", or a question in the recruiter's own words. */
+export type AssistantIntent = 'BRIEF' | 'WHY' | 'ASK'
+
+export interface AssistantTurn {
+  from: 'RECRUITER' | 'ASSISTANT'
+  text: string
+}
+
+export interface AssistantAsk {
+  intent: AssistantIntent
+  question?: string
+  /** What is open on screen; empty asks about the day's interviews. */
+  context: { candidateId?: string; applicationId?: string; jobId?: string }
+  /** The chat so far about this same thing, oldest first. */
+  history: AssistantTurn[]
+}
+
+export interface AssistantReply {
+  /** DAY, CANDIDATE or JOB. */
+  scope: string
+  /** What the answer is about, in words. */
+  about: string
+  /** Plain text; lines starting "- " are list items. */
+  answer: string
+  /** Screens of the portal the answer refers to. */
+  links: { label: string; path: string }[]
+  /** True when AI worded the answer from the records; false when the portal's rules did. */
+  byModel: boolean
+}

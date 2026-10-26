@@ -44,6 +44,9 @@ app:
     enabled: ${ARIA_AI_ENABLED:true}
     model: ${ARIA_MODEL:claude-opus-4-8}
     nlu-model: ${ARIA_NLU_MODEL:claude-opus-4-8}
+    # The recruiter assistant (the widget on every recruiter screen). It words a briefing the
+    # portal builds from its records; names and contact details never reach the model.
+    recruiter-model: ${ARIA_RECRUITER_MODEL:claude-opus-5-5}
 
 management:
   endpoints:

@@ -4,6 +4,7 @@ import SlideOver, { useSlideOverClose } from '@/components/SlideOver'
 import { useBeginInterview, useBookInterviewTime, useInterviewOpenings, useProposeTimes, useRescheduleInterview, useTransitionInterview } from '@/api/hooks'
 import type { AttentionItem, InterviewerLoad } from '@/api/types'
 import { initials } from '@/lib/format'
+import { useAssistantFocus } from '@/lib/assistantFocus'
 
 /* The scheduling drawer of the interview desk: it slides in from the right when a candidate is
    to be scheduled. In it: pick a candidate who has no time yet, choose who
@@ -17,6 +18,10 @@ const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour:
 
 /** The drawer: slides in over the desk, and closes with its X, Escape or a click outside. */
 export default function InterviewScheduleDrawer(props: PanelProps & { fresh: Fresh | null; onClose: () => void }) {
+  // The portal assistant answers about the candidate this drawer is on.
+  const shown = props.fresh ?? props.others.find((w) => w.interviewId === props.picked)
+    ?? props.waiting.find((w) => w.interviewId === props.picked) ?? props.waiting[0] ?? null
+  useAssistantFocus(shown ? { applicationId: shown.applicationId, label: shown.jobTitle ? `${shown.candidateName}, ${shown.jobTitle}` : shown.candidateName } : null)
   return (
     <SlideOver label="Schedule an interview" onClose={props.onClose} head={false}>
       {props.fresh ? <FreshPanel fresh={props.fresh} onPick={props.onPick} /> : <Panel {...props} />}

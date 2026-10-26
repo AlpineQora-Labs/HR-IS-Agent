@@ -4,6 +4,7 @@ import InterviewScheduleDrawer, { type Fresh } from './InterviewSchedulePanel'
 import { useApplications, useJobInterviews, useJobs, useSchedulingOverview, useTransitionInterview } from '@/api/hooks'
 import type { AttentionItem } from '@/api/types'
 import { initials } from '@/lib/format'
+import { useAssistantFocus } from '@/lib/assistantFocus'
 
 /* The interview desk: what a recruiter has to do about interviews, across every job. The
    stuck ones come first with their action on the row; then the week ahead as a plain agenda.
@@ -42,6 +43,8 @@ export default function InterviewDesk() {
   // One job at a time, or all of them. With a job chosen, everyone who applied to it is listed too.
   const { data: jobs } = useJobs()
   const [jobId, setJobId] = useState('')
+  // The portal assistant answers about the job picked here, or the whole desk when none is.
+  useAssistantFocus(jobId ? { jobId, label: (jobs ?? []).find((j) => j.id === jobId)?.title } : null)
   const inJob = (item: AttentionItem) => jobId === '' || appById.get(item.applicationId)?.jobId === jobId
   const lanes: Record<Lane, AttentionItem[]> = {
     outcome: (data?.needsOutcome ?? []).filter(inJob),

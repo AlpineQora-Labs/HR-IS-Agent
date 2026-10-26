@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { useDrawerPresence } from '@/lib/assistantFocus'
 
 // Right-side slide-over chrome: dimmed backdrop, floating rounded panel, Esc +
 // click-outside to close. True drawer motion: slides in from off-screen right
@@ -14,8 +15,8 @@ export function useSlideOverClose() {
 }
 
 /* Every drawer in the app is one size and sits in one place, as the interview scheduling drawer does:
-   400 wide, starting a little above the page card, with no outline; its heading is a navy head. */
-const DRAWER_WIDTH = 400
+   460 wide, starting a little above the page card, with no outline; its heading is a navy head. */
+export const DRAWER_WIDTH = 460
 const DRAWER_RAISE = 16
 
 export default function SlideOver({
@@ -36,6 +37,8 @@ export default function SlideOver({
   children: React.ReactNode
 }) {
   const [closing, setClosing] = useState(false)
+  // The portal assistant steps out of an open drawer's way.
+  useDrawerPresence()
   const closeTimer = useRef<number | undefined>(undefined)
 
   const close = () => {

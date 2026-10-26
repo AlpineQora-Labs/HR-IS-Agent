@@ -24,6 +24,7 @@ import { api } from '@/api/client'
 import { stageHue } from '@/lib/stages'
 import { CHAT } from '@/lib/brand'
 import { FitBadge } from '../components/FitBadge'
+import { useAssistantFocus } from '@/lib/assistantFocus'
 
 // Terminal stages folded into the collapsible "Closed" lane so the active board
 // fits the viewport without horizontal scrolling.
@@ -400,6 +401,8 @@ function CandidateDrawer({
   onClose: () => void
 }) {
   const { data: c, isLoading } = useCandidate(app.candidateId)
+  // The portal assistant answers about this application while the drawer is open.
+  useAssistantFocus({ applicationId: app.id, label: `${app.candidateName}, ${app.jobTitle}` })
   const advance = useUpdateApplicationStage()
   const { toastMsg } = useStore()
   const [stage, setStage] = useState(app.stage)

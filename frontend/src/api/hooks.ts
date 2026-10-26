@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
 import type {
+  AssistantAsk,
+  AssistantReply,
   SchedulingOverview,
   FormDefinitionDto,
   FormMeta,
@@ -818,5 +820,12 @@ export function useSendReminder() {
     mutationFn: ({ interviewId, which }: { interviewId: string; which: '24h' | '1h' }) =>
       api.post<ReminderResult>(`/interviews/${interviewId}/reminders/${which}`).then((r) => r.data),
     onSettled: () => qc.invalidateQueries({ queryKey: ['messages'] }),
+  })
+}
+
+/** Ask the portal assistant about what is on screen. It only reads; nothing is invalidated. */
+export function useAskAssistant() {
+  return useMutation({
+    mutationFn: (ask: AssistantAsk) => api.post<AssistantReply>('/assistant/ask', ask).then((r) => r.data),
   })
 }

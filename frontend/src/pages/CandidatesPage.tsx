@@ -8,6 +8,7 @@ import type { CandidateSummary } from '../api/types'
 import { date, humanize, initials } from '../lib/format'
 import { CHAT } from '@/lib/brand'
 import { FitBadge } from '../components/FitBadge'
+import { useAssistantFocus } from '@/lib/assistantFocus'
 
 // Split-view pilot: the candidate list docks left, the record lives on the
 // right — no overlay, no open/close ceremony. ↑/↓ moves the selection, the
@@ -282,6 +283,8 @@ export default function CandidatesPage() {
   }, [data, filter])
 
   const selected = rows.find((c) => c.id === sel) ?? null
+  // The portal assistant answers about the candidate whose record is open.
+  useAssistantFocus(selected ? { candidateId: selected.id, label: selected.name } : null)
   const setSel = (id: string) => setParams(id ? { sel: id } : {}, { replace: true })
 
   // ↑/↓ move the selection — the split view's superpower.

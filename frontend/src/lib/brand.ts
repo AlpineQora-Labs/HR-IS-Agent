@@ -5,3 +5,6 @@
 export const ASSISTANT = 'Bank of America Careers'
 /* What the assistant's chat is called where the full name would be a mouthful. */
 export const CHAT = 'Careers chat'
+/* The assistant on the recruiter screens. It reads the portal's records and words a briefing; it is
+   not a person and carries no person's name. */
+export const PORTAL_ASSISTANT = 'Portal assistant'

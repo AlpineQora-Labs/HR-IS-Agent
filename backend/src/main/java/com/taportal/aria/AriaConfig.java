@@ -49,6 +49,28 @@ public class AriaConfig {
         return scripted;
     }
 
+    /**
+     * The recruiter assistant's voice. Same switch as the candidate side; its own model setting,
+     * because it writes longer answers from a whole briefing rather than one line of a chat.
+     */
+    @Bean
+    public RecruiterBrain recruiterBrain(
+            @Value("${app.aria.enabled:true}") boolean enabled,
+            @Value("${app.aria.recruiter-model:claude-opus-5-5}") String model) {
+        ScriptedRecruiterBrain scripted = new ScriptedRecruiterBrain();
+        if (enabled && hasKey()) {
+            log.info("Recruiter assistant: Claude-powered (model={})", model);
+            return new ClaudeRecruiterBrain(recruiterClient(), model, scripted);
+        }
+        log.info("Recruiter assistant: written by rules (ai-enabled={}, key-present={})", enabled, hasKey());
+        return scripted;
+    }
+
+    /** A client that gives up sooner than the default ten minutes: a recruiter is waiting on the answer. */
+    private static AnthropicClient recruiterClient() {
+        return AnthropicOkHttpClient.builder().fromEnv().timeout(java.time.Duration.ofSeconds(45)).maxRetries(1).build();
+    }
+
     private static boolean hasKey() {
         String k = System.getenv("ANTHROPIC_API_KEY");
         return k != null && !k.isBlank();

@@ -2,6 +2,7 @@ import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import CommandPalette from '@/components/CommandPalette'
 import NotificationsBell from '@/components/NotificationsBell'
+import PortalAssistant from '@/components/PortalAssistant'
 import { useStore } from '@/state/store'
 import { MODULES, useConfig } from '@/state/config'
 import {
@@ -432,8 +433,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
+      {/* The portal assistant's launcher holds the bottom-right corner; the toast sits beside it. */}
+      <PortalAssistant />
+
       {toast && (
-        <div style={{ position: 'fixed', right: 24, bottom: 24, zIndex: 60 }}>
+        <div style={{ position: 'fixed', right: 112, bottom: 40, zIndex: 60 }}>
           <div className={`toast toast--${toastTone}`} role={toastTone === 'danger' ? 'alert' : 'status'}>
             {toastTone === 'danger' ? (
               <IconAlert className="toast__ic" style={{ color: '#ff8a9b' }} />

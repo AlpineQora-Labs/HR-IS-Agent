@@ -7,6 +7,7 @@ import InterviewScheduleDrawer from './InterviewSchedulePanel'
 import { useStore } from '@/state/store'
 import { useAllSlots, useApplications, useJobInterviews, useJobs, useProposeTimes, useRescheduleInterview, useSchedulingOverview, useTransitionInterview } from '@/api/hooks'
 import { date } from '@/lib/format'
+import { useAssistantFocus } from '@/lib/assistantFocus'
 import type { AttentionItem, Interview, Slot } from '@/api/types'
 
 const statusBadge = (status: string) => {
@@ -718,6 +719,8 @@ export default function InterviewsPage() {
   const setJobId = (id: string) => setParams(id ? { job: id } : {}, { replace: true })
   // The desk (what needs doing) comes first; the calendar and the list are other views of the same interviews.
   const [view, setView] = useState<'desk' | 'calendar' | 'list'>('desk')
+  // The portal assistant answers about the job the calendar or list is showing (the desk says its own).
+  useAssistantFocus(view !== 'desk' && jobId ? { jobId, label: (jobs ?? []).find((j) => j.id === jobId)?.title } : null)
 
   // The calendar and the list cover every job unless one is picked, like the desk.
   const { data: apps } = useApplications(jobId ? { jobId } : undefined)
