@@ -968,17 +968,19 @@ function LivePreview({ form }: { form: IntakeForm }) {
   const raw = (id: string) => answerText(answers[id])
   const val = (id: string) => effectiveValue(form, id, raw)
   const ruleCount = (form.rules ?? []).length + (form.choices ?? []).length
+  // The preview sits in a flex row, where a card shrinks to its content and the form looked cramped: it is
+  // given the row's width, up to a comfortable reading width.
   return (
-    <div className="card" style={{ maxWidth: 680, margin: '0 auto', overflow: 'hidden' }}>
-      <div style={{ background: 'var(--bofa-navy)', color: '#fff', padding: '14px 18px' }}>
-        <div style={{ fontSize: 12, opacity: 0.75 }}>
+    <div className="card" style={{ width: '100%', maxWidth: 880, margin: '0 auto', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bofa-navy)', color: '#fff', padding: '18px 28px' }}>
+        <div style={{ fontSize: 12.5, opacity: 0.75 }}>
           Preview{ruleCount > 0 ? ` · ${ruleCount} rule${ruleCount === 1 ? '' : 's'} active` : ''}
         </div>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginTop: 2 }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginTop: 4 }}>
           Form preview
         </div>
       </div>
-      <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 20, padding: '26px 28px 30px' }}>
         {form.rows.map((r) => {
           const shown = r.slots.filter((sl): sl is IntakeField => sl !== null && fieldVisible(form, sl.id, val))
           if (r.slots.some((sl) => sl !== null) && shown.length === 0) return null
