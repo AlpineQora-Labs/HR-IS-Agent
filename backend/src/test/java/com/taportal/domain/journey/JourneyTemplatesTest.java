@@ -65,4 +65,17 @@ class JourneyTemplatesTest {
         assertThat(JourneyPoint.OPT_OUT.has()).doesNotContain("job_title", "candidate_name");
         assertThat(JourneyPoint.UNKNOWN_SENDER.has()).doesNotContain("job_title", "candidate_name");
     }
+
+    @Test
+    @DisplayName("a template offered for one step is not offered for another its fields would also fit")
+    void aTemplateOfferedForAStepFitsThatStepOnly() {
+        String shortThanks = "{{company_name}}: Thank you, {{first_name}}. Your application for {{job_title}} is in.";
+
+        assertThat(JourneyTemplates.unfit(JourneyPoint.APPLICATION_RECEIVED, "ACTIVE", null, "APPLICATION_RECEIVED",
+                shortThanks)).isNull();
+        assertThat(JourneyTemplates.unfit(JourneyPoint.HIRED, "ACTIVE", null, "APPLICATION_RECEIVED", shortThanks))
+                .isEqualTo("is offered for another step, “When the candidate applies”");
+        // Offered for no step in particular, it goes wherever its fields fit, as before.
+        assertThat(JourneyTemplates.unfit(JourneyPoint.HIRED, "ACTIVE", null, null, shortThanks)).isNull();
+    }
 }

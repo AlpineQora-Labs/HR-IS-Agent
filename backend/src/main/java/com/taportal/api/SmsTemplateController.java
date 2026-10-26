@@ -24,14 +24,17 @@ import org.springframework.web.server.ResponseStatusException;
 public class SmsTemplateController {
 
     /**
-     * @param templateKey set when the template words a point of the candidate journey
-     * @param sentWhen    that point, in words; null otherwise
+     * @param templateKey  set when the template words a point of the candidate journey
+     * @param sentWhen     that point, in words; null otherwise
+     * @param journeyPoint the step it is offered as a choice for on the workflow drawing, or null
+     * @param offeredFor   that step, in words; null otherwise
      */
     public record SmsDto(UUID id, String name, String category, String body, String status,
             java.time.OffsetDateTime createdAt, java.time.OffsetDateTime updatedAt,
-            String templateKey, String sentWhen) {}
+            String templateKey, String sentWhen, String journeyPoint, String offeredFor) {}
 
-    public record SmsSave(String name, String category, String body, String status) {}
+    /** @param journeyPoint the step to offer it for on the workflow drawing; null or blank for none */
+    public record SmsSave(String name, String category, String body, String status, String journeyPoint) {}
 
     public record SmsPreviewRequest(String body) {}
 
@@ -67,6 +70,7 @@ public class SmsTemplateController {
     public SmsDto create(@RequestBody SmsSave req) {
         SmsTemplate t = new SmsTemplate();
         apply(t, req);
+        t.setJourneyPoint(rules.mayOffer(req.journeyPoint(), null, null, req.body(), true));
         return toDto(repository.save(t));
     }
 
@@ -75,7 +79,9 @@ public class SmsTemplateController {
         SmsTemplate t = load(id);
         rules.mayChange(t.getTemplateKey(), t.getName(), req.status() == null ? "ACTIVE" : req.status(),
                 null, req.body(), true);
+        String offeredFor = rules.mayOffer(req.journeyPoint(), t.getTemplateKey(), null, req.body(), true);
         apply(t, req);
+        t.setJourneyPoint(offeredFor);
         return toDto(repository.save(t));
     }
 
@@ -118,6 +124,7 @@ public class SmsTemplateController {
     private static SmsDto toDto(SmsTemplate t) {
         return new SmsDto(t.getId(), t.getName(), t.getCategory(), t.getBody(), t.getStatus(),
                 t.getCreatedAt(), t.getUpdatedAt(), t.getTemplateKey(),
-                JourneyPoint.ofTemplateKey(t.getTemplateKey()).map(JourneyPoint::label).orElse(null));
+                JourneyPoint.ofTemplateKey(t.getTemplateKey()).map(JourneyPoint::label).orElse(null),
+                t.getJourneyPoint(), JourneyPoint.of(t.getJourneyPoint()).map(JourneyPoint::label).orElse(null));
     }
 }

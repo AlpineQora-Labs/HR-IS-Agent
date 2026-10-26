@@ -25,7 +25,7 @@ public final class StatusWording {
             case "APPLIED" -> "we have it and it is under review";
             case "SCREENED", "MATCHED" -> "you passed the first screening and the hiring team is reviewing it";
             case "INTERVIEW" -> interview(interviewStatus, interviewAt, now);
-            case "ASSESSMENT" -> "an assessment is your next step, and the details are in your email";
+            case "ASSESSMENT" -> "an assessment is your next step, and your recruiter will be in touch with the details";
             case "OFFER" -> "an offer is being prepared and your recruiter will be in touch";
             case "HIRED" -> "you are hired. Welcome to the team";
             case "REJECTED" -> "we are not moving forward with it. Thank you for your interest";

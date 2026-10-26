@@ -38,6 +38,11 @@ app:
     # credentials come from the environment, set by the owner of the account.
     sms-provider: ${SMS_PROVIDER:simulated}
     email-provider: ${EMAIL_PROVIDER:simulated}
+  journey:
+    # A move to assessment, offer, hired or not taken forward is told this many minutes after it
+    # happens, and only if the application is still at that stage: the pipeline moves one stage at a
+    # time, so stages only passed through are not announced (StagesReached).
+    stage-grace-minutes: ${JOURNEY_STAGE_GRACE_MINUTES:2}
   aria:
     # LLM-powered Aria activates only when enabled AND ANTHROPIC_API_KEY is set;
     # otherwise the conversation runs fully offline on the scripted brain.

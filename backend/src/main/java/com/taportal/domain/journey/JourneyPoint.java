@@ -27,6 +27,11 @@ public enum JourneyPoint {
             Set.of("interview_time")),
     INTERVIEW_REMINDER_1H("1 hour before the interview", Kind.UNPROMPTED, false, About.BOOKED_INTERVIEW,
             Set.of("interview_time")),
+    // After the interview: each is told once, when the hiring team moves the application to its stage.
+    ASSESSMENT_INVITE("When the candidate is moved to assessment", Kind.UNPROMPTED, true, About.APPLICATION, Set.of()),
+    OFFER_EXTENDED("When the candidate is moved to offer", Kind.UNPROMPTED, true, About.APPLICATION, Set.of()),
+    HIRED("When the candidate is hired", Kind.UNPROMPTED, true, About.APPLICATION, Set.of()),
+    NOT_SELECTED("When the application is not taken forward", Kind.UNPROMPTED, true, About.APPLICATION, Set.of()),
 
     // ---- not drawn: what the hiring team's own actions make necessary ----
     TEAM_RESCHEDULED("When the hiring team moves an interview", Kind.NOTICE, true, About.TIMES_ON_OFFER,
@@ -178,5 +183,23 @@ public enum JourneyPoint {
 
     public static List<JourneyPoint> onTheDrawing() {
         return Arrays.stream(values()).filter(JourneyPoint::drawn).toList();
+    }
+
+    /** The stage an application reaches that tells the candidate at a point. INTERVIEW has its own invitation. */
+    private static final java.util.Map<JourneyPoint, String> REACHED = java.util.Map.of(
+            ASSESSMENT_INVITE, "ASSESSMENT",
+            OFFER_EXTENDED, "OFFER",
+            HIRED, "HIRED",
+            NOT_SELECTED, "REJECTED");
+
+    /** The point that tells a candidate their application reached a stage, if that stage tells them anything. */
+    public static Optional<JourneyPoint> onReaching(String stage) {
+        return REACHED.entrySet().stream().filter(e -> e.getValue().equals(stage))
+                .map(java.util.Map.Entry::getKey).findFirst();
+    }
+
+    /** The stage this point is told on, when it is one of the points told on reaching a stage. */
+    public Optional<String> stageReached() {
+        return Optional.ofNullable(REACHED.get(this));
     }
 }

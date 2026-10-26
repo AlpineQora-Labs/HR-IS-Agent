@@ -23,27 +23,33 @@ import org.springframework.web.bind.annotation.RestController;
 public class EmailTemplateController {
 
     /**
-     * @param templateKey set when the template words a point of the candidate journey
-     * @param sentWhen    that point, in words; null otherwise
+     * @param templateKey  set when the template words a point of the candidate journey
+     * @param sentWhen     that point, in words; null otherwise
+     * @param journeyPoint the step it is offered as a choice for on the workflow drawing, or null
+     * @param offeredFor   that step, in words; null otherwise
      */
     public record TemplateDto(
             UUID templateId, String name, String description, String category,
             String subject, String fromName, String bodyHtml, String status,
             boolean isDefault, OffsetDateTime createdAt, OffsetDateTime updatedAt,
-            String templateKey, String sentWhen) {
+            String templateKey, String sentWhen, String journeyPoint, String offeredFor) {
 
         static TemplateDto of(EmailTemplate t) {
             return new TemplateDto(t.getId(), t.getName(), t.getDescription(), t.getCategory(),
                     t.getSubject(), t.getFromName(), t.getBodyHtml(), t.getStatus(),
                     t.isDefaultTemplate(), t.getCreatedAt(), t.getUpdatedAt(), t.getTemplateKey(),
                     com.taportal.domain.journey.JourneyPoint.ofTemplateKey(t.getTemplateKey())
+                            .map(com.taportal.domain.journey.JourneyPoint::label).orElse(null),
+                    t.getJourneyPoint(),
+                    com.taportal.domain.journey.JourneyPoint.of(t.getJourneyPoint())
                             .map(com.taportal.domain.journey.JourneyPoint::label).orElse(null));
         }
     }
 
+    /** @param journeyPoint the step to offer it for on the workflow drawing; null or blank for none */
     public record TemplateSave(
             String name, String description, String category, String subject,
-            String fromName, String bodyHtml, String status) {
+            String fromName, String bodyHtml, String status, String journeyPoint) {
     }
 
     private final EmailTemplateRepository templates;
@@ -68,6 +74,7 @@ public class EmailTemplateController {
     @Transactional
     public TemplateDto create(@RequestBody TemplateSave req) {
         EmailTemplate t = new EmailTemplate();
+        t.setJourneyPoint(rules.mayOffer(req.journeyPoint(), null, req.subject(), req.bodyHtml(), false));
         apply(t, req);
         return TemplateDto.of(templates.save(t));
     }
@@ -78,6 +85,7 @@ public class EmailTemplateController {
         EmailTemplate t = load(id);
         rules.mayChange(t.getTemplateKey(), t.getName(), req.status() == null ? "DRAFT" : req.status(),
                 req.subject(), req.bodyHtml(), false);
+        t.setJourneyPoint(rules.mayOffer(req.journeyPoint(), t.getTemplateKey(), req.subject(), req.bodyHtml(), false));
         apply(t, req);
         return TemplateDto.of(templates.save(t));
     }
@@ -103,6 +111,8 @@ public class EmailTemplateController {
         copy.setFromName(src.getFromName());
         copy.setBodyHtml(src.getBodyHtml());
         copy.setStatus("DRAFT");
+        // A copy of a step's wording is another wording for the same step: the copy is offered there.
+        copy.setJourneyPoint(rules.offerForCopy(src.getJourneyPoint(), src.getTemplateKey()));
         return TemplateDto.of(templates.save(copy));
     }
 

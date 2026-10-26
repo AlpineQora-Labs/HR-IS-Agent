@@ -38,12 +38,19 @@ public class JourneyListener {
         journey.applicationReceived(event.applicationId());
     }
 
-    /** Being moved to INTERVIEW is being selected for interview. No other move sends anything. */
+    /**
+     * Being moved to INTERVIEW is being selected for interview. A move to ASSESSMENT, OFFER, HIRED or
+     * REJECTED is noted, and the candidate is told a few minutes later if the application is still
+     * there, on whatever channels the drawing has for it (see {@link StagesReached}). No other move
+     * sends anything.
+     */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void on(ApplicationStageChanged event) {
         if ("INTERVIEW".equals(event.to())) {
             journey.selectedForInterview(event.applicationId());
+            return;
         }
+        JourneyPoint.onReaching(event.to()).ifPresent(point -> journey.stageNoted(event.applicationId(), point, event.from()));
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)

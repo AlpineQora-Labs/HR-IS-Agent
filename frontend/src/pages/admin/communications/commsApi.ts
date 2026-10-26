@@ -13,6 +13,10 @@ export interface SmsTemplate {
   templateKey?: string | null
   /** "When the interview is booked": the point this template words. */
   sentWhen?: string | null
+  /** The step of the workflow drawing this template is offered for (a journey point's key), or null for any step its fields fit. */
+  journeyPoint?: string | null
+  /** That step, in words. */
+  offeredFor?: string | null
 }
 
 /** A template's wording as the server would send it, before its fields are filled in. */

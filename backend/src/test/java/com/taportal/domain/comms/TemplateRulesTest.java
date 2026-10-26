@@ -1,5 +1,6 @@
 package com.taportal.domain.comms;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -94,5 +95,54 @@ class TemplateRulesTest {
                 .doesNotThrowAnyException();
         assertThatCode(() -> rules.mayChange("journey.reschedule_declined", "Reschedule not possible", "ACTIVE", null,
                 "{{reason}} It stays at {{interview_time}}.", true)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("a template can be offered for a step its wording suits, and is kept by the step's name")
+    void aTemplateCanBeOfferedForAStep() {
+        assertThat(rules.mayOffer("HIRED", null, null, "{{company_name}}: Welcome, {{first_name}}.", true))
+                .isEqualTo("HIRED");
+        assertThat(rules.mayOffer("hired", null, "Welcome, {{first_name}}", "<p>{{job_title}}</p>", false))
+                .isEqualTo("HIRED");
+        assertThat(rules.mayOffer(null, null, null, "anything", true)).isNull();
+        assertThat(rules.mayOffer(" ", null, null, "anything", true)).isNull();
+    }
+
+    @Test
+    @DisplayName("an invitation offered without its times is refused, and the reason names what it can use")
+    void anOfferedTemplateCarriesWhatItsStepNeeds() {
+        assertThatThrownBy(() -> rules.mayOffer("INTERVIEW_INVITE", null, null, "We would like to interview you.", true))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("{{slot_options}}")
+                .hasMessageContaining("when the candidate is selected for interview");
+        assertThatThrownBy(() -> rules.mayOffer("APPLICATION_RECEIVED", null, null, "Your interview is {{interview_time}}", true))
+                .hasMessageContaining("{{interview_time}}")
+                .hasMessageContaining("It can use");
+    }
+
+    @Test
+    @DisplayName("only a step on the drawing, on a channel it uses, and never with a point's own wording")
+    void onlyADrawnStepOnItsChannel() {
+        assertThatThrownBy(() -> rules.mayOffer("OPT_OUT", null, null, "You are unsubscribed.", true))
+                .hasMessageContaining("is not one the workflow draws")
+                .hasMessageNotContaining("OPT_OUT");
+        assertThatThrownBy(() -> rules.mayOffer("NOPE", null, null, "Hi", true))
+                .hasMessageContaining("That step is not on the workflow.");
+        assertThatThrownBy(() -> rules.mayOffer("INTERVIEW_REMINDER_1H", null, "Soon", "<p>{{interview_time}}</p>", false))
+                .hasMessageContaining("No email is sent 1 hour before the interview");
+        assertThatThrownBy(() -> rules.mayOffer("HIRED", "journey.application_received", null, "Hi {{first_name}}", true))
+                .hasMessageContaining("own wording");
+    }
+
+    @Test
+    @DisplayName("a copy keeps the original's step only when the workflow draws it with an email")
+    void aCopyIsOfferedForAStepItCanBeSavedFor() {
+        assertThat(rules.offerForCopy("HIRED", null)).isEqualTo("HIRED");
+        assertThat(rules.offerForCopy(null, "journey.interview_confirmed")).isEqualTo("INTERVIEW_CONFIRMED");
+        assertThat(rules.offerForCopy(null, "journey.interview_canceled"))
+                .as("a notice is never drawn, so its copy is offered for any step its fields suit").isNull();
+        assertThat(rules.offerForCopy("INTERVIEW_REMINDER_1H", null)).as("no email is sent at that step").isNull();
+        assertThat(rules.offerForCopy("NOPE", null)).isNull();
+        assertThat(rules.offerForCopy(null, null)).isNull();
     }
 }

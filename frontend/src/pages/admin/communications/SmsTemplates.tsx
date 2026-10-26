@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef, SizeColumnsToFitGridStrategy } from 'ag-grid-community'
-import { useJourney } from '@/api/hooks'
+import { useQueryClient } from '@tanstack/react-query'
+import { qk, useJourney } from '@/api/hooks'
 import { commsApi, refusal, type SmsPreview, type SmsTemplate } from './commsApi'
 import { Button } from './TvButton'
 
@@ -45,11 +46,21 @@ function SmsEditor({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const message = useRef<HTMLTextAreaElement>(null)
+  const queryClient = useQueryClient()
+
+  // The step of the workflow drawing this template is offered for: '' for any step its fields fit.
+  // A journey point's own template already belongs to its point, so it is not asked.
+  const [offeredFor, setOfferedFor] = useState(template?.journeyPoint ?? '')
 
   // The fields a message can carry, and what this template's point needs, are the server's.
   const { data: journey } = useJourney()
-  const point = journey?.points.find((p) => p.templateKey === template?.templateKey)
-  // A journey's own template is offered the fields its point has values for; the server refuses the rest.
+  const point = template?.templateKey
+    ? journey?.points.find((p) => p.templateKey === template.templateKey)
+    : journey?.points.find((p) => p.key === offeredFor)
+  const steps = journey?.points.filter((p) => p.drawn && p.byText) ?? []
+  // A step saved before that the list no longer holds is still shown, so what is stored can be seen and cleared.
+  const savedStepUnlisted = offeredFor !== '' && !steps.some((p) => p.key === offeredFor)
+  // A template for one step is offered the fields that step has values for; the server refuses the rest.
   const fields = (journey?.fields ?? FIELDS_MEANWHILE.map((name) => ({ name, holds: '' })))
     .filter((f) => !point || point.has.includes(f.name))
 
@@ -93,8 +104,11 @@ function SmsEditor({
     setBusy(true)
     setError(null)
     try {
-      if (template) await commsApi.updateSmsTemplate(template.id, { name, status, body })
-      else await commsApi.createSmsTemplate({ name, status, body })
+      const journeyPoint = template?.templateKey ? null : offeredFor || null
+      if (template) await commsApi.updateSmsTemplate(template.id, { name, status, body, journeyPoint })
+      else await commsApi.createSmsTemplate({ name, status, body, journeyPoint })
+      // The workflow canvas offers whatever the journey says fits: ask it again, so a saved template shows there at once.
+      queryClient.invalidateQueries({ queryKey: qk.journey })
       onSaved()
       onDone()
     } catch (e) {
@@ -143,6 +157,32 @@ function SmsEditor({
                 ? ` It has to carry ${point.needs.map((f) => `{{${f}}}`).join(', ')}.`
                 : ''}{' '}
               A journey template stays Active and cannot be deleted.
+            </div>
+          )}
+
+          {!template?.templateKey && (
+            <div style={{ margin: '-2px 0 16px' }}>
+              <label style={{ display: 'block' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f', marginBottom: 6 }}>Offered on the workflow for</div>
+                <select className="input" style={{ width: '100%' }} value={offeredFor} onChange={(e) => setOfferedFor(e.target.value)}>
+                  <option value="">Any step its fields suit</option>
+                  {steps.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.sentWhen}
+                    </option>
+                  ))}
+                  {savedStepUnlisted && (
+                    <option value={offeredFor}>{template?.offeredFor ?? offeredFor} (no longer on the workflow)</option>
+                  )}
+                </select>
+              </label>
+              <div style={{ fontSize: 12.5, color: '#6e6e73', lineHeight: 1.5, marginTop: 6 }}>
+                {point
+                  ? `A choice for that step on the workflow canvas, beside the journey's own wording.${
+                      point.needs.length > 0 ? ` It has to carry ${point.needs.map((f) => `{{${f}}}`).join(', ')}.` : ''
+                    } Only the fields that step has values for are offered.`
+                  : 'Listed on the workflow canvas for every step whose fields it can be filled with.'}
+              </div>
             </div>
           )}
 
@@ -291,6 +331,11 @@ export default function SmsTemplatesView() {
         flex: 1.4,
         minWidth: 200,
         cellStyle: { color: '#6e6e73' },
+        // A journey point's own wording says when it is sent; another wording says which step it is a choice for.
+        valueGetter: (params) => {
+          const t = params.data as SmsTemplate | undefined
+          return t?.sentWhen ?? (t?.offeredFor ? `A choice: ${t.offeredFor.replace(/^./, (c) => c.toLowerCase())}` : '')
+        },
       },
       {
         field: 'updatedAt',

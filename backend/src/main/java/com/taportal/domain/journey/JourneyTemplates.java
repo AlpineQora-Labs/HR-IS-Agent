@@ -116,21 +116,35 @@ public class JourneyTemplates {
 
     /** Why this template cannot word this point, in words that follow its name; null when it can. */
     public static String unfit(JourneyPoint point, SmsTemplate t) {
-        return unfit(point, t.getStatus(), t.getTemplateKey(), t.getBody());
+        return unfit(point, t.getStatus(), t.getTemplateKey(), t.getJourneyPoint(), t.getBody());
     }
 
     public static String unfit(JourneyPoint point, EmailTemplate t) {
-        return unfit(point, t.getStatus(), t.getTemplateKey(),
+        return unfit(point, t.getStatus(), t.getTemplateKey(), t.getJourneyPoint(),
                 (t.getSubject() == null ? "" : t.getSubject()) + " " + (t.getBodyHtml() == null ? "" : t.getBodyHtml()));
     }
 
-    /** Pure. */
+    /** Pure. A template offered for no step in particular. */
     static String unfit(JourneyPoint point, String status, String templateKey, String wording) {
+        return unfit(point, status, templateKey, null, wording);
+    }
+
+    /**
+     * Pure.
+     *
+     * @param offeredFor the point the template is offered as a choice for, or null when it is offered
+     *                   wherever its fields fit
+     */
+    public static String unfit(JourneyPoint point, String status, String templateKey, String offeredFor, String wording) {
         if (!"ACTIVE".equals(status)) {
             return "is not Active";
         }
         if (templateKey != null && !templateKey.equals(point.templateKey())) {
             return "is the wording of another point of the journey";
+        }
+        if (offeredFor != null && !offeredFor.equals(point.name())) {
+            return "is offered for another step, "
+                    + JourneyPoint.of(offeredFor).map(p -> "“" + p.label() + "”").orElse("one no longer on the journey");
         }
         Set<String> used = TemplateRenderer.fieldsIn(wording);
         List<String> lacks = point.needs().stream().filter(f -> !used.contains(f)).sorted().toList();

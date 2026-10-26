@@ -21,6 +21,12 @@ class StatusWordingTest {
     }
 
     @Test
+    void anAssessmentPromisesOnlyWhatTheMessagesSay() {
+        assertThat(StatusWording.of("ASSESSMENT", null, null))
+                .isEqualTo("an assessment is your next step, and your recruiter will be in touch with the details");
+    }
+
+    @Test
     void anInterviewStageDependsOnTheInterview() {
         assertThat(StatusWording.of("INTERVIEW", "SLOTS_PROPOSED", null))
                 .isEqualTo("you are invited to interview. Reply TIMES to see the times");
@@ -72,7 +78,11 @@ class StatusWordingTest {
         }
         assertThat(JourneyPoint.of("nope")).isEmpty();
         assertThat(JourneyPoint.of(null)).isEmpty();
-        assertThat(JourneyPoint.onTheDrawing()).hasSize(7);
+        assertThat(JourneyPoint.onTheDrawing()).containsExactly(
+                JourneyPoint.APPLICATION_RECEIVED, JourneyPoint.STATUS_REPLY, JourneyPoint.INTERVIEW_INVITE,
+                JourneyPoint.INTERVIEW_CONFIRMED, JourneyPoint.RESCHEDULE_OPTIONS, JourneyPoint.INTERVIEW_REMINDER_24H,
+                JourneyPoint.INTERVIEW_REMINDER_1H, JourneyPoint.ASSESSMENT_INVITE, JourneyPoint.OFFER_EXTENDED,
+                JourneyPoint.HIRED, JourneyPoint.NOT_SELECTED);
     }
 
     @Test

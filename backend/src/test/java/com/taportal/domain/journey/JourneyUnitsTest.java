@@ -1,6 +1,7 @@
 package com.taportal.domain.journey;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -344,6 +345,139 @@ class JourneyUnitsTest {
             units.applicationReceived(application.getId());
 
             assertThat(texts().get(0)).isEqualTo("APPLICATION_RECEIVED for Renée");
+        }
+    }
+
+    @Nested
+    @DisplayName("after the interview: assessment, offer, hired, not taken forward")
+    class AfterTheInterview {
+
+        @Test
+        @DisplayName("nothing goes until the point is drawn")
+        void anUndrawnPointSendsNothing() {
+            application.setStage("OFFER");
+
+            assertThat(units.stageReached(application.getId(), JourneyPoint.OFFER_EXTENDED, "ASSESSMENT")).isEmpty();
+            assertThat(written).isEmpty();
+        }
+
+        @Test
+        void aDrawnPointGoesOnItsChannelsOnce() {
+            journeyDraws("ASSESSMENT_INVITE");
+            application.setStage("ASSESSMENT");
+
+            List<CandidateMessage> sent = units.stageReached(application.getId(), JourneyPoint.ASSESSMENT_INVITE, "INTERVIEW");
+
+            assertThat(sent).extracting(CandidateMessage::getChannel).containsExactly("SMS", "EMAIL");
+            assertThat(sent.get(0).getDedupeKey()).isEqualTo("ASSESSMENT_INVITE:" + application.getId() + ":SMS");
+            assertThat(sent.get(0).getPoint()).isEqualTo("ASSESSMENT_INVITE");
+        }
+
+        @Test
+        @DisplayName("a closed application still hears it was not taken forward")
+        void notSelectedReachesAClosedApplication() {
+            when(plans.current()).thenReturn(new Plan(true, Map.of("NOT_SELECTED|EMAIL", Optional.empty())));
+            application.setStage("REJECTED");
+
+            assertThat(units.stageReached(application.getId(), JourneyPoint.NOT_SELECTED, "INTERVIEW"))
+                    .extracting(CandidateMessage::getChannel).containsExactly("EMAIL");
+        }
+
+        @Test
+        @DisplayName("an application that has moved again since is told nothing of the stage it left")
+        void aStageNoLongerHeldIsNotTold() {
+            journeyDraws("HIRED");
+            application.setStage("REJECTED");
+
+            assertThat(units.stageReached(application.getId(), JourneyPoint.HIRED, "OFFER")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a message held back is recorded once, not on every return to the stage")
+        void heldBackOnceOnly() {
+            journeyDraws("ASSESSMENT_INVITE");
+            application.setStage("ASSESSMENT");
+            raj.setSmsConsentAt(null);
+
+            List<CandidateMessage> first = units.stageReached(application.getId(), JourneyPoint.ASSESSMENT_INVITE, "INTERVIEW");
+            assertThat(first).extracting(CandidateMessage::getChannel, CandidateMessage::getStatus)
+                    .containsExactly(tuple("SMS", "SUPPRESSED"), tuple("EMAIL", "QUEUED"));
+            assertThat(first.get(0).getDedupeKey()).isEqualTo("ASSESSMENT_INVITE:" + application.getId() + ":SMS:held");
+            first.forEach(m -> when(messages.existsByDedupeKey(m.getDedupeKey())).thenReturn(true));
+
+            assertThat(units.stageReached(application.getId(), JourneyPoint.ASSESSMENT_INVITE, "OFFER")).isEmpty();
+            assertThat(written).hasSize(2);
+            verify(notifications, never()).notifyRole(any(), any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("a candidate offered the job is told in person, not by template, that it is not going ahead")
+        void notSelectedAfterAnOfferIsSaidInPerson() {
+            journeyDraws("NOT_SELECTED");
+            application.setStage("REJECTED");
+
+            List<CandidateMessage> held = units.stageReached(application.getId(), JourneyPoint.NOT_SELECTED, "OFFER");
+
+            assertThat(held).extracting(CandidateMessage::getStatus).containsOnly("SUPPRESSED").hasSize(2);
+            assertThat(held.get(0).getReason()).contains("An offer was made");
+            assertThat(written).noneMatch(m -> "QUEUED".equals(m.getStatus()));
+            verify(notifications).notifyRole(eq("RECRUITER"), eq("MESSAGE"),
+                    eq("Raj Patel was not sent the not-taken-forward message"), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("so is one hired, or told of an offer, even when the rejection comes from another stage")
+        void notSelectedAfterAnOfferWasToldIsSaidInPerson() {
+            journeyDraws("NOT_SELECTED");
+            application.setStage("REJECTED");
+            when(messages.existsByDedupeKey("OFFER_EXTENDED:" + application.getId() + ":EMAIL")).thenReturn(true);
+
+            assertThat(units.stageReached(application.getId(), JourneyPoint.NOT_SELECTED, "INTERVIEW"))
+                    .extracting(CandidateMessage::getStatus).containsOnly("SUPPRESSED");
+            assertThat(written).noneMatch(m -> "QUEUED".equals(m.getStatus()));
+        }
+
+        @Test
+        @DisplayName("rejecting a booked candidate sends the rejection alone, not a cancellation promising follow-up first")
+        void rejectingABookedCandidateSendsOnlyTheRejection() {
+            journeyDraws("NOT_SELECTED");
+            application.setStage("REJECTED");
+            OffsetDateTime was = OffsetDateTime.now().plusDays(2);
+            interview.setStatus("CANCELED");
+
+            List<CandidateMessage> cancellation = units.canceled(interview.getId(), application.getId(), was);
+            assertThat(cancellation).extracting(CandidateMessage::getStatus).containsOnly("SUPPRESSED").hasSize(2);
+            assertThat(cancellation.get(0).getReason()).contains("not-taken-forward message tells the candidate");
+
+            List<CandidateMessage> rejection = units.stageReached(application.getId(), JourneyPoint.NOT_SELECTED, "INTERVIEW");
+            assertThat(rejection).extracting(CandidateMessage::getChannel).containsExactly("SMS", "EMAIL");
+            assertThat(written).filteredOn(m -> "QUEUED".equals(m.getStatus()))
+                    .extracting(CandidateMessage::getPoint).containsOnly("NOT_SELECTED").hasSize(2);
+        }
+
+        @Test
+        @DisplayName("where the drawing tells no rejection, the cancellation still goes")
+        void theCancellationGoesWhenNoRejectionIsDrawn() {
+            journeyDraws("INTERVIEW_INVITE");
+            application.setStage("REJECTED");
+            interview.setStatus("CANCELED");
+
+            assertThat(units.canceled(interview.getId(), application.getId(), OffsetDateTime.now().plusDays(2)))
+                    .extracting(CandidateMessage::getStatus).containsOnly("QUEUED").isNotEmpty();
+        }
+
+        @Test
+        void eachStageHasItsPointAndNoOther() {
+            assertThat(JourneyPoint.onReaching("ASSESSMENT")).contains(JourneyPoint.ASSESSMENT_INVITE);
+            assertThat(JourneyPoint.onReaching("OFFER")).contains(JourneyPoint.OFFER_EXTENDED);
+            assertThat(JourneyPoint.onReaching("HIRED")).contains(JourneyPoint.HIRED);
+            assertThat(JourneyPoint.onReaching("REJECTED")).contains(JourneyPoint.NOT_SELECTED);
+            assertThat(JourneyPoint.onReaching("INTERVIEW")).isEmpty();
+            assertThat(JourneyPoint.onReaching("WITHDRAWN")).isEmpty();
+            assertThat(JourneyPoint.HIRED.drawn()).isTrue();
+            assertThat(JourneyPoint.HIRED.byEmail()).isTrue();
+            assertThat(JourneyPoint.NOT_SELECTED.has()).contains("job_title", "recruiter_name")
+                    .doesNotContain("interview_time", "slot_options");
         }
     }
 

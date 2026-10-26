@@ -16,15 +16,39 @@ Channels are web chat and SMS for conversation, email for notices. WhatsApp is n
 | 5 | `RESCHEDULE_OPTIONS` | The candidate texts RESCHEDULE. Policy is checked, calendars are read again, new times are offered. | reply | – |
 | 6 | `INTERVIEW_REMINDER_24H` | The day before the interview. | yes | yes |
 | 7 | `INTERVIEW_REMINDER_1H` | The last hour before the interview. | yes | – |
+| 8 | `ASSESSMENT_INVITE` | The application is moved to ASSESSMENT. | yes | yes |
+| 9 | `OFFER_EXTENDED` | The application is moved to OFFER: an offer is being prepared. | yes | yes |
+| 10 | `HIRED` | The application is moved to HIRED. | yes | yes |
+| 11 | `NOT_SELECTED` | The application is moved to REJECTED: it is not taken forward. | yes | yes |
 
-These seven are on the drawing. Two further groups are not drawn; their wording is edited in Communications.
+These eleven are on the drawing. Points 8 to 11 (V37) are told once per application. They send nothing until an
+administrator draws a step for them: the journey as seeded does not draw them, so moving an application to those
+stages is silent until then. For not taken forward, an email step on its own is the usual choice. A not-taken-forward
+message goes to a closed application by design.
+
+How points 8 to 11 are told (V38):
+
+- **After a short wait.** A move to one of these stages is noted (table `journey_stage_reached`) and told by the
+  journey's sweep once it is `app.journey.stage-grace-minutes` old (default 2), and only if the application is still
+  at that stage. The pipeline moves one stage at a time, so a candidate taken from Interview to Offer passes
+  Assessment on the way; a stage only passed through, or a move undone within the wait, is not told.
+- **Offer or hire first.** A candidate who was at offer or hired just before, or was told of either, is never told by
+  template that they were not taken forward. The message is recorded as not sent, and the recruiters are asked to
+  tell them in person.
+- **Rejected with an interview booked.** Rejecting cancels the booked interview. When the drawing tells a rejection,
+  the cancellation notice ("your recruiter will be in touch") is recorded as not sent, and the not-taken-forward
+  message tells the candidate. Where the drawing does not tell a rejection, the cancellation goes as before.
+- **Held back once.** A message held back (no agreement to texts, say) is recorded once, not on every return to the
+  stage.
+
+Two further groups are not drawn; their wording is edited in Communications.
 
 **Notices** — sent because the hiring team did something the candidate must hear of:
 
 | Key | When | Text | Email |
 |---|---|---|---|
 | `TEAM_RESCHEDULED` | The hiring team moves a booked interview; new times are offered. | yes | yes |
-| `INTERVIEW_CANCELED` | The hiring team cancels, or the application is rejected or withdrawn. | yes | yes |
+| `INTERVIEW_CANCELED` | The hiring team cancels, or the application is rejected or withdrawn. Not sent for a rejection the drawing tells (above). | yes | yes |
 | `INVITE_BY_LINK` | An invitation goes out when numbers cannot be used in reply: another invitation is open to the same phone, or the phone was given by two people. It carries a link. | yes | – |
 | `TEAM_RESCHEDULED_BY_LINK` | The same, for an interview the hiring team moved. | yes | – |
 
@@ -106,7 +130,7 @@ Keywords (case-insensitive): `STATUS`, `1` `2` `3`, `MORE`, `TIMES`, `RESCHEDULE
 The enabled workflow with trigger **Candidate journey** is the journey's configuration:
 
 - A **Text** or **Email** step bound to a journey point ("Sent when…") decides *which template* goes out at that point.
-- For the points sent unprompted (1, 3, 4, 6, 7), the step being on the drawing decides *whether that channel is used*.
+- For the points sent unprompted (1, 3, 4, 6, 7 to 11), the step being on the drawing decides *whether that channel is used*.
   Application received by text only: remove the Email step. Both: keep both.
 - Switching the workflow off stops unprompted messages and notices. Replies to a candidate's own text are always given.
 - A step counts when a line leads to it from the start. A step cut out of the flow sends nothing, and the check of the
@@ -116,7 +140,17 @@ The enabled workflow with trigger **Candidate journey** is the journey's configu
   The drawing shows the path; the system follows the events.
 
 Which templates can word a point is decided by the server (`JourneyTemplates`): Active, not the wording of another
-point, carrying what the point needs, and using nothing the point has no value for. The canvas lists exactly those.
+point, not offered for another step, carrying what the point needs, and using nothing the point has no value for.
+The canvas lists exactly those.
+
+A template made in Communications can be **offered for one step** ("Offered on the workflow for", stored as
+`journey_point`). The canvas then lists it for that step and no other; saving refuses a step that cannot be drawn, an
+email for a step that sends no email, and wording that lacks what the step needs or uses what it has no value for, and
+says which fields it can use. A template offered for no step is listed wherever its fields fit, as before. Copying an
+email keeps its step (its own, for a journey point's email) only when the workflow draws that step with an email;
+otherwise the copy is offered for any step its fields suit. With a step set, the email editor's field menu lists only
+that step's fields. V37 adds another wording for each step already on the drawing, each offered for its own step. A
+saved template appears on the canvas at once.
 A step with no template chosen, or one whose template is not fit, falls back to the journey's own template for that
 point. Saving the drawing gives advice when a message step is not bound to a point, is bound to a point its channel
 cannot carry, repeats a point, or names a template that is not fit.
@@ -161,7 +195,7 @@ domain events     ApplicationReceived, ApplicationStageChanged, InterviewTimesOf
                   published by the services that make the change; heard after commit
 ```
 
-## 5. Data (migrations V24 to V26)
+## 5. Data (migrations V24 to V26, and V37)
 
 - `candidate`: `phone_e164` (CHECK E.164, indexed), `sms_consent_at`.
 - `sms_opt_out`: the numbers that said STOP.
@@ -174,6 +208,8 @@ domain events     ApplicationReceived, ApplicationStageChanged, InterviewTimesOf
   it closed, timestamps.
 - 25 text templates and 6 email templates for the journey (V24, V26; wording corrections in V25). Older starter
   templates that nobody had edited are archived.
+- V37: text and email templates for points 8 to 11; `journey_point` on both template tables; seven other text wordings
+  and four other email wordings, each offered for its own step.
 - The Candidate journey workflow, redrawn. The drawing it replaces is kept, switched off, as
   "Candidate journey (earlier drawing)".
 
@@ -192,7 +228,8 @@ Times are Eastern Time and say so. The screens read the vocabulary from `GET /v1
 - **Candidate's phone**: a phone to text from as the candidate, on the candidate record and on its own at
   `/phone/{candidateId}`, for showing the journey without a handset.
 - **Workflow canvas**: a Text or Email step has "Sent when", which binds it to a journey point.
-- **Communications**: journey templates show the point they word; merge fields come from the server.
+- **Communications**: journey templates show the point they word; other templates can be offered for one step of the
+  drawing, and the SMS list shows which ("A choice: …"); merge fields come from the server.
 
 ## 8. Not in this build
 

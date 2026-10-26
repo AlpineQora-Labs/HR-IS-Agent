@@ -14,7 +14,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * What the journey does by the clock: reminders, keeping the promise to text
- * times when there were none, and sending anything recorded and never sent.
+ * times when there were none, telling a stage reached once its short wait is
+ * over ({@link StagesReached}), and sending anything recorded and never sent.
  *
  * <p>The sweep has no transaction. Each interview is handled in a unit of its
  * own, so one that fails costs the others nothing and nothing is sent twice.
@@ -56,6 +57,7 @@ public class JourneyReminderJob {
         } catch (RuntimeException e) {
             log.warn("Journey sweep failed: {}", e.toString());
         }
+        journey.tellStagesReached();
         journey.sweep();
     }
 

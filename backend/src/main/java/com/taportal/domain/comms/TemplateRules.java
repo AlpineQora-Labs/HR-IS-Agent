@@ -69,6 +69,52 @@ public class TemplateRules {
         }
     }
 
+    /**
+     * May this template be offered as a choice for a step of the workflow drawing? Only for a step that
+     * can be drawn, on a channel that step uses, and only when its wording carries what the step needs
+     * and nothing the step has no value for. A point's own wording already belongs to its point.
+     *
+     * @param journeyPoint the point's name as the editor sends it; null or blank for no step in particular
+     * @param subject      the email's subject; null for a text message
+     * @return the point's name to keep, or null for none. Refuses with 422 and the reason.
+     */
+    public String mayOffer(String journeyPoint, String templateKey, String subject, String body, boolean text) {
+        if (journeyPoint == null || journeyPoint.isBlank()) {
+            return null;
+        }
+        if (templateKey != null) {
+            throw refuse("This template is the journey's own wording for one step, so it cannot be offered for another.");
+        }
+        JourneyPoint point = JourneyPoint.of(journeyPoint).filter(JourneyPoint::drawn)
+                .orElseThrow(() -> refuse(JourneyPoint.of(journeyPoint)
+                        .map(p -> "The step sent " + lowerFirst(p.label()) + " is not one the workflow draws, so nothing can be offered for it.")
+                        .orElse("That step is not on the workflow.")));
+        if (!text && !point.byEmail()) {
+            throw refuse("No email is sent " + lowerFirst(point.label()) + ", so an email cannot be offered for it.");
+        }
+        String why = JourneyTemplates.unfit(point, "ACTIVE", null, point.name(),
+                (subject == null ? "" : subject) + " " + (body == null ? "" : body));
+        if (why != null) {
+            throw refuse("This template is offered for the step sent " + lowerFirst(point.label()) + ", but it " + why
+                    + ". It can use " + String.join(", ", point.has().stream().map(f -> "{{" + f + "}}").toList()) + ".");
+        }
+        return point.name();
+    }
+
+    /**
+     * The step a copy of a template is offered for: the original's step, or the step the original is the
+     * journey's own wording for, but only when that step is drawn and sends email. Otherwise none, so the
+     * copy can be saved as it is and offered for any step its fields suit.
+     */
+    public String offerForCopy(String srcJourneyPoint, String srcTemplateKey) {
+        return JourneyPoint.of(srcJourneyPoint)
+                .or(() -> JourneyPoint.ofTemplateKey(srcTemplateKey))
+                .filter(JourneyPoint::drawn)
+                .filter(JourneyPoint::byEmail)
+                .map(Enum::name)
+                .orElse(null);
+    }
+
     private static String lowerFirst(String s) {
         return s.isEmpty() || Character.isDigit(s.charAt(0)) ? s : Character.toLowerCase(s.charAt(0)) + s.substring(1);
     }

@@ -166,6 +166,83 @@ public class JourneyUnits {
     }
 
     /**
+     * The hiring team moved an application on after the interview: to an assessment, to an offer, to
+     * hired, or not forward. The candidate is told once per application, and only on the channels the
+     * drawing has a step for, so nothing goes out until an administrator draws it. A not-forward message
+     * goes to a closed application by design.
+     *
+     * <p>This runs from the sweep, a few minutes after the move ({@link StagesReached}), so a stage the
+     * application has already left (passed through on the way to another, or a move undone) is not
+     * told. A message held back (no agreement to texts, say) is recorded once, not on every return to
+     * the stage, and may still go if the stage is reached again once it can.
+     *
+     * <p>A candidate who was offered the job or hired is never told by template that they were not
+     * taken forward: that is said in person. The message is recorded as not sent and the recruiters
+     * are asked to do it.
+     *
+     * @param fromStage the stage the application left, or null when not known
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public List<CandidateMessage> stageReached(UUID applicationId, JourneyPoint point, String fromStage) {
+        String stage = point.stageReached()
+                .orElseThrow(() -> new IllegalArgumentException(point + " is not told on reaching a stage"));
+        Subject s = subject(applicationId, null);
+        if (s == null || !stage.equals(s.application.getStage())) {
+            return List.of();
+        }
+        String key = point.name() + ":" + applicationId;
+        if (point == JourneyPoint.NOT_SELECTED && offerWasMade(applicationId, fromStage)) {
+            List<CandidateMessage> held = holdBack(point, s, key,
+                    "An offer was made or the candidate was hired: a person tells them it is not going ahead");
+            if (!held.isEmpty()) {
+                askRecruiter(s, "was not sent the not-taken-forward message",
+                        "They were offered the job or hired, so it is not sent by template. Tell them in person.");
+            }
+            return held;
+        }
+        return tell(point, s, values.of(s.candidate, s.application, s.job, null), key, null, false, true);
+    }
+
+    /** The application was at offer or hired just before, or the candidate was told of either. */
+    private boolean offerWasMade(UUID applicationId, String fromStage) {
+        if ("OFFER".equals(fromStage) || "HIRED".equals(fromStage)) {
+            return true;
+        }
+        for (JourneyPoint told : List.of(JourneyPoint.OFFER_EXTENDED, JourneyPoint.HIRED)) {
+            String key = told.name() + ":" + applicationId;
+            if (store.known(key + ":" + CandidateMessage.SMS) || store.known(key + ":" + CandidateMessage.EMAIL)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Record, on each channel the drawing would have told this point on, that it was not sent and why.
+     * The record carries the message's own key, so the message is never sent later either: this is
+     * for a message that something else has made wrong to send, not one that might go tomorrow.
+     */
+    private List<CandidateMessage> holdBack(JourneyPoint point, Subject s, String key, String reason) {
+        Plan plan = plans.current();
+        if (!plan.on()) {
+            return List.of();
+        }
+        boolean notice = point.kind() == JourneyPoint.Kind.NOTICE;
+        List<CandidateMessage> held = new ArrayList<>();
+        String sms = key + ":" + CandidateMessage.SMS;
+        if ((notice || plan.draws(point, CandidateMessage.SMS)) && !store.known(sms)) {
+            held.add(store.notSent(draft(point, CandidateMessage.SMS, s, s.candidate.getPhoneE164(), null, "", null, null, sms),
+                    CandidateMessage.SUPPRESSED, reason));
+        }
+        String email = key + ":" + CandidateMessage.EMAIL;
+        if (point.byEmail() && (notice || plan.draws(point, CandidateMessage.EMAIL)) && !store.known(email)) {
+            held.add(store.notSent(draft(point, CandidateMessage.EMAIL, s, s.candidate.getEmail(), null, "", null, null, email),
+                    CandidateMessage.SUPPRESSED, reason));
+        }
+        return held;
+    }
+
+    /**
      * The hiring team moved an application to INTERVIEW. Times are taken from
      * the interviewers' calendars and offered — unless the candidate is
      * already booked, in which case inviting them again would be a second
@@ -257,7 +334,14 @@ public class JourneyUnits {
                 + ":" + (bookedAt == null ? 0 : bookedAt.toInstant().toEpochMilli());
     }
 
-    /** The hiring team's side cancelled an interview the candidate was booked for. */
+    /**
+     * The hiring team's side cancelled an interview the candidate was booked for.
+     *
+     * <p>When it was cancelled because the application was not taken forward, and the drawing tells
+     * that, the not-taken-forward message tells the candidate. The cancellation notice says "your
+     * recruiter will be in touch", which would be untrue moments before it, so it is recorded as not
+     * sent. Where the drawing does not tell a rejection, the notice goes as before.
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<CandidateMessage> canceled(UUID interviewId, UUID applicationId, OffsetDateTime was) {
         store.closeOffers(interviewId);
@@ -266,10 +350,17 @@ public class JourneyUnits {
         if (s == null || was == null) {
             return List.of();
         }
+        String key = "INTERVIEW_CANCELED:" + interviewId + ":" + was.toEpochSecond();
+        Plan plan = plans.current();
+        if ("REJECTED".equals(s.application.getStage()) && plan.on()
+                && (plan.draws(JourneyPoint.NOT_SELECTED, CandidateMessage.SMS)
+                        || plan.draws(JourneyPoint.NOT_SELECTED, CandidateMessage.EMAIL))) {
+            return holdBack(JourneyPoint.INTERVIEW_CANCELED, s, key,
+                    "Not sent: the not-taken-forward message tells the candidate instead");
+        }
         Map<String, String> v = values.of(s.candidate, s.application, s.job, interview);
         v.put("interview_time", JourneyTimes.when(was));
-        return tell(JourneyPoint.INTERVIEW_CANCELED, s, v,
-                "INTERVIEW_CANCELED:" + interviewId + ":" + was.toEpochSecond(), null, false, false);
+        return tell(JourneyPoint.INTERVIEW_CANCELED, s, v, key, null, false, false);
     }
 
     /**

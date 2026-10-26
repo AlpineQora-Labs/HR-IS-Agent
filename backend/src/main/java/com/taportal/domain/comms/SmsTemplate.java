@@ -50,6 +50,13 @@ public class SmsTemplate {
     @Column(name = "template_key", length = 80)
     private String templateKey;
 
+    /**
+     * Set when the template is offered as a choice for one step of the workflow drawing: that
+     * point's name, for example {@code HIRED}. The canvas then offers it for that step and no other.
+     */
+    @Column(name = "journey_point", length = 40)
+    private String journeyPoint;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;

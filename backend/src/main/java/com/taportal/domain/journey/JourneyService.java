@@ -50,11 +50,17 @@ public class JourneyService {
     private final MessagePolicy policy;
     private final NotificationService notifications;
     private final TransactionTemplate alone;
+    private final StagesReached stages;
+    private final java.time.Duration stageGrace;
 
     public JourneyService(
             JourneyUnits units, MessageDispatcher dispatcher, InterviewService interviewService,
-            MessagePolicy policy, NotificationService notifications, PlatformTransactionManager transactions) {
+            MessagePolicy policy, NotificationService notifications, PlatformTransactionManager transactions,
+            StagesReached stages,
+            @org.springframework.beans.factory.annotation.Value("${app.journey.stage-grace-minutes:2}") long stageGraceMinutes) {
         this.units = units;
+        this.stages = stages;
+        this.stageGrace = java.time.Duration.ofMinutes(Math.max(0, stageGraceMinutes));
         this.dispatcher = dispatcher;
         this.interviewService = interviewService;
         this.policy = policy;
@@ -71,6 +77,43 @@ public class JourneyService {
 
     public List<CandidateMessage> selectedForInterview(UUID applicationId) {
         return run("inviting a candidate to interview", () -> units.selectedForInterview(applicationId));
+    }
+
+    /**
+     * An application reached a stage the candidate is told of. It is noted, not told: the sweep tells
+     * it once the move is {@code app.journey.stage-grace-minutes} old, if the stage still holds. See
+     * {@link StagesReached} for why.
+     */
+    public void stageNoted(UUID applicationId, JourneyPoint point, String fromStage) {
+        try {
+            alone.executeWithoutResult(tx -> stages.note(applicationId, point, fromStage));
+        } catch (RuntimeException e) {
+            failed("noting that an application moved on", e);
+        }
+    }
+
+    /** Tell the stages whose wait is over. Each is dealt with once, whether told or dropped. */
+    public void tellStagesReached() {
+        List<StagesReached.Reached> due;
+        try {
+            due = stages.reachedBefore(OffsetDateTime.now().minus(stageGrace));
+        } catch (RuntimeException e) {
+            log.warn("Could not read the stages waiting to be told: {}", e.toString());
+            return;
+        }
+        for (StagesReached.Reached r : due) {
+            JourneyPoint.of(r.point()).ifPresent(point -> stageReached(r.applicationId(), point, r.fromStage()));
+            try {
+                stages.done(r.applicationId(), r.point());
+            } catch (RuntimeException e) {
+                // Left in place, it is looked at again next sweep; the message's key stops a second send.
+                log.warn("Could not clear a stage told: {}", e.toString());
+            }
+        }
+    }
+
+    public List<CandidateMessage> stageReached(UUID applicationId, JourneyPoint point, String fromStage) {
+        return run("telling a candidate their application moved on", () -> units.stageReached(applicationId, point, fromStage));
     }
 
     public List<CandidateMessage> timesOffered(UUID interviewId, InterviewTimesOffered.Why why) {

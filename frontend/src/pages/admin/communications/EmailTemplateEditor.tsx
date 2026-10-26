@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { Node, mergeAttributes } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
@@ -12,7 +13,7 @@ import TabBar from './TabBar'
 import FormField from './FormField'
 import ToggleSwitch from './ToggleSwitch'
 import { commsApi as api, refusal } from './commsApi'
-import { useJourney } from '@/api/hooks'
+import { qk, useJourney } from '@/api/hooks'
 import type { EmailTemplate, EmailCategory } from './emailTemplate'
 import '@/styles/tv-comms.css'
 import { EMAIL_CATEGORIES } from './emailTemplate'
@@ -152,6 +153,7 @@ function replaceMergeFields(html: string): string {
 export default function EmailTemplateEditor() {
   const { templateId } = useParams<{ templateId: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const isEditMode = !!templateId
 
   const [activeTab, setActiveTab] = useState<EditorTab>('details')
@@ -163,12 +165,6 @@ export default function EmailTemplateEditor() {
 
   // The candidate journey's fields come from the server, ahead of the older groups.
   const { data: journey } = useJourney()
-  const mergeGroups: Record<string, { field: string; label: string }[]> = {
-    ...(journey
-      ? { 'Candidate journey': journey.fields.map((f) => ({ field: `{{${f.name}}}`, label: f.holds })) }
-      : {}),
-    ...MERGE_FIELDS,
-  }
 
   // Template state
   const [name, setName] = useState('')
@@ -179,6 +175,31 @@ export default function EmailTemplateEditor() {
   const [bodyHtml, setBodyHtml] = useState('<p>Start typing your email content here...</p>')
   const [status, setStatus] = useState<'DRAFT' | 'ACTIVE'>('DRAFT')
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
+  // The step of the workflow drawing this email is offered for: '' for any step its fields fit. A journey
+  // point's own email already belongs to its point, so it is not asked.
+  const [ownsAStep, setOwnsAStep] = useState(false)
+  const [ownKey, setOwnKey] = useState<string | null>(null)
+  const [offeredFor, setOfferedFor] = useState('')
+  /** The step the template is saved for, in words, as the server named it: shown even when that step is no longer listed. */
+  const [offeredForLabel, setOfferedForLabel] = useState<string | null>(null)
+  const emailSteps = journey?.points.filter((p) => p.drawn && p.byEmail) ?? []
+  const offeredStep = journey?.points.find((p) => p.key === offeredFor)
+  const savedStepUnlisted = offeredFor !== '' && !emailSteps.some((p) => p.key === offeredFor)
+  // The step whose fields the server will hold this email to: its own point, or the step it is offered for.
+  // With one, the menu offers only those fields, so nothing picked from it is refused on save.
+  const fieldsStep = ownsAStep ? journey?.points.find((p) => p.templateKey === ownKey) : offeredStep
+  const mergeGroups: Record<string, { field: string; label: string }[]> = fieldsStep
+    ? {
+        'Candidate journey': (journey?.fields ?? [])
+          .filter((f) => fieldsStep.has.includes(f.name))
+          .map((f) => ({ field: `{{${f.name}}}`, label: f.holds })),
+      }
+    : {
+        ...(journey
+          ? { 'Candidate journey': journey.fields.map((f) => ({ field: `{{${f.name}}}`, label: f.holds })) }
+          : {}),
+        ...MERGE_FIELDS,
+      }
 
   // Toolbar popover state
   const [mergeDropdownOpen, setMergeDropdownOpen] = useState(false)
@@ -229,9 +250,13 @@ export default function EmailTemplateEditor() {
         setDescription(t.description || '')
         setCategory(t.category)
         setSubject(t.subject)
-        setFromName(t.fromName || 'Teammate Voices')
+        setFromName(t.fromName || 'Bank of America Careers')
         setBodyHtml(t.bodyHtml)
         setStatus(t.status === 'ACTIVE' ? 'ACTIVE' : 'DRAFT')
+        setOwnsAStep(!!t.templateKey)
+        setOwnKey(t.templateKey ?? null)
+        setOfferedFor(t.journeyPoint ?? '')
+        setOfferedForLabel(t.offeredFor ?? null)
         setJourneyNote(
           t.templateKey
             ? `Candidate journey: sent ${(t.sentWhen ?? '').replace(/^./, (c) => c.toLowerCase())}. A journey template stays Active and cannot be deleted.`
@@ -266,15 +291,19 @@ export default function EmailTemplateEditor() {
         fromName: fromName.trim(),
         bodyHtml,
         status,
+        journeyPoint: ownsAStep ? null : offeredFor || null,
       }
       if (isEditMode) {
         await api.updateEmailTemplate(templateId!, payload)
-        setSaveMessage('Template saved!')
+        setSaveMessage('Template saved.')
       } else {
         const created = await api.createEmailTemplate(payload)
-        setSaveMessage('Template created!')
+        setSaveMessage('Template created.')
         setTimeout(() => navigate(`/admin/communications/${created.templateId}/edit`), 1500)
       }
+      // Which templates fit each step of the workflow drawing is the journey's answer: ask again, so the
+      // canvas offers this one (or stops offering it) without waiting for the cached answer to expire.
+      queryClient.invalidateQueries({ queryKey: qk.journey })
       setTimeout(() => setSaveMessage(''), 3000)
     } catch (e) {
       setSaveMessage(`Failed to save. ${refusal(e, '')}`.trim())
@@ -365,12 +394,28 @@ export default function EmailTemplateEditor() {
             <FormField label="Description">
               <input className="email-editor__input" placeholder="Brief description of this template" value={description} onChange={e => setDescription(e.target.value)} />
             </FormField>
+            {!ownsAStep && (
+              <FormField label="Offered on the workflow for">
+                <select className="email-editor__select" value={offeredFor} onChange={e => setOfferedFor(e.target.value)}>
+                  <option value="">Any step its fields suit</option>
+                  {emailSteps.map((p) => <option key={p.key} value={p.key}>{p.sentWhen}</option>)}
+                  {savedStepUnlisted && <option value={offeredFor}>{offeredForLabel ?? offeredFor} (no longer on the workflow)</option>}
+                </select>
+                <div style={{ fontSize: 12.5, color: '#6e6e73', lineHeight: 1.5, marginTop: 6 }}>
+                  {offeredStep
+                    ? `A choice for that step on the workflow canvas, beside the journey's own email.${
+                        offeredStep.needs.length > 0 ? ` It has to carry ${offeredStep.needs.map((f) => `{{${f}}}`).join(', ')}.` : ''
+                      } It can use ${offeredStep.has.map((f) => `{{${f}}}`).join(', ')}.`
+                    : 'Listed on the workflow canvas for every step whose fields it can be filled with.'}
+                </div>
+              </FormField>
+            )}
             <div className="email-editor__form-row">
               <FormField label="Subject Line" required>
-                <input className="email-editor__input" placeholder="e.g., You are invited: {{event_name}}" value={subject} onChange={e => setSubject(e.target.value)} />
+                <input className="email-editor__input" placeholder="e.g., Your interview for {{job_title}}" value={subject} onChange={e => setSubject(e.target.value)} />
               </FormField>
               <FormField label="From Name">
-                <input className="email-editor__input" placeholder="Teammate Voices" value={fromName} onChange={e => setFromName(e.target.value)} />
+                <input className="email-editor__input" placeholder="Bank of America Careers" value={fromName} onChange={e => setFromName(e.target.value)} />
               </FormField>
             </div>
             <div className="email-editor__form-row">

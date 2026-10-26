@@ -16,6 +16,10 @@ export interface EmailTemplate {
   /** Set on the templates that word a point of the candidate journey. */
   templateKey?: string | null
   sentWhen?: string | null
+  /** The step of the workflow drawing this template is offered for (a journey point's key), or null for any step its fields fit. */
+  journeyPoint?: string | null
+  /** That step, in words. */
+  offeredFor?: string | null
 }
 
 export type EmailCategory =
